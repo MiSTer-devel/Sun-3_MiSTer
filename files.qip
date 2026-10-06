@@ -1,0 +1,121 @@
+# Source list for the Sun-3 MiSTer core.
+#
+# One machine, fixed in Sun-3.qsf: a Sun-3/60 with its RD68021 and RD68884,
+# the on-board bw2, SCSI and serial ports (docs/hardware.md).  Only files that
+# machine instantiates are listed.  sys/sys.qip is pulled in by sys/sys.tcl and
+# must not be listed again here; rtl/pll.qip comes in through sys/pll_q17.qip.
+#
+# Language matters: rtl/sun3/*.v is Verilog-2001 and stays VERILOG_FILE; the
+# vendored cores, the SCSI board and the MiSTer glue are SystemVerilog.
+# Packages first -- wish5380_pkg.sv declares blk_req_t and blk_rsp_t at file
+# scope, and the CPU's and the FPU's packages come before their modules.
+#
+# tb/verilator/emu.mk reads this file for the whole-core simulation, so a file
+# missing here is missing there too.
+
+set_global_assignment -name SDC_FILE Sun-3.sdc
+
+# ---- packages ---------------------------------------------------------------
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish5380/wish5380_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/wish7990_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/gen/rd68021_frame_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/gen/rd68021_ucode_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/rd68884_pkg.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/gen/rd68884_ucode_pkg.sv
+
+# ---- RD68021 CPU, an MC68020 (rtl/vendor/rd68021, CERN-OHL-S-2.0) ------------
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/gen/rd68021_cpdec_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/gen/rd68021_decode_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/gen/rd68021_eadec_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/gen/rd68021_eamode_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/gen/rd68021_ucode_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_sync.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_dedge_ff.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_shifter.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_divider.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_bitfield.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_biu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_icache.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_ifu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_seq.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68021/rd68021_top.sv
+
+# ---- RD68884 FPU, an MC68881 (rtl/vendor/rd68884, CERN-OHL-S-2.0) ------------
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/gen/rd68884_crom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/gen/rd68884_ucode_rom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/rd68884_sync.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/rd68884_biu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/rd68884_regfile.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/rd68884_seq.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/rd68884/rd68884_top.sv
+
+# ---- Z8530 SCC (rtl/vendor/z8530_scc, GPL-3.0) --------------------------------
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/z8530_scc/z8530_scc.sv
+
+# ---- NCR 5380, SCSI target and bus fabric (rtl/vendor/wish5380, MIT) ----------
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish5380/sci_regs.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish5380/sci_bus.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish5380/wish5380.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish5380/scsi_fabric.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish5380/scsi_targ.sv
+
+# ---- the LANCE, Am7990 (rtl/vendor/wish7990, MIT) ---------------------------------
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/async_fifo.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/sync_fifo.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/dp_ram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/crc32_eth.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/mii_tx.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/mii_rx.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/le_filt.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/le_init.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/le_regs.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/le_rx.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/le_tx.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/wb_arb.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/wb_master.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/wish7990/wish7990.sv
+
+# ---- the Sun-3/60 (rtl/sun3, from Sun-3_FPGA) ----------------------------------
+set_global_assignment -name VERILOG_FILE rtl/sun3/sun3_top.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/sun3_fpga.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/sun3_mmu.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/ctx_reg_sun3.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/smap.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/pmap.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/sram_sync.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/idprom_sun3.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/gen8bit_reg.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/cyctr32bit_reg.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/bootrom32.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/icm7170.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/eeprom.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/sun3_irq_priority.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/sun3_vint.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/sun3_async_fifo.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/sun3_cached_fifo_bridge.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/fault_log.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/wish7990_dvma_to_020.v
+set_global_assignment -name VERILOG_FILE rtl/sun3/wish7990_sun3_regs.v
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_mt02.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_si.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/reset_sync.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/video_timing.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/fb_scanout.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg4.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg4_scanout.sv
+
+# ---- MiSTer glue ------------------------------------------------------------------
+set_global_assignment -name QIP_FILE rtl/pll_serial.qip
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sdram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_sdram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_block.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_kbd_mouse.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_bell.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_tod.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_tick.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_cpuclk.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_eeprom.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3_mister_enet.sv
+
+set_global_assignment -name SYSTEMVERILOG_FILE Sun-3.sv

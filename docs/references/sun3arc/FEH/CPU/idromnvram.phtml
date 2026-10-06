@@ -1,0 +1,60 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<TITLE>Sun3/I: CPU - IDPROM, NVRAM, and EEPROM</TITLE>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<H2><A NAME="H1_99999">Volume I: CPU</A></H2>
+<H2>NVRAM and EEPROM</H2>
+<P >
+The IDPROM on Sun-3 and Sun-4 CPU boards contains the machine-type code,
+serial number, and ethernet address.
+</P>
+<P >
+The machine-type code and serial number are combined to create 
+the hostid. Some companies use the hostid to license software to 
+a specific machine.
+</P>
+<P >
+The <TT><B>hostid</B></TT> command displays the serial number in hexadecimal. 
+The label on the IDPROM is decimal. The label on the NVRAM is 
+alpha-numeric. The serial number displayed by the Power-On Self 
+Test (POST) is decimal.
+</P>
+<P >
+Follow the steps in the example below to verify an IDPROM.     
+</P>
+<UL >
+The label on a Sun-3/160 IDPROM is <B>31774</B>.<BR>
+The serial number displayed by the POST is <B>#1774</B>.
+<OL >
+<LI>Convert 1774 decimal to 006ee hexadecimal.
+<LI>Combine the Sun-3/160 machine-type code 11 with 006ee 
+for a hostid of 11006ee.
+<LI>Use the <TT><B>hostid</B></TT> command to display the hostid of 11006ee.
+</OL>
+</UL>
+<HR>
+<PRE width=57>
+               HOSTID
+               ------
+               1100xxxx
+               ||||||||
+               //\\\\\\
+              //  \\\\\\
+   Machine-type    Hex Serial #
+    (1 byte)         (3 bytes)
+
+-------------------------------------------------------------<BR>
+SYSTEM         HOSTID     LABEL  TYPE      PART #    LOCATION
+-------------------------------------------------------------<BR>
+3/75/140/150   1100xxxx   3xxxx  IDPROM    520-1221  U1409
+3/160/180      1100xxxx   3xxxx  IDPROM    520-1221  U1409
+3/50           1200xxxx   4xxxx  IDPROM    520-1295  U0204
+3/260/280      1300xxxx   5xxxx  IDPROM    520-1322  U1907
+3/110          1400xxxx   6xxxx  IDPROM    520-1412  U1409
+3/60           1700xxxx   0xxxx  IDPROM    520-1559  U224
+3E             1800xxxx   9xxxx  IDPROM    520-8049  U224
+----------------------------------------------------------<BR>
+3/460/470/480  4100xxxx    xxxx  IDPROM    525-1083  U1701
+3/80           4200xxxx          NVRAM     525-1031  U0205
+----------------------------------------------------------<BR>
+</PRE>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

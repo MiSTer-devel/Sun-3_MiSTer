@@ -1,0 +1,20 @@
+# Text is stored with LF.  Scripts run in WSL must also be LF in the checkout
+# (this machine checks out with core.autocrlf=true).
+*           text=auto
+*.sh        text eol=lf
+*.py        text eol=lf
+Makefile    text eol=lf
+*.bat       text eol=crlf
+
+*.gif       binary
+*.png       binary
+*.jpg       binary
+*.pdf       binary
+*.gz        binary
+*.rbf       binary
+*.rom       binary
+*.bin       binary
+
+# sys/ is Template_MiSTer 3ea1134 byte for byte (upstream mixes CRLF and LF):
+# store it as it is so a later template update diffs cleanly.
+sys/**      -text

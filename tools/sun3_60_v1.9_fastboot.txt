@@ -1,0 +1,75 @@
+# Sun 3/60 PROM Rev 1.9: shorten two waiting loops, for simulation only.
+#
+# Applied on top of sun3_60_v1.9_noparity.txt, as in the RomPatcher set it
+# comes from (Old/VintageBusFPGA_Common/RomPatcher/Sun3_60FastBoot).  Both
+# words are iteration counts; 2 keeps the loops running, just not for long.
+#
+# Line format: <address> <expected> <new>   (hex, 16-bit words, PROM at 0x0fef0000)
+
+# loweritercount: 50000 -> 2
+0fef1e4e c350 0002
+# loweritercount2: 65535 -> 2
+0fef2d5c ffff 0002
+
+# The MMU table tests walk every entry of the segment map (2048 segments x
+# 8 contexts) and the page map (4096 entries), with a console poll per
+# step; at 20 MHz the segment map write/read test alone is ~4.5 s of
+# simulated time.  Test 16 entries instead.  Only the tests' own loop
+# counts change: the setup loops around them (0x0fef2196 fills the segment
+# map, 0x0fef2254 builds the 1:1 page map the PROM runs on afterwards) are
+# left alone.
+
+# Segment Map Wr/Rd Test: movel #2046,%d5 -> #15
+0fef201c 07fe 000f
+# Segment Map Address Test, write pass and check pass: movel #2046,%d5 -> #15
+0fef20c4 07fe 000f
+0fef20fa 07fe 000f
+# Page Map Test, write pass and check pass: movel #4095,%d4 -> #15
+0fef21c2 0fff 000f
+0fef21f8 0fff 000f
+
+# Memory Test (diag switch on only; skipped when it is off): its end address
+# is (megabytes found) << 20, and it writes and then reads back every word,
+# polling the diag switch per word -- ~10 s simulated for 4 MiB.  moveq #20
+# -> #16 tests 64 KiB per megabyte found instead.
+0fef28ba 7014 7010
+
+# RAM initialisation (always, diag switch or not): fills every longword of
+# the memory found with 0xffffffff, from 0 up to %d1.  At ~2.3 us a longword
+# that is ~2.4 s simulated for 4 MiB.  %d1 is a copy of %d2 = (megabytes
+# found) << 20, and %d2 is ALSO what the monitor keeps as the memory size
+# (0xffffe172, the "NMB memory installed" of the banner) -- so the shift at
+# 0x0fef2a94 must not change (it once did here: the banner said 0MB).
+# Instead the bound's >= 32 MiB clamp (cmpil/bltw/subil, moot below 32 MiB)
+# becomes lsrl #4,%d1: 64 KiB filled per megabyte, still from 0, so the low
+# memory the monitor keeps its data in is still initialised.
+0fef2a9e 0c81 e889
+0fef2aa0 0200 4e71
+0fef2aa2 0000 4e71
+0fef2aa4 6d00 4e71
+0fef2aa6 0008 4e71
+0fef2aa8 0481 4e71
+0fef2aaa 0010 4e71
+0fef2aac 0000 4e71
+
+# Keyboard detection: after resetting the keyboard the PROM waits up to 1000
+# timer ticks (~1 s) for its reply -- the whole wait, every boot, when there
+# is no keyboard.  addil #1000,%d7 -> #10.
+0fef1a62 03e8 000a
+
+# SCSI bus reset recovery: si_reset() ends with DELAY(10000000), ten seconds
+# for the disks to come back (mon3/si.c, in Inputs/Wish5380/doc/drivers), as
+# movel #160000000,%d0 (the delay x 16, shifted by the CPU speed factor) and
+# a count-down loop -- ~100 minutes of wall clock in simulation.  The disk
+# target here is ready at once: 160000000 -> 160000 (10 ms).
+0fefa468 0989 0002
+0fefa46a 6800 7100
+
+# Tape open: stopen() waits DELAY(10000000) after opening the host adapter,
+# "for tape controller to become ready ... about 10 seconds for the Emulex"
+# (sun3-bootrom dev/st.c), the same movel #160000000 and count-down loop as
+# si_reset's above, then two TEST UNIT READYs.  The tape target here is ready
+# at once: 160000000 -> 160000 (10 ms).  Without it, `b st()' sits for ten
+# seconds of simulated time (about 25 minutes of tb_emu).
+0fefb008 0989 0002
+0fefb00a 6800 7100

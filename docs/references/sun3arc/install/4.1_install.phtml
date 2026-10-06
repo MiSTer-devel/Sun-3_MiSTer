@@ -1,0 +1,185 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<title>SunOS 4.1 Install FAQ</title>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<body>
+<h1>Little install FAQ for SunOS version 4.1</h1><hr>
+by Keith Woodworth, January 24, 1998<p>
+
+I do not know how many people out there acutally have or even run version
+4.1 of SunOS these days, but it so happens that I do.
+<p>
+
+I am writing this to shed some light on this particular version as pretty 
+much everything I have found on the internet deals with versions 4.1.x 
+(4.1.1, 4.1.2,(was there a 4.1.2?) 4.1.3 and various updates)
+<p>
+
+This little FAQ deals with installing version 4.1 of SunOS because Sun
+changed the way the OS is installed between version 4.1 and 4.1.x. Well not
+really the way its installed as I'm sure its pretty much the same but really
+how to run/boot/install from QIC-24 tape.
+<p>
+
+As I have found there is very little or no information out there detailing
+the install of SunOS version 4.1. I have a couple of Sun 3/60's that I got
+a while back that came with v4.1 installed and two copies of SunOS 4.1 on
+tape.
+<p>
+
+The OS was sort of "broken". Alot of things worked, but alot of things did
+not. Some basic commands like vi, uname, vipw and various others did not work.
+Along with that some programs for creating a file system to netboot other
+Suns was there but some of it worked and some did not. After a few months of
+getting by with the OS in this shape I finally got around to getting the
+netbooting somewhat operational. But as some of that stuff was "broken" it
+never worked right so I finally decided to bite the bullet and re-install from
+scratch.
+<p>
+
+That was when I really discovered there was nothing out there for SunOS 4.1.
+Everything I found was for 4.1.x.
+<p>
+
+Messages went out, ftp sites searched, webs scoured and I came up with a
+few tidbits. One that I tried got me to a point. Then, through not having
+enough information to get the job done, I guessed at some values and
+knackered the harddrive. I wiped the disklabel and all partition info
+before I even really got started.
+<p>
+
+So out of desperation I phoned Sun and a tech there was nice enough to fax me
+the correct information on getting going with SunOS 4.1
+<p>
+
+Lets just say it was one big learning experience. One that I am writing
+down so if anyone else needs it, the information is there.
+<p>
+
+<H2>To Begin</H2>
+
+  SunOS 4.1 comes on two QIC-24 tapes like other 4.1.x versions, though
+  4.1.x versions come on CD too. Booting from tape is under 4.1 is
+  similar to 4.1.x versions but requires a few more steps and a different
+  syntax is used.
+<P>
+  To boot and copy the miniroot over to the swap partition under 4.1.x you
+  just had to type from the monitor:
+<BR>
+<PRE>
+  > b st()
+</PRE><BR>
+
+  and everything was pretty much done for you automatically. Not so with
+  version 4.1. You have to specify a bit more at the monitor prompt to
+  get things going:
+<BR>
+<PRE>
+
+  > b st()install sd(0,0,1)
+</PRE><BR>
+
+  Then it should flash on the screen Copying st(0,0,3) to partition. This is
+  the miniroot being copied over to the swap/dump partition of your hard
+  drive.
+<P>
+  After this is completed you will be in the miniroot and you should have a
+  # prompt. From there you can do a normal suninstall and be on your merry
+  way. The above all assumes that you have a working disk, with all partitions
+  and disklabel intact and your swap partition is bigger than the miniroot.
+ If you dont, the copying will bail and a message will come up saying it could
+  not find that partition then leave you at a different prompt which is
+  shown below.
+<P>
+  If you should be unlucky enough to NOT have a swap partition or disk with a
+  valid disklabel to know where the swap partition is on the disk (like I did)
+  doing the following from the monitor should get things rolling.
+<P>
+  When at the > monitor prompt type:
+<BR><PRE>
+  > b st()
+</PRE><BR>
+  Notice that this is what you do for 4.1.x installs. But for SunOS v4.1
+  after the tape spins for a minute or so you will be presented with another
+  prompt:
+<BR><PRE>
+  Boot:
+</PRE><BR>
+  Now at this prompt you have to type:
+<BR><PRE>
+  Boot: st(0,0,4)
+</PRE><BR>
+  As this program is loading it detects your disk and you are presented
+  with a small menu asking if you want to format your disk or exit to
+  shell. Choose 1 to format your disk. This *does* not format your disk
+  all it does is then ask which disk you want to format/disklable.
+  A new menu will be presented with what disks were found.
+<P>
+  At this point you should have a prompt with two (or three choices). It
+  might look like this:
+<BR><PRE>
+   1. format sd0
+   2. format sd1 (if you have more than one disk you will see this)
+   3. exit to shell
+</PRE><BR>
+  Choose 1 and the format program will run. You will then have a list of
+  choices to format, partition, write disklabel and in general do
+  anything you need to do to get a new disk going or just look at the
+  current disk info.
+<P>
+  As I had overwritten my original disklabel and lost the partition info
+  I was very happy to find there was a choice to look for a backup disklabel
+  and restore it if there is one. I was lucky, there was a backup and I
+  got my partition info restored.
+<P>
+  Once you have quit this part you will be asked if you want to load
+  miniroot, or exit to shell. Hit 1 to load miniroot. Some info will
+  pop up about version numbers etc, and you will see your hardware being
+  probed.
+<P>
+  Then you will be dropped, finally!, to a # shell prompt. Now from here
+  you can type suninstall and be on your way. As I have never seen or
+  installed any other version of SunOS except 4.1, I dont know how much
+  it differs but at this point its probably somewhat the same as any
+  4.1.x version for installing the actual system.
+<P>
+  On a related note there is something I did find with SunOS 4.1 that I
+  have ever only seen reference to once and that is Standalone copy and
+  Standalone format.
+<P>
+  I did manage to get Standalone copy to run off the tape but I never did
+  figure out how to use it. (the copy program was how I knackered the
+  disklabel in the first place) And as for Standalone format, well I think
+  st(0,0,4) is it but dont know for sure.
+<P>
+  For Standalone Copy at the monitor > prompt type:
+<BR><PRE>
+  > b st(0,0,2)
+</PRE><BR>
+  Tape will spin for a bit then you will have:
+<PRE>
+  Standalone Copy
+  From:
+</PRE><BR>
+  I dont know what to enter here but valid devices are only tape drives or
+  hard disks. After that prompt you get the prompt:
+<BR><PRE>
+  To:
+</PRE><BR>
+  Again valid devices are only tape or hard disks.<BR>
+
+  If anyone does have any info related to Standalone copy and format I would
+  like to hear from you. <A HREF="mailto: kwoody@citytel.net"><ADDRESS>kwoody@citytel.net</ADDRESS></A>
+<P>
+  So at any rate this is all the info I have about running SunOS 4.1
+  from tape. After over a month of searching dozens of internet sites
+  related to Sun equipment/software of any kind and digging through any book
+  I found that had mention of Sun Microsystems in it I came up empty handed.
+<P>
+  I do not know if this information will be of use to anyone, but I thought
+  if I ever did find what I was seeking I would write it down then post it.
+<P>
+  If anyone has anything to add/critique about this info or found it useful
+  in some way email me to the above address.
+<P>
+
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

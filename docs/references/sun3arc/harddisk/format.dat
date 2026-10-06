@@ -1,0 +1,2464 @@
+# $Id: format.dat,v 2.18 1997/06/25 18:58:34 jdd Exp $
+#
+# Maintained by John DiMarco (jdd@cdf.toronto.edu)
+# University of Toronto, CDF
+#
+# based on one dated October 5, 1992 by George Neville-Neil DEC WSL
+# (gnn@cs.berkeley.edu)
+#
+# This file was built using a base format.dat file and added to using 
+# format.dat entries mailed in from various people on the Internet.
+#
+# DISCLAIMER: This is provided as a public service to sun managers. Neither
+#             I nor anyone else guarantees the correctness of these entries.
+#
+# All attempts have been made to eliminate duplicate information.
+#
+# Most of the comments came from the suppliers of the data and are not
+# mine.
+#
+# If you come across any errors or wish to add new entries, please send 
+# email to: sun-managers-format@eecs.nwu.edu
+#
+# This file is available for anonymous ftp from ra.mcs.anl.gov in
+# /sun-managers/format.dat.
+#
+# If the drive you want isn't here, you can contact the manufacturer. 
+# Some manufacturers run Bulletin Board systems:
+#
+#        Fujitsu America BBS   408 944 9899
+#        Seagate BBS USA/Can   408 438 8771
+#        Seagate BBS England   44 62 847 8011
+#        Seagate BBS Germany   49 89 140 9331
+#        Seagate BBS Singapore 65 292 6973
+#        Seagate BBS Australia 61 2 756 2359
+#        Maxtor BBS            303 678 2222
+#        Micropolis BBS        818 709 3310
+#        Quantum BBS           408 894 3214
+#        Conner BBS            408 456 4415 / 408 456 3200
+#	 Western Digital       714 932 4900
+#
+# It is also possible to contact drive manufacturers by telephone.
+# Some relevant numbers are:
+#
+#        Fujitsu USA     800-626-4686
+#                        408-432-1300
+#        Fujitsu FAXLINE 408-428-0456
+#        Fujitsu Canada  416-602-5454
+#                        800-263-7091
+#        HP USA          800-826-4111
+#        HP mass storage 970-635-1000
+#        Hitachi USA     800-HIT-ACHI
+#        Hitachi HITFAX  800-HIT-FAX1
+#        Maxtor USA      800-2MA-XTOR
+#        Maxtor FAXBACK  303-678-2618
+#        Maxtor Auto     800-262-9867
+#        Micropolis USA  818-709-3300
+#        Micropolis Tech 818-709-3325
+#        Seagate USA     800-468-3472
+#                        408-438-8222
+#        Seagate FAX     408-438-8137
+#        Seagate FAXBACK 408-438-2620
+#        Quantum USA     800-826-8022
+#        Conner USA      408-456-3247
+#                        408-456-4500
+#        Conner Auto     800-421-1879
+#        Conner Tech     800-426-6637
+#        Conner FAXBACK  408-456-4903
+#        Conner Service  800-537-2248
+#
+#  CDC spun off their disk-drive business as Imprimis, which was later bought 
+#  by Seagate, so direct all questions about CDC and Imprimis drives to Seagate.
+#
+#  Fujitsu lists some format parameters for their drives on the WWW, at
+#  http://www.fujitsu-europe.com/t_sun01.htm
+#
+#  Quantum lists some format parameters for their drives on the WWW, at
+#  http://support.quantum.com/appnotes/sun.htm
+#
+# TIPS for rolling your own format.dat
+#
+# In SunOS 5.3 (aka Solaris 2.3) and later, the format program supports the 
+# automatic querying of SCSI drives for their parameters, and a format.dat 
+# entry is not strictly necessary.
+#
+# For SCSI disks, any combination of cylinders, heads and sectors that does 
+# not add up to more than the rated formatted capacity of the drive 
+# will usually work, because the SCSI specification hides most of the drive
+# details from the host. 
+#
+# A program which queries a SCSI drive for its parameters and generates a 
+# format.dat entry for it is scsiinfo, which is available for anonymous 
+# ftp from ftp.cdf.toronto.edu (128.100.31.2):/pub/scsiinfo/scsiinfo-*.shar.
+# [ Yes, it's an attempt to put myself out of the format faq business. :-) ]
+# Moreover, SCSI drives may be queried at great length using the scsiping 
+# program, which is freely available for anonymous ftp from 
+# ftp.cdf.toronto.edu (128.100.31.2) and ftp.fwi.uva.nl (146.50.4.20) in 
+# /pub/scsiping/scsiping-2.0.shar. 
+#
+# woods@most.weird.com (Greg A. Woods) makes the following suggestions
+# for finding geometry information if it's not here, and if you can't run
+# scsiping or scsiinfo:
+#
+#     1. run format and choose the "Other type" disk
+#     
+#     2. supply reasonable values for the disk geometry
+#     
+#     3. go back to the main menu and enter the defect mananagement menu and
+#     load the "original manufacturer's defect list", then commit the list
+#     
+#     3a. optionally print the defect list to get clues on the geometry and go
+#     back to step 1.
+#     
+#     4. enter the "analysis" menu and run the "setup" option to turn *on* the
+#     "extended messages" (and optionally set other values, such as number of
+#     passes to one)
+#     
+#     5. go back to the main menu and format the drive
+#     
+#     If you didn't get all the geometry right, the extended messages printed
+#     will show the correct values (according to the drive) in parenthesis
+#     after the values you did enter.  Run format again and enter the correct
+#     geometry, or write a new /etc/format.dat entry.
+#     
+# For SunOS 4.1.2 and earlier, replace all occurrences of "SCSI" by "MD21".
+# For SunOS 5.x, replace partition names a, b, c, etc. with 0, 1, 2, etc. 
+# For Solbourne systems, replace all occurrences of "SCSI" by "IOASIC".
+#
+# When partitioning, do not make a partition larger than 2GB (2097152 KB, or
+# 4194304 blocks), since SunOS does not support partitions larger than 2GB. 
+
+#
+# This is the search path for 'format'. It contains all the disks that
+# will be searched for if no disk list is given on the command line.
+#
+
+search_path =   xd0, xd1, xd2, xd3, xd4, xd5, xd6, xd7, xd8, xd9, xd10, xd11, \
+                xd12, xd13, xd14, xd15, xy[0-3], sd[0-7], sd8, sd9, sd10, \
+                sd11, sd12, sd13, sd14, sd15, id0[0-3][0-7]
+
+#
+# This is the list of supported disks for the Xylogics 450/451 controller.
+#
+disk_type = "Fujitsu-M2312K" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 587 : acyl = 2 : pcyl = 589 : nhead = 7 : nsect = 32 \
+        : rpm = 3600 : bpt = 20480 : bps = 621 : drive_type = 1
+
+disk_type = "Fujitsu-M2284/M2322" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 821 : acyl = 2 : pcyl = 823 : nhead = 10 : nsect = 32 \
+        : rpm = 3600 : bpt = 20480 : bps = 621 : drive_type = 2
+
+disk_type = "Fujitsu-M2351 Eagle" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 840 : acyl = 2 : pcyl = 842 : nhead = 20 : nsect = 46 \
+        : rpm = 3961 : bpt = 28160 : bps = 595 : drive_type = 0
+
+disk_type = "Fujitsu-M2333" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 821 : acyl = 2 : pcyl = 823 : nhead = 10 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600 : drive_type = 3
+
+disk_type = "Fujitsu-M2361 Eagle" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 840 : acyl = 2 : pcyl = 842 : nhead = 20 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600 : drive_type = 3
+
+disk_type = "CDC EMD 9720" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 1147 : acyl = 2 : pcyl = 1217 : nhead = 10 : nsect = 48 \
+        : rpm = 3600 : bpt = 30240 : bps = 613 : drive_type = 1
+
+disk_type = "Hitachi DK815-10" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 1735 : acyl = 2 : pcyl = 1737 : nhead = 15 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600 : drive_type = 1
+
+disk_type = "NEC D2363" \
+        : ctlr = XY450 : fmt_time = 4 \
+        : ncyl = 964 : acyl = 2 : pcyl = 1024 : nhead = 27 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600 : drive_type = 2
+
+#
+# This is the list of supported disks for the Xylogics 7053 controller.
+#
+disk_type = "Fujitsu-M2351 Eagle" \
+        : ctlr = XD7053 \
+        : ncyl = 840 : acyl = 2 : pcyl = 842 : nhead = 20 : nsect = 46 \
+        : rpm = 3961 : bpt = 28160 : bps = 595
+
+disk_type = "Fujitsu-M2333" \
+        : ctlr = XD7053 \
+        : ncyl = 821 : acyl = 2 : pcyl = 823 : nhead = 10 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600
+
+disk_type = "Fujitsu-M2361 Eagle" \
+        : ctlr = XD7053 \
+        : ncyl = 840 : acyl = 2 : pcyl = 842 : nhead = 20 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600
+
+disk_type = "CDC EMD 9720" \
+        : ctlr = XD7053 \
+        : ncyl = 1147 : acyl = 2 : pcyl = 1217 : nhead = 10 : nsect = 48 \
+        : rpm = 3600 : bpt = 30240 : bps = 613
+
+disk_type = "Hitachi DK815-10" \
+        : ctlr = XD7053 \
+        : ncyl = 1735 : acyl = 2 : pcyl = 1737 : nhead = 15 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600
+
+disk_type = "NEC D2363" \
+        : ctlr = XD7053 \
+        : ncyl = 964 : acyl = 2 : pcyl = 1024 : nhead = 27 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600
+
+disk_type = "Fujitsu-M2372K" \
+        : ctlr = XD7053 \
+        : ncyl = 743 : acyl = 2 : pcyl = 745 : nhead = 27 : nsect = 67 \
+        : rpm = 3600 : bpt = 40960 : bps = 600
+
+disk_type = "CDC 9720-850" \
+        : ctlr = XD7053 \
+        : ncyl = 1358 : acyl = 2 : pcyl = 1360 : nhead = 15 : nsect = 66 \
+        : rpm = 3600 : bpt = 41088 : bps = 610
+
+# 
+# From megatek!randy@suntan.West
+#
+# works great on a 4/300
+
+disk_type = "Sabre ST82500J" \
+        : ctlr = XD7053 \
+        : ncyl = 2609 : acyl = 2 : pcyl = 2611 : nhead = 19 : nsect = 82 \
+        : rpm = 3600 : bpt = 50400 : bps = 604
+
+#
+# From:	"Adam W. Feigin" <awf@iis.ee.ethz.ch>
+#
+# We recently decomissioned a couple of Alliant FX/80's which had these
+# drives in them. Between for formatting program on the Alliant, and the
+# Fujitsu manual, I came up with the following format.dat entry. We've been
+# using this entry on the dozen or so drives we pulled from our Alliants
+# for about 6 months now without any problems. The drive formats down to
+# roughly 525MB with this entry....
+
+disk_type = "Fujitsu M2344K" \
+        : ctlr = XD7053 \
+        : ncyl = 622 : acyl = 2 : pcyl = 624 : nhead = 27 : nsect = 64 \
+        : rpm = 3600 : bpt = 40960 : bps = 600
+
+# Format.dat 1.26 of 89/09/06, from a 490, shows Sun support of the
+# following Imprimis drives on either the SMD-4 or ISP-80 (Sun IPI-2)
+# controllers:
+
+# The 3 disks shown are, respectively, the Sabre 9720-368, 9720-850,
+# and 9720-1230.
+disk_type = "CDC EMD 9720" \
+        : ctlr = XD7053 \
+        : ncyl = 1147 : acyl = 2 : pcyl = 1217 : nhead = 10 : nsect = 48 \
+        : rpm = 3600 : bpt = 30240 : bps = 613
+disk_type = "CDC 9720-850" \
+        : ctlr = XD7053 \
+        : ncyl = 1358 : acyl = 2 : pcyl = 1360 : nhead = 15 : nsect = 66 \
+        : rpm = 3600 : bpt = 41088 : bps = 610
+
+# From: Tom Limoncelli <tom_limoncelli@Warren.MENTORG.COM>
+#
+# Seagate Sabre-5 ST81236J drive
+# used with the Xylogics 7053 controller
+disk_type = "Seagate Sabre-5 ST81236J" \
+        : ctlr = XD7053 \
+        : ncyl=1633: acyl= 2: pcyl=1635: nhead=15: nsect=82 \
+        : rpm=3600 : bpt=50400 : bps=604
+partition = "Seagate Sabre-5 ST81236J" \
+        : disk = "Seagate Sabre-5 ST81236J" : ctlr = XD7053 \
+        : a = 0, 99630 : b = 81, 261990 : c = 0, 2008590  \
+        : d = 294, 548580 : e = 740, 1098390 : f = 0, 361620  \
+        : g = 294, 1646970 : h = 81, 1908960
+
+# From: Tom Limoncelli <tom_limoncelli@Warren.MENTORG.COM>
+# Fujitsu-M2382 on a Xylogics-7053 (/dev/xd*) controller.
+disk_type = "Fujitsu-M2382" \
+        : ctlr = XD7053 \
+        : ncyl = 743 : acyl = 2 : pcyl = 745 : nhead = 27 : nsect = 81 \
+        : rpm = 3600 : bpt = 49728 : bps = 604
+partition = "Fujitsu-M2382" \
+        : disk = "Fujitsu-M2382" :ctlr = XD7053 \
+        : a = 0, 80919 : b = 37, 129033 : c = 0, 1624941  \
+        : d = 96, 470205 : e = 311, 944784 : f = 0, 209952  \
+        : g = 96, 1414989 : h = 37, 1544022
+
+# From johnb@edge.cis.mcmaster.ca (John Benjamins)
+#
+disk_type = "CDC EMD 9720-1230" \
+        : ctlr = XD7053 \
+        : ncyl = 1633 : acyl = 2 : pcyl = 1635 : nhead = 15 : nsect = 82 \
+        : rpm = 3600 : bpt = 50400 : bps = 606
+
+#
+# This is the list of disks that were supported by Sun, for the Emulex MD21 
+# controller.
+#
+# NB: Emulex no longer supports the MD21 controller in any way.  Contact
+# GD California (510)417-7000 or Cerplex (714)258-5113 for MD21 support.
+#
+disk_type = "Micropolis 1355" \
+        : ctlr = MD21 \
+        : ncyl = 1018 : acyl = 2 : pcyl = 1024 : nhead = 8 : nsect = 34 \
+        : rpm = 3600 : bpt = 20832
+
+disk_type = "Toshiba MK 156F" \
+        : ctlr = MD21 \
+        : ncyl = 815 : acyl = 2 : pcyl = 830 : nhead = 10 : nsect = 34 \
+        : rpm = 3600 : bpt = 20832
+
+disk_type = "Micropolis 1558" \
+        : ctlr = MD21 \
+        : ncyl = 1218 : acyl = 2 : pcyl = 1224 : nhead = 15 : nsect = 35 \
+        : rpm = 3600 : bpt = 20833
+
+#
+# Following is a list of sample embedded SCSI disk configurations.
+#
+disk_type = "Quantum ProDrive 80S" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : cache = 0x07 : trks_zone = 6 : atrks = 0 : asect = 1 \
+        : ncyl = 832 : acyl = 2 : pcyl = 834 : nhead = 6 : nsect = 34 \
+        : rpm = 3662 : bpt = 16896
+
+disk_type = "Seagate (CDC) Wren V 94181-702" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : cache = 0x11 : trks_zone = 15 : asect = 2 \
+        : ncyl = 1543 : acyl = 2 : pcyl = 1545 : nhead = 15 : nsect = 48 \
+        : rpm = 3592 : bpt = 33408
+
+disk_type = "Seagate (CDC) Wren VI 94191-766" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : cache = 0x11 : trks_zone = 15 : asect = 5 : atrks = 30 \
+        : ncyl =  1659 : acyl = 2 : pcyl = 1661 : nhead = 15 : nsect = 52 \
+        : rpm = 3600 : bpt = 31410
+
+# From: sweh@spuddy.mew.co.uk (Stephen Harris)
+# I tried scsiinfo, which returned:
+#
+disk_type = "Seagate (CDC) Wren VII 94601-15" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : atrks = 30  \
+        : ncyl = 1905 : acyl = 2 : pcyl = 1931 : nhead = 15 : nsect = 71 \
+        : rpm = 3597 : bpt = 41301
+
+# Wren 8 - from Tim Kohler <tim@pnge.psu.edu>
+#
+disk_type = "Seagate (CDC) Wren VIII ST41650N" \
+        : ctlr = SCSI \
+        : cache = 0x11 : trks_zone = 15 : asect = 3 \
+        : ncyl =  2070 : acyl = 2 : pcyl = 2072 : nhead = 15 : nsect = 89 \
+        : rpm = 3597 : bpt = 45568
+
+# Yes, this is a duplicate entry. If you're running SunOS 4.1.1 or earlier
+# on a sun4c (Sparcstation SLC/ELC/1/1+/IPC/IPX/2 without the patch for
+# large SCSI disks, problems arise for SCSI disks with a formatted capacity
+# greater than 2^21-1 bytes (1GB). Since the Wren VII is pretty close to 
+# that anyways, here's an entry for it that stays within the limit.
+
+disk_type = "Seagate (CDC) Wren VII 94601-1.2G SunOS 4.1.1" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15 : asect = 5 : atrks = 30 \
+        : ncyl =  1925 : acyl = 2 : pcyl = 1927 : nhead = 15 : nsect = 70 \
+        : rpm = 3597 : bpt = 41301
+
+disk_type = "Maxtor XT-8380S" \
+        : ctlr = SCSI \
+        : cache = 0x11 : trks_zone = 8 : asect = 3 \
+        : ncyl = 1626 : acyl = 2 : pcyl = 1632 : nhead = 8 : nsect = 53 \
+        : rpm = 3600 : bpt = 31410
+
+disk_type = "Maxtor XT-8760S" \
+        : ctlr = SCSI \
+        : cache = 0x11 : trks_zone = 15 : asect = 5 : atrks = 30 \
+        : ncyl =  1614 : acyl = 2 : pcyl = 1632 : nhead = 15 : nsect = 54 \
+        : rpm = 3600 : bpt = 31410
+
+# WARNING: this disk must be driven in hard sector mode and hard-configured
+# for 52 sectors/track.
+#
+disk_type = "Maxtor XT-8760E" \
+        : ctlr = SCSI \
+        : ncyl = 1616 : acyl = 6 : pcyl = 1632 : nhead = 15 : nsect = 50 \
+        : rpm = 3600 : bpt = 31410
+
+partition = "Maxtor XT-8760E" \
+        : disk = "Maxtor XT-8760E" : ctlr = SCSI \
+        : a = 0, 97500 : b = 878, 63750 : c = 0, 1212000 : g = 130, 561000 \
+        : d = 130, 280500 : e = 504, 280500 : f = 963, 489750 : h = 0, 658500
+
+
+#
+# This is the list of Sun supported disks for embedded SCSI.
+#
+
+disk_type = "CDC Wren IV 94171-344" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : cache = 0x11 : trks_zone = 9 : asect = 3 \
+        : ncyl = 1545 : acyl = 2 : pcyl = 1549 : nhead = 9 : nsect = 46 \
+        : rpm = 3600 : bpt = 20833
+
+#
+# Note: "SUN0999" entries constitute a "least common denominator" across
+#        all drives of the appropriate size that Sun ships. Sun may 
+#        ship similarly sized drives from several different manufacturers,
+#        maintaining plug-and-play replaceability by using a generic "SUN0999"
+#        entry that works on all of them. It is sometimes possible to get a 
+#        little more space or slightly better performance by using the entry
+#        for the disk manufacturer rather than the generic Sun entry. 
+
+disk_type = "SUN0104" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : trks_zone = 6 : atrks = 0 : asect = 1 \
+        : ncyl = 974 : acyl = 2 : pcyl = 1019 : nhead = 6 : nsect = 35 \
+        : rpm = 3662 : bpt = 16896
+
+disk_type = "SUN0121" \
+        : ctlr = SCSI \
+        : ncyl = 1520 : acyl = 2 : pcyl = 1530 : nhead = 4 : nsect = 39 \
+        : rpm = 3575 : bpt = 19968
+
+disk_type = "SUN0207" \
+        : ctlr = SCSI \
+        : trks_zone = 9 : atrks = 2: asect = 4 \
+        : ncyl = 1254 : acyl = 2 : pcyl = 1272 : nhead = 9 : nsect = 36 \
+        : rpm = 3600 : bpt = 18432
+
+disk_type = "SUN0327" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : cache = 0x11 : trks_zone = 9 : asect = 3 \
+        : ncyl = 1545 : acyl = 2 : pcyl = 1549 : nhead = 9 : nsect = 46 \
+        : rpm = 3600 : bpt = 20833
+
+disk_type = "SUN0424" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 9 : asect = 2 \
+        : ncyl = 1151 : acyl = 2 : pcyl = 2500 : nhead = 9 : nsect = 80 \
+        : rpm = 4400 : bpt = 26000
+
+disk_type = "SUN0535" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 1866 : acyl = 2 : pcyl = 2500 : nhead = 7 : nsect = 80 \
+        : rpm = 5400 : bpt = 31370
+
+disk_type = "SUN0669" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15 : asect = 5 : atrks = 30 \
+        : ncyl =  1614 : acyl = 2 : pcyl = 1632 : nhead = 15 : nsect = 54 \
+        : rpm = 3600 : bpt = 31410
+
+disk_type = "Sun1.0G" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15 : asect = 5 : atrks = 30 \
+        : ncyl =  1703 : acyl = 2 : pcyl = 1931 : nhead = 15 : nsect = 80 \
+        : rpm = 3597 : bpt = 41301
+
+disk_type = "SUN2.1G" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 2733 : acyl = 2 : pcyl = 3500 : nhead = 19 : nsect = 80 \
+        : rpm = 5400 : bpt = 44823
+
+#
+# Maxtor Xt-8610E notes:
+#
+# The drive is physically set to be hard-sectored at 53 sectors per track
+# as recommended by the emulex manual.  However, the OS apparently wants
+# a sector per track for sparing, hence the number 52!
+#
+disk_type = "Maxtor XT-8610E" \
+        : ctlr = SCSI \
+        : ncyl =  1626 : acyl = 2 : pcyl = 1632 : nhead = 12 : nsect = 52 \
+        : rpm = 3600 : bpt = 31410
+
+
+# Entry seems to work, but loses 10 Mbytes or so.
+#
+disk_type = "Seagate ST1239N SWIFT" \
+        : ctlr = SCSI \
+        : ncyl = 1264 : acyl = 2 : pcyl = 1266 : nhead = 9 \
+        : nsect = 35: rpm = 3600 : bpt=20232 :
+
+disk_type = "Maxtor LXT-200S" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : trks_zone = 1 : atrks = 0 : asect = 1 \
+        : ncyl = 1117 : acyl = 2 : pcyl = 1119 : nhead = 7 : nsect = 43 \
+        : rpm = 3600 : bpt = 17000
+
+#
+# From Karen Casella (kcasella@maxtor.com) at Maxtor Corp.
+# courtesy of Ken Lam (lam@jove.cofc.edu)
+#
+disk_type = "Maxtor LXT-340SY" \
+        : ctlr = SCSI \
+        : ncyl = 1355 : acyl = 2 : pcyl = 1546 : nhead = 7 : nsect = 70 \
+        : rpm = 3600 : bpt = 35840
+
+#
+# From Larry D. Kelley (ldk@udev.cdc.com)
+#
+disk_type = "Maxtor LXT535ST" \
+        : cache = 0x00 \
+        : ctlr = SCSI : fmt_time = 4 : atrks = 7 \
+        : ncyl = 1547 : acyl = 5 : pcyl = 1552 : nhead = 11 \
+        : nsect = 61 : rpm = 3600 : bpt = 31370
+
+partition = "Maxtor LXT535ST" \
+        : disk = "Maxtor LXT535ST" : ctlr = SCSI \
+        : c = 0, 1038037
+
+#
+# From: Peter Ilieve   peter@memex.co.uk
+#
+
+disk_type = "HP 97549T" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : asect = 1 \
+        : ncyl = 1909 : acyl = 2 : pcyl = 1921 : nhead = 16 : nsect = 64 \
+        : rpm = 4002 : bpt = 38350
+
+disk_type = "HP 97558" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : asect = 0 : atrks = 26 \
+        : ncyl = 1933 : acyl = 2 : pcyl = 1962 : nhead = 15 : nsect = 72 \
+        : rpm = 4002 : bpt = 42840
+
+disk_type = "HP 97556" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : asect = 0 : atrks = 26 \
+        : ncyl = 1668 : acyl = 2 : pcyl = 1697 : nhead = 11 : nsect = 72 \
+        : rpm = 4002 : bpt = 42840
+
+disk_type = "HP 97560" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : asect = 0 : atrks = 26 \
+        : ncyl = 1933 : acyl = 2 : pcyl = 1962 : nhead = 19 : nsect = 72 \
+        : rpm = 4002 : bpt = 42840
+
+
+# I didn't see the SUN1.3G from 4.1.2. I am using it on a factory
+# formatted Seagate ST41600N
+#
+disk_type = "SUN1.3G" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 17 : asect = 6 : atrks = 17 \
+        : ncyl = 1965 : acyl = 2 : pcyl = 3500 : nhead = 17 : nsect = 80 \
+        : rpm = 5400 : bpt = 44823
+
+#
+# This is the list of supported disks for the Adaptec ACB4000 controller.
+#
+disk_type = "Micropolis 1304" \
+        : ctlr = ACB4000 \
+        : ncyl = 825 : acyl = 5 : pcyl = 830 : nhead = 6 : nsect = 17 \
+        : rpm = 3600 : bpt = 10416 : skew = 2 : precomp = 400
+
+disk_type = "Micropolis 1325" \
+        : ctlr = ACB4000 \
+        : ncyl = 1022 : acyl = 2 : pcyl = 1024 : nhead = 8 : nsect = 17 \
+        : rpm = 3600 : bpt = 10416 : skew = 2 : precomp = 1024
+
+disk_type = "Maxtor XT-1050" \
+        : ctlr = ACB4000 \
+        : ncyl = 1020 : acyl = 4 : pcyl = 1024 : nhead = 5 : nsect = 17 \
+        : rpm = 3600 : bpt = 10416 : skew = 2 : precomp = 1024
+
+disk_type = "Fujitsu M2243AS" \
+        : ctlr = ACB4000 \
+        : ncyl = 752 : acyl = 2 : pcyl = 754 : nhead = 11 : nsect = 17 \
+        : rpm = 3600 : bpt = 10416 : skew = 2 : precomp = 754
+
+disk_type = "Vertex V185" \
+        : ctlr = ACB4000 \
+        : ncyl = 1163 : acyl = 3 : pcyl = 1166 : nhead = 7 : nsect = 17 \
+        : rpm = 3600 : bpt = 10416 : skew = 2 : precomp = 1166
+
+
+# We are using a number of 1004Mb drives (IBM 3.5 inch, quite *fast*)
+# distributed by Acropolis Systems, Inc. 
+# These entries work for us on 4/60s and 4/75's and equivalent entries work on
+# HP9000/700s. Enjoy!
+
+disk_type = "ASI-1.0GIBM"\
+        :ctlr=SCSI:fmt_time=4\
+        :cache=0x11:trks_zone=15:asect=5:atrks=30\
+        :ncyl=1632:acyl=2:pcyl=1925:nhead=15:nsect=80\
+        :rpm=4316:bpt=41664
+
+# From M.Lim@anu.edu.au
+#
+# Here is an entry for a Wren IX I posted to sun-managers recently 
+#
+# It works on my SunOS 4.1.x systems.
+#
+
+disk_type = "Seagate ST42100N - Wren 9" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : cache = 0x11 : trks_zone = 15 : asect = 5 : atrks = 30 \
+        : ncyl = 2574 : acyl = 3 : pcyl = 2577 : nhead = 15 : nsect = 96 \
+        : rpm = 3600 : bpt = 57200
+
+partition = "Seagate ST42100N - Wren 9" \
+        : disk = "Seagate ST42100N - Wren 9" : ctlr = SCSI \
+        : a = 0, 0 : b = 0, 0 : c = 0, 3706560 : d = 0, 0 \
+        : e = 0, 0 : f = 0, 0 : g = 0, 0 : h = 0, 0
+
+#
+# From jdd@cdf.toronto.edu
+#
+
+disk_type = "Fujitsu M2263SA" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15 : asect = 1 : atrks = 10 \
+        : ncyl =  1652 : acyl = 2 : pcyl = 1658 : nhead = 15 : nsect = 53 \
+        : rpm = 3600 : bpt = 31296
+
+#
+# From nir@ca44.zoran.hellnet.org
+#
+# I couldn't find a Fujitsu 2266SA 1.2GB entry in your format.faq.
+# I recently installed such a disk, and tried some entries sugested both from
+# my dealer, and from The Net.
+#
+# The best results I got was by using:
+
+disk_type = "Fujitsu M2266SA 1.2GB" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15 : asect = 1 : atrks = 10 \
+        : ncyl =  1652 : acyl = 2 : pcyl = 1658 : nhead = 15 : nsect = 85 \
+        : rpm = 3600 : bpt = 50830
+
+#
+# From: John DiMarco (jdd@cdf.toronto.edu)
+#
+# Yes, this is a duplicate entry. If you're running SunOS 4.1.1 or earlier 
+# on a sun4c (Sparcstation SLC/ELC/1/1+/IPC/IPX/2 without the patch for 
+# large SCSI disks, problems arise for SCSI disks with a formatted capacity
+# greater than 2^21-1 bytes (1GB). Since the Fujitsu 2266 is pretty
+# close to that anyways, here's a format entry for the 2266 that stays
+# within the limit. Parameters courtesy of Ian Watt from Fujitsu Canada
+
+disk_type = "Fujitsu M2266SA 1GB" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 1642 : acyl = 2 : pcyl = 1658 : nhead = 15 : nsect = 85 \
+        : rpm = 3600 : bpt = 50910
+
+#
+# From: poirot@mickey.jsc.nasa.gov (Daniel Poirot)
+#
+# I have just installed five Seagate ST3283N in different SPARC 1+ and 2
+# machines.  These drives are 'FAST SCSI' and format out to 240 Meg.  The
+# following format.dat entry works fine for me!
+
+disk_type = "SeagateST3283N" \
+        : ctlr = SCSI \
+        : trks_zone = 5 : atrks = 0: asect = 0 \
+        : ncyl = 1689 : acyl = 2 : pcyl = 1691 : nhead = 5 : nsect = 57 \
+        : rpm = 4500 : bpt = 29184
+
+
+#
+# From br@melb.bull.oz.au (Bret Robinson)
+#
+disk_type = "Maxtor XT-4380S" \
+        : ctlr = SCSI \
+        : ncyl = 1202 : acyl = 2 : pcyl = 1224 : nhead = 15 : nsect = 36 \
+        : rpm = 3600 : bpt = 18432
+
+#
+# From : Philip Brown <philb@soda.berkeley.edu>
+#
+#
+#Note that this is for the ESDI disk.
+#with an "ASDI" controller. although we fake it be be an SCSI. ignore
+#the final error about vendor-specific error. it really formats.
+# also, when you label it, it is 90% likely to lock up the
+# SCSI bus for a bit. try labeling immediately after. it should 99%
+#likely work. don't ask me why. but from then on, you should
+#have virtually no troubles with the drive.
+#note also that this has NOTHING to do
+#with the actual parameters of the drive. Which, I might add, are:
+# 10 heads, 6 disks,
+# 823 cylinders, variable sector size.
+
+disk_type = "Fujitsu M2246E"\
+        : ctlr = SCSI : fmt_time = 1 \
+        : trks_zone = 6 : atrks = 0 : asect = 1 \
+        : ncyl = 1196 : acyl = 2 : pcyl = 1198 : nhead = 6 : nsect = 35 \
+        : rpm = 3662 : bpt = 16896
+
+partition = "Fujitsu M2246E" \
+        : disk = "Fujitsu M2246E" : ctlr = SCSI \
+        : a = 0 , 16170 : b = 77,28140 : c = 0, 251160 : g = 211,206850
+
+#
+# From pete@guug.de (Pete Delaney)
+# I'm using the following format.dat entry, it SEEMS to be working ok:
+#
+disk_type = "Fujitsu-M2624S-512" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : trks_zone = 15 : asect = 4 : atrks = 30 \
+        : ncyl =  1429 : acyl = 2 : pcyl = 1435 : nhead = 11 : nsect = 64 \
+        : rpm = 4400 : bpt = 39263
+
+#
+# From kcasella@maxtor.com (Karen Casella)
+#
+# There are two models of Maxtor P0-12S, the newer one with 1795 cylinders,
+# the older with 1632 cylinders.
+#
+# Newer model Maxtor P0-12S
+disk_type = "Maxtor P0-12S (1795)" \
+        : ctlr = SCSI : fmt_time = 7 \
+        : ncyl = 1510 : acyl = 2 : pcyl = 1795 : nhead = 15 : nsect = 90 \
+        : rpm = 3600 : bpt = 46080
+
+partition = "Maxtor P0-12S (1795)" \
+        : disk = "Maxtor P0-12S (1795)" : ctlr = SCSI \
+        : c = 0, 2038500 : g = 0, 2038500
+
+# Older model Maxtor P0-12S
+disk_type = "Maxtor P0-12S (1632)" \
+        : ctlr = SCSI : fmt_time = 7 \
+        : ncyl = 1478 : acyl = 2 : pcyl = 1632 : nhead = 15 : nsect = 90 \
+        : rpm = 3600 : bpt = 46080
+
+partition = "Maxtor P0-12S (1632)" \
+        : disk = "Maxtor P0-12S (1632)" : ctlr = SCSI \
+        : c = 0, 1995300 : g = 0, 1995300
+
+# From: Sandra Smith (sandra@csri.toronto.edu)
+# Confirmed by Ian Watt at Fujitsu Canada
+
+disk_type = "Fujitsu M2652SA" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 1935 : acyl = 2 : pcyl = 1944 : nhead = 20 : nsect =  88 \
+        : rpm = 5400 : bpt = 52864
+
+# From: John DiMarco (jdd@cdf.toronto.edu)
+#
+# Parameters from Ian Watt at Fujitsu Canada
+
+disk_type = "Fujitsu M2654SA" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 2174 : acyl = 2 : pcyl = 2179 : nhead = 21 : nsect =  88 \
+        : rpm = 5400 : bpt = 52864
+
+# From: sun 4.1.2 format.dat version 1.24
+
+disk_type = "CDC IPI 9720" \
+        : ctlr = ISP-80 \
+        : ncyl = 1631 : acyl = 1 : pcyl = 1633 : nhead = 15 : nsect = 82 \
+        : rpm = 3600 : bpt = 50400 : skew = 0 : precomp = 0
+
+partition = "CDC IPI 9720" \
+        : disk = "CDC IPI 9720" : ctlr = ISP-80 \
+        : a = 0, 33210 : b = 27, 131610 : c = 0, 2006130 : g = 134, 196800 \
+        : h = 294, 1644510
+
+disk_type = "CDC IPI 9722" \
+        : ctlr = ISP-80 \
+        : ncyl = 1630 : acyl = 1 : pcyl = 1632 : nhead = 7 : nsect = 156 \
+        : rpm = 3600 : bpt = 100800 : skew = 0 : precomp = 0
+
+partition = "CDC IPI 9722" \
+        : disk = "CDC IPI 9722" : ctlr = ISP-80 \
+        : a = 0, 33852 : b = 31, 132132 : c = 0, 1779960 : g = 152, 197652 \
+        : h = 333, 1416324
+
+disk_type = "Seagate IPI ZBR Elite" \
+        : ctlr = "ISP-80" \
+        : ncyl = 1893 : acyl = 1 : pcyl = 1895 : nhead = 17 : nsect = 78 \
+        : rpm = 5400 : bpt = 50400 : skew = 0 : precomp = 0
+
+partition = "Seagate IPI ZBR Elite" \
+        : disk = "Seagate IPI ZBR Elite" : ctlr = ISP-80 \
+        : a = 0, 34476 : b = 26, 132600 : c = 0, 2510118 : g = 126, 663000 \
+        : h = 626, 1680042
+
+disk_type = "ST83220K" \
+        : ctlr = "ISP-80" \
+        : ncyl = 2652 : acyl = 1 : pcyl = 2653 : nhead = 19 : nsect = 102 \
+        : rpm = 4365 : bpt = 63840 : skew = 0 : precomp = 0
+
+# From: Charles A. Uretsky (wbbart!cau@abars.att.com)
+# thanks to the following:
+#
+# Michiel Steltman
+# Brian Bartholomew
+#
+disk_type = "Seagate ST1480N" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 9 : asect = 4 \
+        : ncyl = 1456 : acyl = 2 : pcyl = 1476 : nhead = 9 : nsect = 64 \
+        : rpm = 4400 : bpt = 37037
+
+# From: Bevin Steer (ccbjs@levels.unisa.edu.au)
+#
+# The following is what I am experimenting with. Please don't hesitate to
+# contact me if you see something wrong or silly...or know what the real
+# numbers should be :-)
+#
+disk_type = "DEC_RZ58" \
+    : ctlr = SCSI : fmt_time = 4 \
+    : trks_zone = 15 : asect = 8 : atrks = 0 \
+    : ncyl = 2112 : acyl = 3 : pcyl = 2115 : nhead = 15 : nsect = 85 \
+    : rpm = 5400 : bpt = 44000 # Stab in the dark, what should it be? #
+
+partition = "DEC_RZ58_whole_disk" \
+    : disk = "DEC_RZ58" : ctlr = SCSI \
+    : c=0,2692800
+
+# From jdd@cdf.toronto.edu (John DiMarco)
+#
+# Courtesy of Open Storage Solutions, bpt added from Seagate specs (avg of
+# bpt for inner and outer tracks).
+disk_type = "SUN2.1G" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 2733 : acyl = 2 : pcyl = 3500 : nhead = 19 : nsect = 80 \
+        : rpm = 5400 : bpt = 44823
+
+#
+# From jdd@cdf.toronto.edu (John DiMarco)
+#
+# Params courtesy of Open Storage Solutions except for 
+# bpt, which I set to be the midpoint between the bpt figure for the
+# inner and outer tracks. 
+#
+disk_type = "Seagate ST42400N Elite 2" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 2604 : acyl = 2 : pcyl = 2624 : nhead = 19 \
+        : nsect = 84 : rpm = 5400 : bpt = 48720
+
+partition = "Seagate ST42400N Elite 2" \
+        : disk = "Seagate ST42400N Elite 2" : ctlr = SCSI \
+        : c = 0, 4155984
+
+#
+# From:    philf@hst.att.com (Phil Fischer)
+#
+disk_type = "Seagate Elite ST43400N-3.5G" \
+        : ctlr = SCSI : fmt_time = 8 \
+        : cache = 0x11 : trks_zone = 20 : asect = 6 : atrks = 20 \
+        : ncyl =  2736 : acyl = 2 : pcyl = 2738 : nhead = 21 : nsect = 99 \
+        : rpm = 5400 : bpt = 49000
+
+partition = "Seagate Elite ST43400N-3.5G" \
+        : disk = "Seagate Elite ST43400N-3.5G" : ctlr = SCSI \
+        : a = 0, 2843360 : b = 1367, 2843360
+#
+# From kcasella@maxtor.com (Karen Casella)
+#
+disk_type = "Maxtor P1-17S" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : trks_zone = 19 \
+        : ncyl = 1816 : acyl = 2 : pcyl = 1818 : nhead = 19 : nsect = 83 \
+        : rpm = 3600 : bpt = 42496
+
+partition = "Maxtor P1-17S" \
+        : disk = "Maxtor P1-17S" : ctlr = SCSI \
+        : a = 0, 78850 : b = 50, 78850 : c = 0, 2863832 : d = 100, 78850 \
+        : g = 150, 2469582 : h = 1716, 78850
+
+disk_type = "Maxtor P1-17S NB" \
+        : ctlr = SCSI \
+        : ncyl = 1711 : acyl = 2 : pcyl = 1778 : nhead = 19 : nsect = 90 \
+        : rpm = 3600 : bpt = 46080
+
+partition = "Maxtor P1-17S NB" \
+        : disk = "Maxtor P1-17S NB" : ctlr = SCSI \
+        : c = 0, 2925810 : g = 0, 2925810
+
+#
+# From: kimc@w8hd.org (Kim Culhan)
+# This is a 'revised' format.dat which was supplied by Maxtor tech support
+# for the MXT1240S.
+#
+
+disk_type = "Maxtor MXT1240S" \
+        : ctlr = SCSI : fmt_time = 7 \
+        : ncyl = 2306 : acyl = 2 : pcyl = 2368 : nhead = 15 : nsect = 70 \
+        : rpm = 6300  : bpt = 31410
+
+partition = "Maxtor MXT1240S" \
+        : disk = "Maxtor MXT1240S" : ctlr = SCSI \
+        : c = 0, 2421300 : g = 0, 2421300
+
+#
+# from Michael Chang (nulspace@cs.umd.edu)
+#
+disk_type = "CONNER 30170E" \
+        : ctlr = SCSI \
+        : ncyl = 897 : acyl = 2 : pcyl = 903 : nhead = 8 : nsect = 46 \
+        : rpm = 3822 : bpt = 23552
+
+partition = "CONNER 30170E" \
+        : disk = "CONNER 30170E" : ctlr = SCSI \
+        : a = 0, 14720 : b = 40, 40480 : c = 0, 330096 : g = 150, 274896
+
+#
+# from sgolson@trilobyte.com (Steve Golson)
+# 
+# This drive is sold by DEC as the DEC DSP3105
+#
+disk_type = "Maxtor DXP3105S" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : ncyl = 2568 : acyl = 2 : pcyl = 2570 : nhead = 14 : nsect = 57 \
+        : rpm = 5400 : bpt = 29640
+
+#
+# From (Dan Butzer) butzer@cranel.com:
+#
+disk_type = "HP C3010 / Cranel 2.0GB Fast SCSI2 H10" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 28515 : asect = 0 : atrks = 1311 \
+        : ncyl = 2165 : acyl = 2 : pcyl = 2325 : nhead = 19 : nsect = 95 \
+        : rpm = 5400 : bpt = 44032
+
+#
+# From Rex Mayne <rex@hpuerca.atl.hp.com>
+#
+disk_type = "HP97548SU 664MB" \
+        :ctlr = SCSI \
+        :trks_zone = 1 : asect = 1 : atrks = 112 \
+        :ncyl = 1445 : acyl = 2 : pcyl = 1457 : nhead = 16 \
+        :nsect = 56 : rpm = 4002 : bpt = 37449
+
+partition = "HP97548SU 664MB" \
+        :disk = "HP97548SU 664MB" : ctlr = SCSI \
+        :a = 0,35840 : b = 40,71680 : c = 0,1294720 \
+        :g = 240,197120 : h = 680,342720
+
+#
+# From louis@marco.de (Ju"rgen Fluk)
+#
+disk_type = "Conner CP3540" \
+        : ctlr = SCSI \
+        : ncyl = 1805 : acyl = 2 : pcyl = 1807 : nhead = 12 \
+        : nsect = 49 : rpm = 4400 : bpt = 35840
+
+#
+# From: kcasella@maxtor.com (Karen Casella)
+#
+disk_type = "Maxtor 7213SR NB" \
+        : ctlr = SCSI \
+        : ncyl = 1595 : acyl = 3 : pcyl = 1698 : nhead = 4 : nsect = 65 \
+        : rpm = 3600 : bpt = 33280
+partition = "Maxtor 7213SR NB" \
+        : disk = "Maxtor 7213SR NB" : ctlr = SCSI \
+        : c = 0, 414700 : g = 0, 414700
+
+#
+# From sam@ics.uci.edu (Sam Horrocks)
+#
+disk_type = "Seagate ST11200N" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15 : asect = 12 : atrks = 30 \
+        : ncyl = 1714 : acyl = 1 : pcyl = 1715 : nhead = 15 : nsect = 80 \
+        : rpm = 5411 : bpt = 40960
+
+partition = "Seagate ST11200N" \
+        : disk = "Seagate ST11200N" : ctlr = SCSI \
+        : a = 0, 2056800 : b = 0, 0 : c = 0, 2056800 : g = 0, 0
+
+#
+# From jdd@cdf.toronto.edu (John DiMarco)
+#
+disk_type = "CONNER 30200" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : ncyl = 2121 : acyl = 2 : asect = 1 : pcyl = 2123 \
+        : nhead = 4 : nsect = 49 \
+        : rpm = 3600 : bpt = 25088
+
+partition = "CONNER 30200" \
+        : disk = "CONNER 30200" : ctlr = SCSI \
+        : c = 0, 415716
+
+# From: Thomas Tornblom <Thomas.Tornblom@Nexus.Comm.SE>
+# This is the format.dat entry I used for using a 44M SyQuest drive on a
+# SparcStation SLC. The SCSI-driver, for 4.1.1 and 4.1.2 at least, needs
+# one binary patch and synchronous SCSI needs to be turned off in the
+# kernel.
+#
+# What is needed is two kernel patches, a format.dat for the drive and a
+# disk formatted with 512 byte blocks (I formatted one in a Macintosh).
+# 
+# The kernel patches are small and can be done without source.
+# 
+# # adb -k -w /vmunix /dev/mem
+# physmem	fec
+# scsi_options?X
+# _scsi_options:
+# _scsi_options:	78
+# ?W 38
+# _scsi_options:	0x78		=	0x38	<- Turn off Synch SCSI
+# sd_findslave+0x1b0?i
+# _sd_findslave+0x1b0:		mov	-0x1, %l5
+# 
+# _sd_findslave+0x1b4:		st	%l5, [%fp - 0x8] <- Change this
+# ?W c027bff8
+# _sd_findslave+0x1b4:		0xea27bff8	=	0xc027bff8
+# sd_findslave+0x1b0?i
+# _sd_findslave+0x1b0:		mov	-0x1, %l5
+# 
+# _sd_findslave+0x1b4:		st	%g0, [%fp - 0x8] <- to this
+# 
+# _sd_findslave+0x1b8:		st	%g0, [%fp - 0x4]
+# 
+# 'what /sys/sun4c/OBJ/sd.o' said version 1.98 90/08/30 on my system, if
+# yours is different, you might have to check around to find the
+# offending sequence of instructions.
+# 
+disk_type = "SyQuest SQ555" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : ncyl = 1273 : acyl = 2 : pcyl = 1275 : nhead = 2 : nsect = 34 \
+        : rpm = 3220 : bpt = 16896
+
+partition = "SyQuest SQ555" \
+        : disk = "SyQuest SQ555" : ctlr = SCSI \
+        : c = 0, 86564 
+
+# From Fabrice Cuq (fabrice@cisk.atmos.ucla.edu)
+# DEC DSP3160S  --  Formatted Capacity: 1526MB
+disk_type = "Arte DEC DSP3160S" \
+    : ctlr = SCSI : fmt_time = 13 \
+    : ncyl = 1744 : acyl = 2 : pcyl = 1746 : nhead = 16 : nsect = 112 \
+    : rpm = 5403 : bpt = 57344
+
+# From: Richard.Hellier<rlh@cppuk.co.uk>
+#
+#	Here is a format.dat entry for the IBM 0663 E15 1.2G disk,
+# as supplied by the vendor.
+disk_type = "IBM 0663-E15" : ctlr = SCSI \
+	: ncyl = 3182 : acyl = 2 : pcyl = 3184 \
+	: nhead = 20 : nsect = 37 : rpm = 4316 : bpt = 31410
+
+# From:	greg@serveme.chi.il.us (Gregory Gulik)
+# 
+# I got this information from Fujitsu technical support.
+#
+disk_type = "Fujitsu-M2694ESA" \
+        : ctlr = SCSI \
+        : cache = 0x11 : trks_zone = 15 : asect = 5 : atrks = 30 \
+        : ncyl =  1830 : acyl = 2 : pcyl = 1832 : nhead = 15 : nsect = 77 \
+        : rpm = 5400 : bpt = 31410
+
+# From: Peter W. Osel <pwo@guug.de>
+#
+# Received these directly from Quantum Corp., USA
+#
+disk_type = "Quantum LPS 105S" \
+	: ctlr = SCSI \
+	: ncyl = 1221 : acyl = 2 : pcyl = 1223 : nhead = 4 : nsect = 42 \
+	: rpm = 3600 : bpt = 21504
+
+disk_type = "Quantum LPS 120S" \
+	: ctlr = SCSI \
+	: ncyl = 1987 : acyl = 2 : pcyl = 1989 : nhead = 2 : nsect = 60 \
+	: rpm = 3660 : bpt = 30720
+
+disk_type = "Quantum LPS 240S" \
+	: ctlr = SCSI \
+	: ncyl = 1995 : acyl = 2 : pcyl = 1997 : nhead = 4 : nsect = 60 \
+	: rpm = 3660 : bpt = 30720
+
+disk_type = "Quantum PD 120S" \
+	: ctlr = SCSI \
+	: ncyl = 1114 : acyl = 2 : pcyl = 1116 : nhead = 5 : nsect = 42 \
+	: rpm = 3600 : bpt = 21504
+
+disk_type = "Quantum PD 170S" \
+	: ctlr = SCSI \
+	: ncyl = 1117 : acyl = 2 : pcyl = 1119 : nhead = 7 : nsect = 42 \
+	: rpm = 3600 : bpt = 21504
+
+disk_type = "Quantum PD 210S" \
+	: ctlr = SCSI \
+	: ncyl = 1189 : acyl = 2 : pcyl = 1191 : nhead = 7 : nsect = 49 \
+	: rpm = 3600 : bpt = 25088
+
+disk_type = "Quantum PD 425S" \
+	: ctlr = SCSI \
+	: ncyl = 1540 : acyl = 2 : pcyl = 1542 : nhead = 9 : nsect = 60 \
+	: rpm = 3600 : bpt = 30720
+
+disk_type = "Quantum ELS 85S" \
+	: ctlr = SCSI \
+	: ncyl = 1535 : acyl = 2 : pcyl = 1537 : nhead = 2 : nsect = 54 \
+	: rpm = 3600 : bpt = 27648
+
+disk_type = "Quantum ELS 127S" \
+	: ctlr = SCSI \
+	: ncyl = 1541 : acyl = 2 : pcyl = 1543 : nhead = 3 : nsect = 54 \
+	: rpm = 3600 : bpt = 27648
+
+disk_type = "Quantum ELS 170S" \
+	: ctlr = SCSI \
+	: ncyl = 1542 : acyl = 2 : pcyl = 1544 : nhead = 4 : nsect = 54 \
+	: rpm = 3600 : bpt = 27648
+
+disk_type = "Quantum GoDrive 120S" \
+	: ctlr = SCSI \
+	: ncyl = 1067 : acyl = 2 : pcyl = 1069 : nhead = 4 : nsect = 56 \
+	: rpm = 3600 : bpt = 28672
+
+disk_type = "Quantum GoDrive 160S" \
+	: ctlr = SCSI \
+	: ncyl = 1413 : acyl = 2 : pcyl = 1415 : nhead = 4 : nsect = 58 \
+	: rpm = 3600 : bpt = 29696
+
+disk_type = "Quantum LPS 525S" \
+	: ctlr = SCSI \
+	: ncyl = 2444 : acyl = 2 : pcyl = 2446 : nhead = 6 : nsect = 70 \
+	: rpm = 4500 : bpt = 35840
+
+disk_type = "Quantum PD 700S" \
+	: ctlr = SCSI \
+	: ncyl = 2441 : acyl = 2 : pcyl = 2443 : nhead = 8 : nsect = 70 \
+	: rpm = 4500 : bpt = 35840
+
+disk_type = "Quantum PD 1050S" \
+	: ctlr = SCSI \
+	: ncyl = 2444 : acyl = 2 : pcyl = 2446 : nhead = 12 : nsect = 70 \
+	: rpm = 4500 : bpt = 35840
+
+disk_type = "Quantum PD 1225S" \
+	: ctlr = SCSI \
+	: ncyl = 2442 : acyl = 2 : pcyl = 2444 : nhead = 14 : nsect = 70 \
+	: rpm = 4500 : bpt = 35840
+
+# From: cc_koper@rcvie.co.at (Koper Zangocyan)
+# DEC RZ55 disk format.dat entry is the same as "Micropolis 1558"
+# This works fine on a Sun-4/40 with SunOS 4.1.2
+
+disk_type = "RZ55" \
+        : ctlr = SCSI \
+        : ncyl = 1218 : acyl = 2 : pcyl = 1224 : nhead = 15 : nsect = 35 \
+        : rpm = 3600 : bpt = 20833
+
+partition = "RZ55" \
+        : disk = "RZ55" : ctlr = SCSI \
+        : a = 0, 32025 : b = 61, 59850 : c = 0, 639450 : g = 175, 547575
+
+# From: cc_koper@rcvie.co.at (Koper Zangocyan)
+# DEC RZ24 disk format.dat entry.
+# This works fine on a Sun-4/40 with SunOS 4.1.2
+
+disk_type = "RZ24" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 8 \
+        : ncyl = 1344 : acyl = 2 : pcyl = 1348 \
+        : nhead = 8 : nsect = 38 : rpm = 3497 : bpt = 19456
+
+partition = "RZ24" \
+        : disk = "RZ24" : ctlr = SCSI \
+        : a = 0, 0 : b = 0, 0 : c = 0, 409792
+#
+# From: olav.lerbrekk@geology.uio.no (Olav Lerbrekk)
+#
+disk_type = "Seagate ST12550N" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : cache = 0x0 : trks_zone = 19 : asect = 9 : atrks = 19 \
+        : ncyl = 2747 : acyl = 2 : pcyl = 2708 : nhead = 19 : nsect = 80 \
+        : rpm = 7200 : bpt = 40960
+
+#
+# From:	morrow@cns.ucalgary.ca (Bill Morrow)
+#
+# Format entry for M2511A magneto-optical 128MB removeable media drive.
+
+disk_type = "Fujitsu M2511A" \
+        : ctlr = SCSI : fmt_time = 12 \
+        : ncyl = 9950 : acyl = 2 : pcyl = 9952 : nhead = 1 : nsect = 25 \
+        : rpm = 3600 : bpt = 12800
+
+#
+# From:	gcs@tstsp0.dsto.gov.au (Gary Speechley)
+#
+# These are entries for the Maxtor Tahiti IIm drive.  Credit where credit 
+# is due, however: most of the data is supplied through the device driver 
+# files from Advanced Archival Products of Greenwood Village Colorado. 
+# My modifications are for the single partition "DATA" drives.
+#
+# This is for the Maxoptix Tahiti IIm drive - SYSTEM
+#
+disk_type = "MAXOPTIX (NON-ISO, 512b) SYSTEM" \
+ 	: ctlr = SCSI \
+ 	: ncyl = 15081 : acyl = 2 : pcyl = 15083 : nhead = 1 : nsect = 60 \
+	: rpm = 2200 : bpt = 36600 : bps = 610 :
+ 
+disk_type = "MAXOPTIX (NON-ISO, 1024b) SYSTEM" \
+ 	: ctlr = SCSI \
+ 	: ncyl = 15104 : acyl = 2 : pcyl = 15106 : nhead = 1 : nsect = 66 \
+	: rpm = 2200 : bpt = 74052 : bps = 1122 :
+
+#
+# This is for the Maxoptix Tahiti IIm drive - DATA (GCS 06-Apr-93)
+#
+disk_type = "MAXOPTIX (NON-ISO, 512b) DATA" \
+ 	: ctlr = SCSI \
+ 	: ncyl = 15081 : acyl = 2 : pcyl = 15083 : nhead = 1 : nsect = 60 \
+	: rpm = 2200 : bpt = 36600 : bps = 610 :
+ 
+disk_type = "MAXOPTIX (NON-ISO, 1024b) DATA" \
+ 	: ctlr = SCSI \
+ 	: ncyl = 15104 : acyl = 2 : pcyl = 15106 : nhead = 1 : nsect = 66 \
+	: rpm = 2200 : bpt = 74052 : bps = 1122 :
+
+# From:	Todd Gamble <todd_gamble@wiltel.com>
+#
+# I got the drive and format.dat entry from DATALINK (800-448-6314).
+
+disk_type = "HP C2247 1.05GB" \
+        : ctlr = SCSI \
+        : trks_zone = 6925 : asect = 0 : atrks = 897\
+        : ncyl = 1661 : acyl = 2 : pcyl = 2018: nhead = 13\
+        : nsect = 95 : rpm = 5400 : bpt = 49152
+ 
+partition = "HP C2247 1.05GB" \
+        : disk="HP C2247 1.05GB" : ctlr = SCSI \
+        : c = 0, 2051335 : g = 0, 1640080: h = 1328, 411255
+
+# From:    Chris Dean <ctdean@seaspace.com>
+#
+# DEC DSP3210 2103MB 
+#
+disk_type = "DEC DSP3210 2 GB" \
+        : ctlr = SCSI : fmt_time = 13 \
+        : ncyl = 3040 : acyl = 2 : pcyl = 3042 : nhead = 16 : nsect = 86 \
+        : rpm = 5400 : bpt = 44032
+
+partition = "DEC DSP3210 2 GB" \
+        : disk =  "DEC DSP3210 2 GB" : ctlr = SCSI \
+        : c = 0, 4183040 
+
+# From: Christopher Lott <lott@informatik.uni-kl.de>
+#
+# IBM 0662 S12 drive - approximately 1.05Gb
+# most parameters retrieved from drive using format;
+# rpm, bpt entered from the specification sheet.
+#
+disk_type = "IBM 0662-S12" \
+	: ctlr = SCSI : fmt_time = 4 : ncyl = 3002 : acyl = 2 \
+	: pcyl = 3004 : nhead = 6 : nsect = 114 \
+	: rpm = 5400 : bpt = 31410
+
+# From:	Dean Cookson <cookson@mbunix.mitre.org>
+# As received from DEC:
+#
+disk_type = "DEC DSP5350" \
+        : ctlr = SCSI : fmt_time=9 \
+        : cache = 11 : trks_zone = 25 : asect = 25 : atrks = 0 \
+        : ncyl = 3053 : acyl = 2 : pcyl = 3055 : nhead = 25 : nsect = 91 \
+        : rpm = 5400 : bpt = 46592
+
+# From: reilly@horta.shr.dec.com (Stephen Reilly)
+#
+# I am DEC's Engineer supervisor for the support
+# of DEC devices on Sun SPARC systems. I would like to request that these
+# [3] attached format.dat entries be added public domain version.
+#
+#	1.05 GB 3 1/2" form factor disk ( DEC P/N: SWSD3-SA)
+disk_type = "DEC_RZ26" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 2568 : acyl = 2 : pcyl = 2570 : nhead = 14 : nsect = 57 \
+        : rpm = 5400 : bpt = 29184
+
+partition = "DEC_RZ26" \
+        : disk = "DEC_RZ26" :ctlr = SCSI \
+        : a = 0, 66234 : b = 83, 132468 : c = 0, 2049264 : g = 249, 1850562
+#
+#	2.1 GB 3 1/2" form factor disk (DEC P/N: SWSD3-SB)
+# Note: This is a banded drive so the number of sectors is an average over
+# the bands.
+disk_type = "DEC_RZ28" \
+        : ctlr = SCSI : fmt_time = 5 \
+        : ncyl = 3043 : acyl = 2 : pcyl = 3045 : nhead = 16 : nsect = 84 \
+        : rpm = 5400 : bpt = 43008
+
+partition = "DEC_RZ28" \
+        : disk = "DEC_RZ28" :ctlr = SCSI \
+        : a = 0, 64512 : b = 48, 196224 : c = 0, 4089792 : g = 194, 3827712
+#
+#	3.57 GB 5.25 form factor disk (DEC P/N: SWSD5-SA)
+# Note: This is a banded drive so the number of sectors is an average over
+# the bands.
+disk_type = "DEC_RZ74" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : ncyl = 3053 : acyl = 2 : pcyl = 3055 : nhead = 25 : nsect = 91 \
+        : rpm = 5400 : bpt = 46592
+
+partition = "DEC_RZ74" \
+        : disk = "DEC_RZ74" : ctlr = SCSI \
+        : a = 0, 65975 : b = 29, 193375 : c = 0, 4192825 \
+        : g = 114, 3931200 : h = 1843, 2752750
+#
+# From:	adcock@gsc.emr.ca
+#
+disk_type = "Seagate ST11900N" \
+	: ctlr = SCSI \
+	: ncyl = 2619 : acyl = 2 : pcyl = 2621 : nhead = 15 : nsect = 83 \
+	: rpm = 5411 : bpt = 48140
+
+partition = "Seagate ST11900N" \
+	: disk = "Seagate ST11900N" : ctlr = SCSI \
+	: b = 0, 498000 : c = 0, 3260655 : h = 400, 2761410
+
+#
+# From: dick@netcom.com (Richard Arnold)
+#
+disk_type = "Seagate ST12400N 2.4GB" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : cache = 0x0 : trks_zone = 19 : asect = 1 : atrks = 0 \
+        : ncyl =  2668 : acyl = 2 : pcyl = 2621 : nhead = 19 : nsect = 82 \
+        : rpm = 5411 : bpt = 41984
+
+partition = "Seagate ST12400N 2.4GB" \
+        : disk = "Seagate ST12400N 2.4GB" : ctlr = SCSI \
+        : a = 0, 32718 : b =21, 65436 : c = 0, 4156744 : g = 63, 4058590
+
+#
+# From:	Richard Ravich <richardr@kaiwan.com>
+# Here's the latest version of format.dat that Micropolis has prepared. 
+#
+
+disk_type = "Micropolis 1674-7" \
+	: ctlr = SCSI \
+	: ncyl = 1255: acyl = 3: pcyl = 1249: nhead = 7: nsect = 35 \
+	: rpm = 3600: bpt = 20832: trks_zone = 7: fmt_time = 4 \
+	: atrks = 21: asect = 4
+     
+disk_type = "Micropolis 1684-7" \
+	: ctlr = SCSI \
+	: ncyl = 1785: acyl = 3: pcyl = 1780: nhead = 7: nsect = 53 \
+	: rpm = 3600: bpt = 31248: trks_zone = 7: fmt_time = 4 \
+	: atrks = 21: asect = 4
+     
+disk_type = "Micropolis 1624-7" \
+	: ctlr = SCSI \
+	: ncyl = 1647: acyl = 3: pcyl = 2112: nhead = 7: nsect = 114 \
+	: rpm = 3600: bpt = 67900: trks_zone = 7: fmt_time = 4 \
+	: atrks = 21: asect = 4
+
+disk_type = "Micropolis 1578-15" \
+	: ctlr = SCSI \
+	: ncyl = 1231: acyl = 3: pcyl = 1224: nhead = 15: nsect = 35 \
+	: rpm = 3600: bpt = 20832: trks_zone = 15: fmt_time = 4 \
+	: atrks = 45: asect = 8
+
+disk_type = "Micropolis 1588-15" \
+	: ctlr = SCSI \
+	: ncyl = 1637: acyl = 3: pcyl = 1632: nhead = 15: nsect = 53 \
+	: rpm = 3600: bpt = 31410: trks_zone = 15: fmt_time = 4 \
+	: atrks = 45: asect = 8
+     
+disk_type = "Micropolis 1598-15" \
+	: ctlr = SCSI \
+	: ncyl = 1931: acyl = 3: pcyl = 1928: nhead = 15: nsect = 70 \
+	: rpm = 3600: bpt = 41664: trks_zone = 15: fmt_time = 4 \
+	: atrks = 45: asect = 8
+     
+disk_type = "Micropolis 1528-15" \
+	: ctlr = SCSI \
+	: ncyl = 2102: acyl = 3: pcyl = 2100: nhead = 15: nsect = 83 \
+	: rpm = 3600: bpt = 42496: trks_zone = 15: fmt_time = 5 \
+	: atrks = 45: asect = 8
+     
+disk_type = "Micropolis 1548-15" \
+	: ctlr = SCSI \
+	: ncyl = 1701: acyl = 3: pcyl = 2112: nhead = 15: nsect = 131 \
+	: rpm = 3600: bpt = 79218: trks_zone = 15: fmt_time = 6 \
+	: atrks = 45: asect = 8
+
+disk_type = "Micropolis 2105-8" \
+	: ctlr = SCSI \
+	: ncyl = 1448: acyl = 3: pcyl = 1760: nhead = 8: nsect = 94 \
+	: rpm = 5400: bpt = 51000: trks_zone = 8: fmt_time = 4 \
+	: atrks = 25: asect = 5
+     
+disk_type = "Micropolis 2112-15" \
+	: ctlr = SCSI \
+	: ncyl = 1452: acyl = 3: pcyl = 1760: nhead = 15: nsect = 94 \
+	: rpm = 5400: bpt = 55556: trks_zone = 15: fmt_time = 5 \
+	: atrks = 45: asect = 6
+
+disk_type = "Micropolis 1908-15" \
+	: ctlr = SCSI \
+	: ncyl = 1890: acyl = 3: pcyl = 2112: nhead = 15: nsect = 95 \
+	: rpm = 5400: bpt = 56241: trks_zone = 15: fmt_time = 5 \
+	: atrks = 45: asect = 8
+     
+disk_type = "Micropolis 1924-21" \
+	: ctlr = SCSI \
+	: ncyl = 2072: acyl = 3: pcyl = 2280: nhead = 21: nsect = 94 \
+	: rpm = 5400: bpt = 42496: trks_zone = 21: fmt_time = 5 \
+	: atrks = 63: asect = 11
+
+disk_type = "Micropolis 1936-21" \
+	: ctlr = SCSI \
+	: ncyl = 2772: acyl = 3: pcyl = 2780: nhead = 21: nsect = 101 \
+	: rpm = 5400: bpt = 51718: trks_zone = 21: fmt_time = 6 \
+	: atrks = 63: asect = 11
+
+disk_type = "Micropolis 2210-09" \
+	: ctlr = SCSI \
+	: ncyl = 2099: acyl = 3: pcyl = 2372: nhead = 9: nsect = 109 \
+	: rpm = 5400: bpt = 57770: trks_zone = 9: fmt_time = 4 \
+	: atrks = 27: asect = 6
+
+disk_type = "Micropolis 2108-10" \
+	: ctlr = SCSI \
+	: ncyl = 1450: acyl = 3: pcyl = 1760: nhead = 10: nsect = 94 \
+	: rpm = 5400: bpt = 51000: trks_zone = 10: fmt_time = 4 \
+	: atrks = 30: asect = 5
+
+disk_type = "Micropolis 2205-05" \
+	: ctlr = SCSI \
+	: ncyl = 2088: acyl = 3: pcyl = 2372: nhead = 5: nsect = 109 \
+	: rpm = 5400: bpt = 57770: trks_zone = 5: fmt_time = 3 \
+	: atrks = 15: asect = 6
+
+disk_type = "Micropolis 1926-15" \
+	: ctlr = SCSI \
+	: ncyl = 2769: acyl = 3: pcyl = 2772: nhead = 15: nsect = 101 \
+	: rpm = 5400: bpt = 51718: trks_zone = 15: fmt_time = 5 \
+	: atrks = 45: asect = 8
+
+disk_type = "Micropolis 2217-15" \
+	: ctlr = SCSI \
+	: ncyl = 2105: acyl = 3: pcyl = 2372: nhead = 15: nsect = 109 \
+	: rpm = 5400: bpt = 57770: trks_zone = 15: fmt_time = 5 \
+	: atrks = 45: asect = 6
+
+partition = "Micropolis 2217-15" \
+	: disk = "Micropolis 2217-15" : ctlr = SCSI \
+	: a = 0, 32700: b = 20, 65400: c = 0, 3441675: g = 60, 3343575 
+
+partition = "Micropolis 2210-09" \
+	: disk = "Micropolis 2210-09" : ctlr = SCSI \
+	: a = 0, 33354: b = 34, 66708: c = 0, 2059119: g = 102, 1959057 
+
+partition = "Micropolis 2205-05" \
+	: disk = "Micropolis 2205-05" : ctlr = SCSI \
+	: a = 0, 32700: b = 60, 65400: c = 0, 1137960: g = 180, 1039860 
+
+partition = "Micropolis 2108-10" \
+	: disk = "Micropolis 2108-10" : ctlr = SCSI \
+	: a = 0, 31960: b = 34, 63920: c = 0, 1363000: g = 102, 1267120 
+
+partition = "Micropolis 1926-15" \
+	: disk = "Micropolis 1926-15" : ctlr = SCSI \
+	: a = 0, 33330: b = 22, 66660: c = 0, 4195035: g = 66, 4095045
+
+partition = "Micropolis 1674-7" \
+	: disk = "Micropolis 1674-7" : ctlr = SCSI \
+	: a = 0, 16415: b = 67, 32830: c = 0, 307475: g = 201, 258230    
+
+partition = "Micropolis 1684-7" \
+	: disk = "Micropolis 1684-7" : ctlr = SCSI \
+	: a = 0, 32648: b = 88, 65296: c = 0, 662235: g = 264, 564291    
+          
+partition = "Micropolis 1624-7" \
+	: disk = "Micropolis 1624-7" : ctlr = SCSI \
+	: a = 0, 32718: b = 41, 65436: c = 0, 1314306: g = 123, 1216152  
+          
+partition = "Micropolis 1578-15" \
+	: disk = "Micropolis 1578-15" : ctlr = SCSI \
+	: a = 0, 32550: b = 62, 65100: c = 0, 646275: g = 186, 548625    
+          
+partition = "Micropolis 1588-15" \
+	: disk = "Micropolis 1588-15" : ctlr = SCSI \
+	: a = 0, 32595: b = 41, 65190: c = 0, 1301415: g = 123, 1203630  
+          
+partition = "Micropolis 1598-15" \
+	: disk = "Micropolis 1598-15" : ctlr = SCSI \
+	: a = 0, 32550: b = 31, 65100: c = 0, 2027550: g = 93, 1929900   
+          
+partition = "Micropolis 1528-15" \
+	: disk = "Micropolis 1528-15" : ctlr = SCSI \
+	: a = 0, 32370: b = 26, 64740: c = 0, 2616990: g = 78, 2519880   
+          
+partition = "Micropolis 1548-15" \
+	: disk = "Micropolis 1548-15" : ctlr = SCSI \
+	: a = 0, 33405: b = 17, 66810: c = 0, 3342465: g = 51, 3242250   
+          
+partition = "Micropolis 2105-8" \
+	: disk = "Micropolis 2105-8" : ctlr = SCSI \
+	: a = 0, 32336: b = 43, 64672: c = 0, 1088896: g = 129, 991888
+
+partition = "Micropolis 2112-15" \
+	: disk = "Micropolis 2112-15" : ctlr = SCSI \
+	: a = 0, 33840: b = 24, 67680: c = 0, 2047320: g = 72, 1945800 
+
+partition = "Micropolis 1908-15" \
+	: disk = "Micropolis 1908-15" : ctlr = SCSI \
+	: a = 0, 32775: b = 23, 65550: c = 0, 2693250: g = 69, 2594925   
+          
+partition = "Micropolis 1924-21" \
+	: disk = "Micropolis 1924-21" : ctlr = SCSI \
+	: a = 0, 33558: b = 17, 67116: c = 0, 4090128: g = 51, 3989454
+
+partition = "Micropolis 1936-21" \
+	: disk = "Micropolis 1936-21" : ctlr = SCSI \
+	: a = 0, 33936: b = 16, 67872: c = 0, 5879412  \
+	: g = 48, 2846382 : h = 1390, 2931222
+
+# This is a entry for IBM 0663L12 (1004 Mb).
+# It was created using scsinfo 3.1.
+# It seems to work fine with my ELC (4/25) and Sun OS 4.1.3.
+# jonas@interactive.se
+
+disk_type = "IBM 0663L12" \
+        : ctlr = SCSI : fmt_time = 2 \
+        : trks_zone = 15 : atrks = 0 : asect = 0 \
+        : ncyl = 1979 : acyl = 2 : pcyl = 2051 : nhead = 15 : nsect = 66 \
+        : rpm = 4316 : bpt = 38808
+ 
+partition = "IBM 0663L12" \
+        : disk = "IBM 0663L12" : ctlr = SCSI \
+        : c = 0, 1959210
+
+# From:	Gerard Hynes <ghynes@compusult.nf.ca>
+# Please find included the format.dat and partition data for the new 
+# Micropolis 2217-15 3.5" Fast SCSI-2 disk drive.  This is a 1.765GB 
+# formatted unit.  
+# 
+# This data provided by Micropolis technical support.
+
+disk_type = "Micropolis 2217-15" \
+	: ctlr = SCSI \
+	: ncyl = 2105: acyl = 3: pcyl = 2372: nhead = 15: nsect = 109 \
+	: rpm = 5400: bpt = 57770: trks_zone = 15: fmt_time = 5 \
+	: atrks = 45: asect = 6
+
+partition = "Micropolis 2217-15" \
+	: disk = "Micropolis 2217-15" : ctlr = SCSI \
+	: a = 0, 32700: b = 20, 65400: c = 0, 3441675: g = 60, 3343575
+
+# From:	mingso@netcom.com (Ming Yau So)
+#
+# The entry was provided by Stephen Reilly <reilly@horta.shr.dec.com>.
+#
+#  format.dat for DEC DSP5200S 2GB SCSI disk
+#
+
+disk_type = "DEC DSP5200" \
+	: ctlr = SCSI \
+	: cache = 0x11 : trks_zone = 15 : asect = 5 : atrks = 30 \
+	: ncyl =  2619 : acyl = 2 : pcyl = 2621 : nhead = 21 : nsect = 71 \
+	: rpm = 3600 : bpt = 36352
+
+partition = "DEC DSP5200" \
+	: disk = "DEC DSP5200" : ctlr = SCSI \
+	: a = 0, 32802 : b = 22, 65604 : c = 0, 3904929 : g = 66, 3806523
+
+# Hitachi DK315C-10, DK315C-10, DK315C-11, DK315C-14, DK325C-57,
+# DK326C-6, DK326C-10, DK515C-78, DK516C-16, DK517C-37 and DK315-14
+# entries prepared by Steve Simmons, scs@lokkur.dexter.mi.us.
+#
+# These values are taken from a sheet faxed to me by Hitachi. 
+# Cautionary note: the DK315C-14 does *not* fit into a standard 
+# mounting bracket -- the screw holes are in the wrong place.
+
+disk_type = "Hitachi DK315C-10" \
+	: ctlr = SCSI : fmt_time = 3 \
+	: trks_zone = 1 : atrks = 22 : asect = 1 \
+	: ncyl = 2467 : acyl = 2 : pcyl = 2469 : nhead = 11 : nsect = 75 \
+	: rpm = 4500 : bpt = 38912
+
+disk_type = "Hitachi DK315C-11" \
+	: ctlr = SCSI : fmt_time = 3 \
+	: trks_zone = 1 : atrks = 30 : asect = 1 \
+	: ncyl = 2478 : acyl = 2 : pcyl = 2480 : nhead = 15 : nsect = 58 \
+	: rpm = 4500 : bpt = 30208
+
+disk_type = "Hitachi DK315C-14" \
+	: ctlr = SCSI : fmt_time = 3 \
+	: trks_zone = 1 : atrks = 30 : asect = 1 \
+	: ncyl = 2462 : acyl = 2 : pcyl = 2464 : nhead = 15 : nsect = 75 \
+	: rpm = 4500 : bpt = 38912
+
+disk_type = "Hitachi DK326C-6" \
+	: ctlr = SCSI : fmt_time = 2 \
+	: trks_zone = 1 : atrks = 8 : asect = 1 \
+	: ncyl = 3200 : acyl = 2 : pcyl = 3202 : nhead = 4 : nsect = 87 \
+	: rpm = 6300 : bpt = 44544
+
+disk_type = "Hitachi DK326C-10" \
+	: ctlr = SCSI : fmt_time = 2 \
+	: trks_zone = 1 : atrks = 14 : asect = 1 \
+	: ncyl = 3200 : acyl = 2 : pcyl = 3202 : nhead = 7 : nsect = 87 \
+	: rpm = 6300 : bpt = 44544
+
+disk_type = "Hitachi DK515C-78" \
+	: ctlr = SCSI : fmt_time = 2 \
+	: trks_zone = 1 : atrks = 28 : asect = 1 \
+	: ncyl = 1354 : acyl = 2 : pcyl = 1356 : nhead = 14 : nsect = 69 \
+	: rpm = 3600 : bpt = 35328
+
+disk_type = "Hitachi DK516C-16" \
+	: ctlr = SCSI : fmt_time = 3 \
+	: trks_zone = 1 : atrks = 30 : asect = 1 \
+	: ncyl = 2170 : acyl = 2 : pcyl = 2172 : nhead = 15 : nsect = 80 \
+	: rpm = 3600 : bpt = 41472
+
+disk_type = "Hitachi DK517C-37" \
+	: ctlr = SCSI : fmt_time = 6 \
+	: trks_zone = 1 : atrks = 42 : asect = 1 \
+	: ncyl = 3297 : acyl = 2 : pcyl = 3299 : nhead = 21 : nsect = 81 \
+	: rpm = 5400 : bpt = 41472
+
+# From:	MURRAY ALEXANDER W <murraya@ecf.toronto.edu>
+#
+# This is for a Conner CP3100 (note: not the newer CP30100), an older
+# full-height 3.5" SCSI drive.
+
+disk_type = "CP3100" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : ncyl = 1023 : acyl = 2 : pcyl = 1023 : nhead = 4 : nsect = 49 \
+        : rpm = 3600 : bpt = 25088
+
+partition = "CP3100" \
+        : disk = "CP3100" : ctlr = SCSI \
+        : c = 0, 204864
+
+# From: tl@cd.chalmers.se (Torbj|rn Lindgren)
+# The following format.dat entry is constructed from the Application
+# Note that accompained our disks. We have run one of these a couple of
+# days using this entry. M1H and N1H is both documented in the same
+# AppNote, and even thought it isn't mentioned what the N1H is it MIGHT
+# be the differential version (both the normal and the wide version).
+
+disk_type = "IBM 0664-M1H/N1H" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 2856 : acyl = 2 : pcyl = 2870 \
+        : nhead = 16 : nsect = 86 : rpm = 5400 : bpt = 57600
+
+# From:	Kevin Martinez <lps@rahul.net>
+# Here is format.dat data for Quantum LPS540 and LPS270 drives. Note that 
+# the "Empire 540" is not the same as the LPS540. They are distinguishable 
+# by color: the "Empire" series has black epoxy coat on the base casting; 
+# the LPS series is natural aluminum finish.
+
+disk_type = "Quantum LPS 270S" \
+        :ctlr = SCSI \
+        :ncyl = 992 : acyl = 2 : pcyl =994 : nhead = 7 : nsect = 76  \
+        :rpm  = 4500 : bpt = 38912
+
+disk_type = "Quantum Empire 1080S" \
+	:ctlr = SCSI \
+	:ncyl = 1431 : acyl = 2 : pcyl = 1433 : nhead = 16 : nsect = 92  \
+	:rpm  = 5400 : bpt = 47104
+
+disk_type = "Quantum Empire 540S" \
+        :ctlr = SCSI \
+        :ncyl = 1431 : acyl = 2 : pcyl = 1433 : nhead = 8 : nsect = 92  \
+        :rpm  = 5400 : bpt = 47104
+#
+# 940511 shj@dknet.dk, partly courtesy of scsiinfo.
+# IBM 0664 M1H, ~2 gb, tested on a Sparc IPC running SunOS 4.1.3.
+disk_type = "IBM OEM 0664M1H" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15 : atrks = 0  : asect = 34  \
+        : ncyl = 2787 : acyl = 2 : pcyl = 2857 : nhead = 15 : nsect = 94 \
+        : rpm = 5400 : bpt = 55272
+
+# From: Daniel Curry <dan@radiomail.net>
+# What I was looking for was the geometry for a Seagate ST3600N disk.
+# Here is what scsiinfo printed out.
+#
+disk_type = "SEAGATE ST3600N" \
+        : ctlr = SCSI : fmt_time = 2 \
+        : trks_zone = 7 : atrks = 14  : asect = 7  \
+        : ncyl = 1853 : acyl = 2 : pcyl = 1872 : nhead = 7 : nsect = 79 \
+        : rpm = 4467 : bpt = 46452
+
+partition = "SEAGATE ST3600N" \
+        : disk = "SEAGATE ST3600N" : ctlr = SCSI \
+        : c = 0, 1024709
+
+# From:	Mark Tearle <mtearle@tartarus.uwa.edu.au>
+# Here's my format.dat submission for the NEC 2352 disk drive, the numbers
+# of sectors per track (nsect) and bytes per sector (bps) vary a lot
+# depending on what position the dip switches are in.  This is controlled
+# by 10 switch DIP switch, my dip switches are in the following positions:
+# 8,9,10,2,3,7 off  1,4,5,6 on
+#
+disk_type = "NEC-D2352" \
+        : ctlr = XD7053 \
+        : ncyl = 758 : acyl = 2 : pcyl = 760 : nhead = 19 : nsect = 57 \
+        : rpm = 3070 : bpt = 36288 : bps = 636                
+
+# From:	"richard a. reitmeyer" <gordot@leland.Stanford.EDU>
+# 
+# I called someone here and asked them to try and dial the micropolis
+# BBS for me and look for the 4110,  Here's what I'm told:
+# 
+disk_type = "Micropolis 4110" \
+        : ctlr = SCSI : fmt_time = 4 \
+	: ncyl = 1998 : acyl = 3 : pcyl = 2428 : nhead = 9 \
+ 	: nsect = 114 : rpm = 5400 : bpt = 51718 : trks_zone = 9 \
+	: atrks = 27 : asect = 6
+
+# From: Paul Brand, Hong Kong (CIS 100267,3526) using scsiinfo 3.3
+# The QUANTUM PD1050iS seems to be different from the QUANTUM PD1050S.
+# (I'm not sure: for instance, for the "Seagate ST11200N" I received from
+# several people 3 different format.dat entries. Then I discovered this
+# big format.dat file: entry #4. Scsiinfo gave me a 5th different version.)
+#
+disk_type = "QUANTUM PD1050iS" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : trks_zone = 12 : atrks = 0  : asect = 2  \
+        : ncyl = 1859 : acyl = 2 : pcyl = 2448 : nhead = 12 : nsect = 92 \
+        : rpm = 3600 : bpt = 54096
+
+partition = "QUANTUM PD1050iS" \
+        : disk = "QUANTUM PD1050iS" : ctlr = SCSI \
+        : c = 0, 2052336
+
+# From:	rsm@math.utexas.edu (Robert S. Maier)
+#
+# Entry partially from scsiinfo, partially from information from Quantum
+#
+disk_type = "QUANTUM LPS540S" \
+	: ctlr = SCSI : fmt_time = 2 \
+	: trks_zone = 4 : atrks = 0  : asect = 2 \
+	: ncyl = 2113 : acyl = 2 : pcyl = 2740 : nhead = 4 : nsect = 125 \
+	: rpm = 4500 : bpt = 73500
+#
+# From: huesler@hifo.unizh.ch
+#
+# This is based on a list from morrow@cns.ucalgary.ca and adapted 
+# to Fujitsu specifications
+# "Fujitsu M2512A v2" applies to 230 MB MOs 
+# "Fujitsu M2512A small" applies to 128 MB MOs
+# ncyl and pcyl could be increased
+#
+
+disk_type = "Fujitsu M2512A v2" \
+	: ctlr = SCSI : fmt_time = 12 \
+	: ncyl = 17840 : acyl = 2 : pcyl = 17842 : nhead = 1 : nsect = 25 \
+	: rpm = 3600 : bpt = 12800
+
+partition = "Fujitsu M2512A v2" \
+	:disk = "Fujitsu M2512A v2" : ctlr = SCSI \
+	: a = 0, 0 : b = 0, 0 : c = 0, 446000 : g = 0, 0
+
+disk_type = "Fujitsu M2512A small" \
+	: ctlr = SCSI \
+	: ncyl = 9950 : acyl = 2 : pcyl = 9952 : nhead = 1 : nsect = 25 \
+	: rpm = 3600 : bpt = 12800
+
+partition = "Fujitsu M2512A small" \
+	: disk = "Fujitsu M2512A small" : ctlr = SCSI \
+	: a = 0, 0 : b = 0, 0 : c = 0, 248750 : g = 0, 0
+
+# From:	Daniel Curry <dan@radiomail.net>
+# Derived using scsiinfo 3.3. 
+#
+disk_type = "SEAGATE ST11950N" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 15  : asect = 6  \
+        : ncyl = 2715 : acyl = 2 : pcyl = 2707 : nhead = 15 : nsect = 81 \
+        : rpm = 7200 : bpt = 47628
+
+partition = "SEAGATE ST11950N" \
+        : disk = "SEAGATE ST11950N" : ctlr = SCSI \
+        : c = 0, 3298725
+
+disk_type = "CONNER CP3500-540MB-3.5" \
+        : ctlr = SCSI : fmt_time = 2 \
+        : atrks = 0  \
+        : ncyl = 1768 : acyl = 2 : pcyl = 1807 : nhead = 12 : nsect = 50 \
+        : rpm = 3600 : bpt = 29400
+
+partition = "CONNER CP3500-540MB-3.5" \
+        : disk = "CONNER CP3500-540MB-3.5" : ctlr = SCSI \
+        : c = 0, 1060800
+#
+# From:	D Andrew Reynhout <andrew.reynhout@analog.com>
+#
+# These entries are from Hewlett Packard or distributors, with some
+# adjustments, and have been tested on SPARCstation10s and 20s.
+#
+disk_type = "Hewlett Packard C3323A" \
+	: ctlr = SCSI : fmt_time = 4 \
+	: ncyl = 2995 : acyl = 2 : pcyl = 2997 \
+	: nhead = 7 : nsect = 98 \
+	: rpm = 5400 : bpt = 59232
+
+disk_type = "Hewlett Packard C2490A" \
+	: ctlr = SCSI : fmt_time = 17 \
+	: trks_zone = 3146 : asect = 0 : atrks = 198 \
+	: ncyl = 2159 : acyl = 2 : pcyl = 2582 \
+	: nhead = 18 : nsect = 107 \
+	: rpm = 6400 : bpt = 55296
+
+#
+# From brian@canet.ca (Brian Dickson)
+#
+# Params courtesy of Open Storage Solutions except for 
+# bpt, which I set to be the midpoint between the bpt figure for the
+# inner and outer tracks. 
+#
+#	WARNING!!
+#	Do NOT low-level format Elite 9!
+#	The format program will time out during format, making the drive 
+#       unusable! For Solaris 2.3, patch 101788-01 will fix this problem. 
+#
+disk_type = "Seagate ST410800N Elite 9" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 6087 : acyl = 2 : pcyl = 6089 : nhead = 27 \
+        : nsect = 108 : rpm = 5400 : bpt = 55300
+
+partition = "Seagate ST410800N Elite 9" \
+        : disk = "Seagate ST410800N Elite 9" : ctlr = SCSI \
+        : c = 0, 17749692
+
+#
+# From: ysyang@pine.IECS.FCU.edu.tw (Yaw-Shang Yang)
+#
+# I got this table by scsiinfo 3.3 and used it in SPARCstation10s for 
+# three weeks.
+#
+disk_type = "QUANTUM EMPIRE_2100S" \
+        : ctlr = SCSI : fmt_time = 5 \
+        : trks_zone = 12 : atrks = 0  : asect = 4  \
+        : ncyl = 2497 : acyl = 2 : pcyl = 3053 : nhead = 12 : nsect = 137 \
+        : rpm = 5400 : bpt = 80556
+ 
+partition = "QUANTUM EMPIRE_2100S" \
+        : disk = "QUANTUM EMPIRE_2100S" : ctlr = SCSI \
+        : c = 0, 4105068
+
+# From:	weitzel@burke.com (David Weitzel)
+#
+disk_type = "SEAGATE ST31200N" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : trks_zone = 9 : atrks = 18  : asect = 9  \
+        : ncyl = 2692 : acyl = 2 : pcyl = 2700 : nhead = 9 : nsect = 85 \
+        : rpm = 5411 : bpt = 49980
+
+# From: Benjamin Lutch <ben@CS.Stanford.EDU>
+#
+# Micropolis 1991 Drive Geometry
+
+disk_type = "MICROPOLIS 1991-27" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : ncyl = 4400 : acyl = 2 : pcyl = 4402 : nhead = 27 : nsect = 149 \
+        : rpm = 5400 : bpt = 23417
+
+# Micropolis 3243 Drive Geometry
+
+disk_type = "MICROPOLIS 3243-19" \
+	: ctlr = SCSI : fmt_time = 9 \
+	: ncyl = 4139 : acyl = 2 : pcyl = 4141 \
+	: nhead = 19 : nsect = 106 : rpm = 7200 : bpt = 63282
+
+# Micropolis 4110AV Drive Geometry
+
+disk_type = "MICROPOLIS 4110-09" \
+	: ctlr = SCSI : fmt_time = 9 \
+	: ncyl = 2283 : acyl = 2 : pcyl = 2485 \
+	: nhead = 9 : nsect = 95 : rpm = 5400 : bpt = 56715
+
+# From: "rune.johansen" <rune.johansen*CINET@notessmtpgw.cinet.no>
+#
+# 1 GB Starfire (2199878)
+
+disk_type = "IBM DFHSS1x" \
+        : ctlr = SCSI : ncyl = 4383 : acyl = 2 : pcyl = 4385 \
+        : nhead = 4 : nsect = 125 : rpm = 7200 : bpt = 0
+
+# 2 GB Starfire (4404489)
+
+disk_type = "IBM DFHSS2x" \
+        : ctlr = SCSI : ncyl = 4388 : acyl = 2 : pcyl = 4390 \
+        : nhead = 8 : nsect = 125 : rpm = 7200 : bpt = 0
+
+# 4 GB Starfire (8813870)
+
+disk_type = "IBM DFHSS4x" \
+        : ctlr = SCSI : ncyl = 4390 : acyl = 2 : pcyl = 4392 \
+        : nhead = 16 : nsect = 125 : rpm = 7200 : bpt = 0
+
+# 4 GB Allicat
+
+disk_type = "IBM 0664CSH" \
+        : ctlr = SCSI : ncyl = 2787 : acyl = 2 : pcyl = 2789 \
+        : nhead = 30 : nsect = 125 : rpm = 5400 : bpt = 58024
+
+# 2 GB Allicat
+
+disk_type = "IBM 0664M1H" \
+        : ctlr = SCSI : ncyl = 2787 : acyl = 2 : pcyl = 2789 \
+        : nhead = 15 : nsect = 94 : rpm = 5400 : bpt = 58024
+
+# 1 GB Spitfire
+
+disk_type = "IBM 0662S12" \
+        : ctlr = SCSI : ncyl = 3803 : acyl = 2 : pcyl = 3805 \
+        : nhead = 5 : nsect = 108 : rpm = 5400 : bpt = 0
+
+# 270 MB Satsuma
+
+disk_type = "IBM DSAS-3270" \
+        : ctlr = SCSI : ncyl = 2542 : acyl = 2 : pcyl = 2544 \
+        : nhead = 2 : nsect = 108 : rpm = 4500 : bpt = 59400
+
+# 360 MB Satsuma
+
+disk_type = "IBM DSAS-3360" \
+        : ctlr = SCSI : ncyl = 3297 : acyl = 2 : pcyl = 3299 \
+        : nhead = 2 : nsect = 108 : rpm = 4500 : bpt = 59400
+
+# 540 MB Satsuma
+
+disk_type = "IBM DSAS-3540" \
+        : ctlr = SCSI : ncyl = 3259 : acyl = 2 : pcyl = 3261 \
+        : nhead = 3 : nsect = 108 : rpm = 4500 : bpt = 59400
+
+# 720 MB Satsuma
+
+disk_type = "IBM DSAS-3720" \
+        : ctlr = SCSI : ncyl = 3292 : acyl = 2 : pcyl = 3294 \
+        : nhead = 4 : nsect = 108 : rpm = 4500 : bpt = 59400
+
+# From: Peter Coleman <pcoleman@offsv1.cis.mcmaster.ca>
+#
+# I have received the following from Open Storage Solutions 
+
+disk_type = "Seagate ST15150N" \
+	: ctlr = SCSI : fmt_time = 4 \
+	: ncyl = 5119 : acyl = 2 : pcyl = 5121 : nhead = 21 : nsect = 78 \
+	: rpm = 7200 : bpt = 64773
+
+partition = "Seagate ST15150N" \
+	: disk = "Seagate ST15150N" : ctlr = SCSI \
+	: c = 0, 8384922
+
+# From: troy@big.att.com (Troy Cauble)
+#
+# This was generated by scsiinfo, except the bpt number
+# which was taken from the manual.
+# Seagate, 2.1G, tested on Sparc 20 running SunOS 4.1.4
+#
+disk_type = "SEAGATE ST32550N" \
+        : ctlr = SCSI : fmt_time = 5 \
+        : trks_zone = 11 : atrks = 22  : asect = 9  \
+        : ncyl = 3495 : acyl = 2 : pcyl = 3511 : nhead = 11 : nsect = 109 \
+        : rpm = 7200 : bpt = 64160
+        
+partition = "SEAGATE ST32550N" \
+        : disk = "SEAGATE ST32550N" : ctlr = SCSI \
+        : c = 0, 4190505
+
+# From: derekt@stpaul.gov (Derek Terveer)
+#
+# This is a 5.25" r/w optical drive with 600MB, 512b/sector
+# platters.  With standard 10% reserve, gives 269,533 KB per
+# side.
+#
+disk_type = "RICOH RO-5031E" \
+        : ctlr = SCSI : fmt_time = 1 \
+        : trks_zone = 15 : atrks = 45  : asect = 8  \
+        : ncyl = 710 : acyl = 2 : pcyl = 1632 : nhead = 15 : nsect = 54 \
+        : rpm = 3600 : bpt = 31752
+ 
+partition = "RICOH RO-5031E" \
+        : disk = "RICOH RO-5031E" : ctlr = SCSI \
+        : c = 0, 575100
+
+# From: jude@nas.nasa.gov (Jude George)
+#
+disk_type = "Quantum Lightning 730S" \
+       : ctlr = SCSI : fmt_time = 4 \
+       : ncyl = 1415 : acyl = 2 : pcyl = 1416 : nhead = 16 : nsect = 63 \
+       : rpm = 4500 : bpt = 32221
+
+# a=80,640KB; b=48,384KB; g=584,186KB
+partition = "Quantum Lightning 730S" \
+       : disk = "Quantum Lightning 730S" : ctlr = SCSI \
+       : a = 0, 161280 : b = 160, 96768 : c = 0, 1426320 : g = 256, 1168272
+#
+# From: Georg Chytil <chytil@hp4at.eunet.co.at>
+#
+# The parameters were constructed using output from the Adaptec tools, 
+# scsiinfo ( Thanks to cliffa@ray.abo.fi for the hint ) and a fax I got 
+# from the distributor to aid me formatting it on AIX ...
+# IBM Starfire DFHSS2F 2.25 GB 
+#
+disk_type = "IBM OEM DFHSS2F" \
+        : ctlr = SCSI : fmt_time = 5 \
+        : trks_zone = 8 : atrks = 0  : asect = 19  \
+        : ncyl = 4076 : acyl = 2 : pcyl = 4390 : nhead = 8 : nsect = 135 \
+        : rpm = 7200 : bpt = 79380
+
+partition = "IBM OEM DFHSS2F" \
+        : disk = "IBM OEM DFHSS2F" : ctlr = SCSI \
+        : a = 0, 4100760 \
+        : b = 3797, 301320
+#
+# From: "Kaja P. Christiansen" <kaja@daimi.aau.dk>
+# Seagate Hawk 4GB
+# I looked at the geometry with scsiinfo.
+#
+disk_type = "SEAGATE ST15230N" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : trks_zone = 19 : atrks = 38  : asect = 12  \
+        : ncyl = 3974 : acyl = 2 : pcyl = 3992 : nhead = 19 : nsect = 111 \
+        : rpm = 5411 : bpt = 57856
+
+partition = "SEAGATE ST15230N" \
+        : disk = "SEAGATE ST15230N" : ctlr = SCSI \
+        : c = 0, 8381166
+
+#
+# From: diekema@linus.si.com (Jon Diekema)
+#
+disk_type = "Fujitsu-M2651SA" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : ncyl = 1934 : acyl = 2 : pcyl = 1944 : nhead = 16 : nsect = 88 \
+        : rpm  = 5400 : bpt  = 52864 
+
+partition = "Fujitsu-M2651SA" \
+        : disk = "Fujitsu-M2651SA" : ctlr = SCSI \
+        : c = 0, 2723072
+
+disk_type = "Micropolis 4221" \
+	: ctlr = SCSI \
+	: ncyl = 4079 : acyl = 2 : pcyl = 4081 : nhead = 9 : nsect = 109 \
+	: rpm = 7200  : bpt = 65073 : fmt_time = 3 
+
+partition = "Micropolis 4221" \
+	: disk = "Micropolis 4221" : ctlr = SCSI \
+	: a = 0, 4001499 : c = 0, 4001499
+
+# From: joabr@uhura.imt.liu.se (Joakim Brandberg)
+# This is an entry for Quantum's ATLAS 2.1 Gbyte disk
+disk_type = "Quantum XP32150" \
+        : ctlr = SCSI : fmt_time = 5 \
+        : trks_zone = 10 : atrks = 0  : asect = 10  \
+        : ncyl = 3850 : acyl = 2 : pcyl = 3907 : nhead = 10 : nsect = 109 \
+        : rpm = 7200 : bpt = 64092
+
+# From: hannu@fincitec.fi (Hannu Juopperi)
+# I got this from Edward C. Zimmermann <edz@bsn.com>
+disk_type = "MICROP 4221-09MZ  10204" \
+	: ctlr = SCSI : fmt_time = 5 \
+	: trks_zone = 9 : atrks = 27  : asect = 6  \
+	: ncyl = 3198 : acyl = 2 : pcyl = 4048 : nhead = 9 : nsect = 139 \
+	: rpm = 7200 : bpt = 81732
+
+partition = "MICROP 4221-09MZ  10204" \
+	: disk = "MICROP 4221-09MZ  10204" : ctlr = SCSI \
+	: c = 0, 4000698
+
+# From: diekema@linus.si.com (Jon Diekema)
+#
+disk_type = "SEAGATE ST31230N" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : trks_zone = 5 : atrks = 10  : asect = 5  \
+        : ncyl = 3978 : acyl = 2 : pcyl = 3992 : nhead = 5 : nsect = 104 \
+        : rpm = 5411 : bpt = 61152
+ 
+partition = "SEAGATE ST31230N" \
+        : disk = "SEAGATE ST31230N" : ctlr = SCSI \
+        : c = 0, 2068560
+
+# From: frueh@astro.as.utexas.edu (Marian Frueh)
+# We've just installed a DEC disk on our SUN system. Here's the info provided
+# by the company.
+#
+disk_type = "DEC DSP3107L" \
+     : ctlr = SCSI : fmt_time = 9 \
+     : ncyl = 3147 : acyl = 2 : pcyl = 3149 : nhead = 8 : nsect = 83 \
+     : rpm =5400 : bpt = 49551 
+
+partition = "DEC DSP3107L" \
+     : disk = "DEC DSP3107L" : ctlr = SCSI \
+     : c= 0, 2089608 
+
+#
+# From: "Kaja P. Christiansen" <kaja@daimi.aau.dk>
+# QUANTUM XP34301
+#
+disk_type = "QUANTUM XP34301" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : trks_zone = 20 : atrks = 0  : asect = 10  \
+        : ncyl = 3561 : acyl = 2 : pcyl = 4076 : nhead = 20 : nsect = 118 \
+        : rpm = 7200 : bpt = 69384
+
+partition = "QUANTUM XP34301" \
+        : disk = "QUANTUM XP34301" : ctlr = SCSI \
+        : c = 0, 8403960
+
+# From: Daniel Curry <dan@filoli.com>
+# generated using scsiinfo.
+#
+disk_type = "CONNER CFP4207S  4.28GB" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : atrks = 0  \
+        : ncyl = 3353 : acyl = 2 : pcyl = 3999 : nhead = 20 : nsect = 125 \
+        : rpm = 7200 : bpt = 73500
+
+partition = "CONNER CFP4207S  4.28GB" \
+        : disk = "CONNER CFP4207S  4.28GB" : ctlr = SCSI \
+        : c = 0, 8382500
+
+# From: busa057@cantua.canterbury.ac.nz (Tristram Scott)
+# here is a format.dat entry I made with help from scsiinfo.  I am using
+# this IBM DPES-31080 1 Gb drive on a Sparc1 under SunOS 4.1.3.
+#
+disk_type = "IBM DPES-31080" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : trks_zone = 484 : atrks = 8  : asect = 50  \
+        : ncyl = 4901 : acyl = 2 : pcyl = 4903 : nhead = 4 : nsect = 108 \
+        : rpm = 5400 : bpt = 63504
+
+partition = "IBM DPES-31080" \
+        : disk = "IBM DPES-31080" : ctlr = SCSI \
+        : c = 0, 2117232
+#
+# From: garcia@f18sunc.chinalake.navy.mil (Mike Garcia)
+# I received this from Conner's FAX-back service.
+#
+disk_type = "Conner CFP1060" \
+		: ctlr = SCSI : fmt_time = 4 \
+		: trks_zone = 1 : asect = 1 \
+		: ncyl = 2329 : acyl = 2 : pcyl = 2756 : nhead = 8 : nsect=111 \
+		: rpm=5400 : bpt=57344
+
+partition = "Conner CFP1060" \
+		: disk = "Conner CFP1060" : ctlr = SCSI \
+		: c = 0, 2068152 
+
+# From: andrew.reynhout@analog.com (D Andrew Reynhout)
+#
+# Hewlett Packard C3725S / SureStore 2000LP
+# Values are from HP or by calculation.  
+#
+disk_type = "Hewlett Packard C3725S" \
+	: ctlr = SCSI : fmt_time = 5 \
+	: trks_zone = 20003 : atrks = 819 : asect = 0 \
+	: ncyl = 3362 : acyl = 2 : pcyl = 3703 \
+	: nhead = 9 : nsect = 140 : rpm = 5400 \
+	: bpt = 75953
+
+partition = "Hewlett Packard C3725S" \
+	: disk = "Hewlett Packard C3725S" : ctlr = SCSI \
+	: c = 0, 4236120 : h = 1, 4193280
+
+# From: woods@most.weird.com (Greg A. Woods)
+#
+# I'm not 100% sure on the bpt value, but otherwise it seems to work.....
+#
+disk_type = "Maxtor XT-3280S" \
+	: ctlr = SCSI \
+	: cache = 0x0: trks_zone = 15 : atrks = 2 : asect = 2 \
+	: ncyl = 1222 : acyl = 2 : pcyl = 1224 : nhead = 15 : nsect = 25 \
+	: rpm = 3600 : bpt = 16896
+
+# From: Jonathan Thornburg <thornbur@physics.ubc.ca>
+# 
+# Information from Ian D Watt, Fujitsu Canada, (905)602-5454 x349,
+# except for  bpt  from  scsiinfo -F
+#
+disk_type = "Fujitsu M2684S" \
+        : ctlr = SCSI : ncyl = 2338 : acyl = 2 : pcyl = 2340 \
+        : nhead = 6 : nsect = 74 : rpm = 4500 : bpt = 43512
+
+# From: Yaw-Shang Yang <ysyang@pine.iecs.fcu.edu.tw>
+# Derived using scsiinfo 3.3
+# 
+disk_type = "QUANTUM FIREBALL1080S" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : trks_zone = 4 : atrks = 0  \
+        : ncyl = 3836 : acyl = 2 : pcyl = 3835 : nhead = 4 : nsect = 139 \
+        : rpm = 5400 : bpt = 81732
+
+partition = "QUANTUM FIREBALL1080S" \
+        : disk = "QUANTUM FIREBALL1080S" : ctlr = SCSI \
+        : c = 0, 2132816
+
+# From: grosch@ichips.intel.com
+#
+# This is the replacement for the ST11200N that Seagate used to ship.  
+# 
+disk_type = "Seagate ST51080N" \
+        : ctlr = SCSI : ncyl = 4824 : acyl = 2 : pcyl = 4826 \
+        : nhead = 4 : nsect = 109 : rpm = 5376 : bpt = 32356
+#
+# from http://www.iomega.com 
+#
+disk_type = "Zip 100" \
+	: ctlr = SCSI \
+	: ncyl = 2406 : acyl = 2 : pcyl = 2408 : nhead = 2 \
+	: nsect = 40 : rpm = 3600 : bpt = 20480
+partition = "Zip 100" \
+	: disk = "Zip 100" : ctlr = SCSI \
+	: c = 0,192480
+disk_type = "Iomega 230" \
+	: ctlr = SCSI \
+	: ncyl = 5591 : acyl = 2 : pcyl = 5593 : nhead = 2 \
+	: nsect = 40 : rpm = 3600 : bpt = 20480
+partition = "Iomega 230" \
+	: disk = "Iomega 230" : ctlr = SCSI \
+	: c = 0,447280                                     
+
+#
+# From: rlesh@keyway.net (Rick Lesh)
+#
+disk_type = "CONNER CFP2105S 2.147G" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 1 : asect = 1  \
+        : ncyl = 3015 : acyl = 2 : pcyl = 3940 : nhead = 10 : nsect = 139 \
+        : rpm = 5400 : bpt = 71168
+ 
+partition = "CONNER CFP2105S 2.147G" \
+        : disk = "CONNER CFP2105S 2.147G" : ctlr = SCSI \
+        : c = 0, 4190850
+
+# From: deh@atype.com (David Hollingsworth)
+# Quantum Saturn VP32170S info obtained using scsiinfo-4.2
+disk_type = "Quantum VP32170" \
+        : ctlr = SCSI : fmt_time = 5 \
+        : trks_zone = 10 : atrks = 0  : asect = 10  \
+        : ncyl = 3444 : acyl = 2 : pcyl = 3907 : nhead = 10 : nsect = 123 \
+        : rpm = 5403 : bpt = 72324
+
+partition = "Quantum VP32170" \
+        : disk = "Quantum VP32170" : ctlr = SCSI \
+        : c = 0, 4236120
+
+# From: simes@tcp.co.uk (Simon Burr)
+# The following is the format.dat entry for an IOMega Jaz drive. 
+disk_type = "Jaz 1GB" \
+	 : ctlr = SCSI : ncyl = 1018 : acyl = 2 : pcyl = 1020 \
+	 : nhead = 64 : nsect = 32 : rpm = 3600 : bpt = 16384
+
+partition = "Jaz 1GB" \
+	 : disk = "Jaz 1GB" : ctlr = SCSI \
+	 : c =  0, 2084864
+
+# From: "Gregory J. Sandell" <sandell@sparky.ls.luc.edu>
+# Fujitsu M2934S (or M2934SA or M2934SA_512)
+# I cooked a format entry up from the specs and a little guesswork and 
+# here's what I came up with.  It worked when I formatted my drive under 
+# SunOS 4.1.3.
+disk_type = "Fujitsu-M2934S" \
+    : ctlr = SCSI  \
+    : ncyl = 3551 : acyl = 2 : pcyl = 3553 : nhead = 18 : nsect = 133 \
+    : rpm = 7200 : bpt = 68096
+
+# From: "Kaja P. Christiansen" <kaja@daimi.aau.dk>
+# Quantum-XP34300-81HB (4G disk)
+#
+disk_type = "Quantum-XP34300-81HB" \
+         : ctlr = SCSI : ncyl = 3850 : acyl = 2 : pcyl = 3852 \
+         : nhead = 20 : nsect = 109 : rpm = 7200 : bpt = 55808
+
+partition = "Quantum-XP34300-81HB" \
+         : disk = "Quantum-XP34300-81HB" : ctlr = SCSI \
+         : c =  0, 8393000
+
+# From: "Alexander Horn" <ahorn@aragon.bb.bawue.de>
+# The following four entries were generated by scsiinfo
+# IBM DFRSS4F, 4.320G, tested on a SPARCstation-2 running SunOS 4.1.2
+disk_type = "IBM DFRSS4F" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : trks_zone = 16 : atrks = 0  : asect = 37  \
+        : ncyl = 4078 : acyl = 2 : pcyl = 4392 : nhead = 16 : nsect = 135 \
+        : rpm = 7200 : bpt = 79380
+
+partition = "IBM DFRSS4F" \
+        : disk = "IBM DFRSS4F" : ctlr = SCSI \
+        : c = 0, 8808480
+
+# DEC DSP5200S (Version T366), 2G,
+# tested on a SPARCstation-2 running SunOS 4.1.2
+disk_type = "DEC DSP5200S" \
+        : ctlr = SCSI : fmt_time = 4 \
+        : trks_zone = 21 : atrks = 0  : asect = 21  \
+        : ncyl = 2618 : acyl = 2 : pcyl = 2621 : nhead = 21 : nsect = 71 \
+        : rpm = 3600 : bpt = 41748
+
+partition = "DEC DSP5200S" \
+        : disk = "DEC DSP5200S" : ctlr = SCSI \
+        : c = 0, 3903438
+
+# SEAGATE ST43400N, 3.5G, tested on a SPARCstation-2 running SunOS 4.1.2
+disk_type = "SEAGATE ST43400N" \
+        : ctlr = SCSI : fmt_time = 6 \
+        : cache = 0x21 : trks_zone = 21  : asect = 9  \
+        : ncyl = 2734 : acyl = 2 : pcyl = 2737 : nhead = 21 : nsect = 99 \
+        : rpm = 5400 : bpt = 58212
+
+partition = "SEAGATE ST43400N" \
+        : disk = "SEAGATE ST43400N" : ctlr = SCSI \
+        : c = 0, 5683986
+
+# Quantum Fireball 1080S, 1G, tested on a SPARCstation-2 running SunOS 4.1.2
+
+disk_type = "QUANTUM FIREBALL1080S" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : trks_zone = 4 : atrks = 0  \
+        : ncyl = 3836 : acyl = 2 : pcyl = 3835 : nhead = 4 : nsect = 139 \
+        : rpm = 5400 : bpt = 81732
+
+partition = "QUANTUM FIREBALL1080S" \
+        : disk = "QUANTUM FIREBALL1080S" : ctlr = SCSI \
+        : c = 0, 2132816
+
+# From: "Kaja P. Christiansen" <kaja@daimi.aau.dk>
+# Micropolis 4421-II
+
+disk_type = "MICROP 4421-07" \
+        : ctlr = SCSI : fmt_time = 9 : rpm = 5400 \
+        : ncyl = 3459 : acyl = 3 : pcyl = 4049 \
+        : nhead = 7 : nsect = 173 : bpt = 87552
+
+partition = "MICROP 4421-07" \
+        : disk = "MICROP 4421-07" : ctlr = SCSI \
+        : c = 0, 4188849
+
+# From: Francesco Messineo <frank@sun01.ccii.unipi.it>
+# The entry has been taken using scsiinfo under SunOS 4.1.4 on a 
+# sparc 1 host.
+
+disk_type = "QUANTUM TRB850S" \
+        : ctlr = SCSI : fmt_time = 2 \
+        : trks_zone = 4 : atrks = 0  \
+        : ncyl = 2941 : acyl = 2 : pcyl = 3653 : nhead = 4 : nsect = 141 \
+        : rpm = 3600 : bpt = 82908
+
+# From: pauloh@inf.puc-rio.br (Paulo Henrique Schindler)
+# I've bought a Seagate ST34371N and installed it
+# in a Axil 320 with SunOS 4.1.4. To find the entry in format.dat
+# I used the scsiinfo 4.1 utility: scsiinfo -F /dev/rsd3c.
+# (bpt from Western Scientific, courtesy of Tom Schaefer <tks@cpicorp.com>)
+
+disk_type = "SEAGATE ST34371N" \
+        : ctlr = SCSI : fmt_time = 9 \
+        : trks_zone = 80 : atrks = 0  : asect = 80  \
+        : ncyl = 5147 : acyl = 2 : pcyl = 5168 : nhead = 10 : nsect = 165 \
+        : rpm = 7228 : bpt = 84480
+ 
+partition = "SEAGATE ST34371N" \
+        : disk = "SEAGATE ST34371N" : ctlr = SCSI \
+        : c = 0, 8492550
+
+# From: Volker Borchert <bt@teknon.de>
+# All info by scsiinfo-4.3.
+# It seems the C3323-300 is different from the C3323A described by
+# Andrew Reynhout (note pcyl):
+
+disk_type = "HP C3323-300" \
+        : ctlr = SCSI : fmt_time = 3 \
+        : trks_zone = 6723 : atrks = 490  : asect = 0  \
+        : ncyl = 2445 : acyl = 2 : pcyl = 2982 : nhead = 7 : nsect = 120 \
+        : rpm = 5400 : bpt = 70560
+        
+partition = "HP C3323-300" \
+        : disk = "HP C3323-300" : ctlr = SCSI \
+        : c = 0, 2053800
+
+# From: Volker Borchert <bt@teknon.de>
+# Geometry information retrieved by scsiinfo.
+disk_type = "QUANTUM FIREBALL_TM3200S" \
+	: ctlr = SCSI : fmt_time = 7 \
+	: trks_zone = 5 : atrks = 0  : asect = 2  \
+	: ncyl = 7899 : acyl = 2 : pcyl = 6810 : nhead = 5 : nsect = 159 \
+	: rpm = 4500 : bpt = 93492
+
+partition = "QUANTUM FIREBALL_TM3200S" \
+	: disk = "QUANTUM FIREBALL_TM3200S" : ctlr = SCSI \
+	: c = 0, 6279705
+
+# From: stephane@lituus.fr (Stephane Legrand)
+# This entry is based on scsiinfo and the entry for the Fujitsu-M2934S.
+disk_type = "FUJITSU M2932S-512" \
+        : ctlr = SCSI \
+        : ncyl = 3419 : acyl = 2 : pcyl = 3421 : nhead = 9 : nsect = 133 \
+        : rpm = 7200 : bpt = 68096 : trks_zone = 9 : asect = 5
+
+partition = "FUJITSU M2932S-512" \
+        : disk = "FUJITSU M2932S-512" : ctlr = SCSI \
+        : c = 0, 4092543
+
+# From: Guenter Millahn <gm@Informatik.TU-Cottbus.DE>
+disk_type = "IBM-DCAS-34330-S60B" \
+	 : ctlr = SCSI : ncyl = 8203 : acyl = 2 : pcyl = 8205 \
+	 : nhead = 6 : nsect = 171 : rpm = 5400
+
+partition = "IBM-DCAS-34330-S60B" \
+	 : disk = "IBM-DCAS-34330-S60B" : ctlr = SCSI \
+	 : 2 =  0, 8416278
+
+# From: Tim Gilbert (gilbert@marin.cc.ca.us)
+# This is pulled off of quantum's page on Sun format parameters, at
+# http://www.quantum.com/appnotes/sun.htm as of 5/9/97.
+disk_type = "Quantum-Fireball_TM1280" \
+	: ctlr = SCSI : ncyl = 4133 : acyl = 2 : pcyl = 4135 : nhead = 4 \
+	: nsect = 139 : rpm = 4500
+
+disk_type = "Quantum-Fireball_TM2110S" \
+	: ctlr = SCSI : ncyl = 6483 : acyl = 2 : pcyl = 6485 : nhead = 4 \
+	: nsect = 159 : rpm = 4500
+
+# From: bt@teknon.de (Volker Borchert)
+# derived from scsiinfo 4.3
+disk_type = "FUJITSU M2624F-512" \
+	: ctlr = SCSI : fmt_time = 2 \
+	: trks_zone = 11  : asect = 3  \
+	: ncyl = 1463 : acyl = 2 : pcyl = 1429 : nhead = 11 : nsect = 63 \
+	: rpm = 4398 : bpt = 37044
+
+partition = "FUJITSU M2624F-512" \
+	: disk = "FUJITSU M2624F-512" : ctlr = SCSI \
+	: c = 0, 1013859
+
+# From: bt@teknon.de (Volker Borchert)
+disk_type = "FUJITSU M2681S-512" \
+	: ctlr = SCSI : fmt_time = 1 \
+	: trks_zone = 3  : asect = 3  \
+	: ncyl = 2322 : acyl = 2 : pcyl = 2380 : nhead = 3 : nsect = 74 \
+	: rpm = 4500 : bpt = 43512
+
+partition = "FUJITSU M2681S-512" \
+	: disk = "FUJITSU M2681S-512" : ctlr = SCSI \
+	: c = 0, 515484
+
+# From: "Marc L. Summers-SysAdmin" <marcs@tdd.hbo.nec.com>
+# I got a FAX from Andataco here is the data:
+# Quantum XP39100AL  W/WC/WD, Andataco PN: 910S3
+disk_type = "QUANTUM XP39100" \
+	: ctlr = SCSI : fmt_time = 9 \
+	: ncyl = 5847 : acyl = 2 : pcyl = 5849 : nhead = 20 : nsect = 152 \
+	: rpm = 7200 : bpt = 93176
+
+# From: David_Gunn@lardav.com (David Gunn)
+# I obtained the entry from Artecon:
+disk_type = "Arte Conner CFP2107S" \
+        : ctlr = "SCSI" \
+        : ncyl = 3380 : acyl = 2 : pcyl = 3999 : nhead = 10 : nsect = 124 \
+        : rpm = 7200 : bpt = 63488                         
+partition = "Arte Conner CFP2107S" \
+        : disk = "Arte Conner CFP2107S" : ctlr = SCSI \
+        : c = 0, 4191200 
+
+# From: jsprech@melpar.esys.com (Joel Sprechman)
+# Western Digitals new Enterprise SCSI line of drives
+disk_type="WDIGTL ENTERPRI 2170" \
+	:	ctlr = SCSI : fmt_time = 9 \
+	:	ncyl = 5747 : acyl = 2 : pcyl = 5749 : nhead = 4 : nsect = 185\
+	:	rpt = 7200 : bpt = 110445
+
+partition = "WDIGTL ENTRPRI 2170" \
+	:	disk = "WDIGTL  ENTRPRI 2170" : ctlr = SCSI \
+	:	c = 0,4252780 

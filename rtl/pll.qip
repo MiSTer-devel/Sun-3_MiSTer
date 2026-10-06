@@ -1,0 +1,13 @@
+# The main PLL (rtl/pll.v), included by sys/pll_q17.qip.  In the IP wizard's
+# layout, without its saved state: rtl/pll/pll_0002.v is ip-generate's
+# reconfigurable form (its header has the command), every counter fixed, so
+# that rtl/sun3_mister_cpuclk.sv can rewrite cpu_clk's, C1.
+set_global_assignment -entity "pll" -library "pll" -name IP_TOOL_NAME "altera_pll"
+set_global_assignment -entity "pll" -library "pll" -name IP_TOOL_VERSION "17.0"
+set_global_assignment -entity "pll" -library "pll" -name IP_TARGETED_DEVICE_FAMILY "Cyclone V"
+set_global_assignment -name SYNTHESIS_ONLY_QIP ON
+set_global_assignment -library "pll" -name VERILOG_FILE [file join $::quartus(qip_path) "pll.v"]
+set_global_assignment -library "pll" -name VERILOG_FILE [file join $::quartus(qip_path) "pll/pll_0002.v"]
+set_global_assignment -library "pll" -name QIP_FILE [file join $::quartus(qip_path) "pll/pll_0002.qip"]
+set_global_assignment -entity "pll_0002" -library "pll" -name IP_TOOL_NAME "altera_pll"
+set_global_assignment -entity "pll_0002" -library "pll" -name IP_TOOL_VERSION "17.0"

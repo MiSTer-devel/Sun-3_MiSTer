@@ -1,0 +1,418 @@
+FOREWORDS:
+==========
+
+On ethernet addresses:  These should be unique, it's the main idea behind
+them.  If you have also lost any reference to yours, try to find the number
+for one that isn't used, like on those Novell PC Bugworks that will never
+make it on the net.  Some Sys Architect informs me that there are ethernet
+addresses databases you can get on alt.2600 or other places in order to see
+what you should use if you ever had to "create a bogus one from scratch". 
+Manufacturers are assigned the first part of the numbers by the "Ethernet
+Big Authority Bureau", Sun seems to be 8:0:20:x:x:x .
+Whatever you do, don't forget that Ethernet addresses are like fingerprints
+on your packets.  UDP talks... too much.  
+This is why Sun doesn't like you to touch it to avoid Net traffic accidents or
+impersonalisation of machines on a local net.  So you've been warned.
+
+
+On hostid:  You've all read the posts on licenses. Changing the serial
+number of one machine in order to also run software licensed for an other
+one...  This IS PIRACY.  It is the main reason why people used to buy 
+Apple II's and now buy PC.  If it will boost SUN sales as well... :>  
+This is why you'll stick with your hostid number.  This faq was made to help 
+you when your NVRAM failed, not to help SUN selling more hardware.
+
+  (Just call 1-800-555-pir8 and report yourself to the self-incrimination 
+   service once you've changed your Hostid for the reason stated above.)  
+
+
+
+
+
+
+ **************************************************************************
+                                ORIGINAL FAQ
+ **************************************************************************
+
+Now that more and more elder Sparcstations pass the magic age of 5 years,
+the problem of dying nvrams seems to get a FAQ.
+I compiled what I could ask or get from previous postings,
+so this heavily relies on information provided by two other persons:
+
+    Adrie Koolen (adrie@ica.philips.nl)  (2 postings quoted)
+    J"org Schilling (js@cs.tu-berlin.de) (almost everything else)
+
+Thanks to them for sharing their knowledge.
+I did mail a copy to mueller@cs.unc.edu (Carl Mueller) for inclusion in the
+pseudo-FAQ if he whishes to.
+
+/tatjana
+
+  Contents:
+  ---------
+  1 Reading our your old nvram       (js)
+    which nvram for which machine?   (js)
+    idprom structure                 (js, header)
+    1.1 devinfo                     
+    1.2 idprom                       (adrie)
+    1.3 into a file                  (js)
+
+  2 Refurbishing the old nvram       (js)
+    adding a new battery
+
+  3 Writing the nvram
+    3.1 using an eprom burner
+    3.2 using a Sun3                 (js)
+    3.3 using a Sparc                (js)
+    3.4 using the prom monitor       (adrie)
+    3.5 Getting a new nvram from Sun
+
+  4 Possible Problems
+
+1 Reading out your old nvram:
+  ---------------------------
+  The Mostek MK48T02 2k nvram chip has been used in Sun3/80, sun4 and sun4c
+  systems.  In sun4m systems they use the 8k version -but these are
+  not dying yet.
+  Sun is selling the MK48T02 for $70.
+  In Germany they cost DM 45 / piece or DM 20 in larger quantities.
+  From this I think that they might be between $10 and $25 in the US.
+
+  idprom structure, from /usr/include/mon/idprom.h:
+  01  format identifier 
+    51, machine type -here a 4/60
+      08 00 20 07 40 c7 ethernet address. (08:00:20:07:40:c7)
+  and so on (see idprom.h)
+
+
+  These informations can be gathered in several ways:
+   1.1 devinfo: not ideal, as more handwork is needed to recontruct the nvram
+       from these "human readable" informations.
+   1.2 From prom Monitor: .idprom -You need to write down the information.
+   1.3 From SunOS:
+       The last 8 Bytes of the 2k are occupied by the clock. The size of 
+       the idrom in a 3/50 is 32 Bytes (only the first 16 Bytes are used).
+       To be compatible with the 3/50 idrom the last accessable 32 Bytes 
+       in the 48T02 are used. Therefore the offset of the id-data is:
+       2k - 32 bytes - 8 bytes.
+       Therefore, for all machines with a 2k nvram:
+                     open /dev/kmem, lseek to ffff8000, read 2k 
+       All sun4m machines (8k nvram):
+                     open /dev/kmem, lseek to feffe000, read 8k 
+       Poor dd can't lseek -it would save us writing these
+       mini-programs. (Sorry, nothing "ready to go", -Joerg uses his own dd)
+       never mind that this offset is negative -it does work :)
+       For SunOS4 these adresses can be found in header files.
+       This information vanished with Solaris 2.x, but it's valid anyway.
+
+
+2 Refurbishing the old nvram: 
+  ---------------------------
+  The contents of the (nv)ram are backed up by a 3V lithium battery.
+  It's located together with a quartz on top of the ram in a kind of backpack.
+  The battery is on the side that's opposed to the dot marking pin 1,
+  next to pin 12:
+
+                         _oscillator
+                        /
+                       / _battery
+                      / /
+                   -------
+                   | O O | <-- cut here 
+                   -------
+                  /
+             Pin 1
+
+   At the point marked above, some kind of nose is reaching down from the
+   backpack over the resin.
+   Carefully cut through the polyester resin filling the dimple.
+   This works best with some kind of mini drill with a small milling head.
+   buried in the resin you'll find two small diagonal metal connectors :).
+   Be careful not to short-circuit them, or you'll loose the contents of your
+   nvram (if it was still able to keep them). -That's why you should save them
+   *before* :)
+   The connector closest to pin 12 is ground, the other (opposing) one +3V.
+   You can now solder some wire to them and connect them to a new 3V lithium
+   battery.
+   If you find that the ram has been erased during this procedure, try to
+   rewrite it using one of the following approaches.
+
+
+3 If you have to write a virgin or erased nvram:
+  ----------------------------------------------
+
+  3.1 an eprom burner able to handle the 48t02
+
+  3.2 any Sun 3 system which has a socket for the eeprom. (i.e. not a 3/60)
+      - Remove the eeprom 
+      - Insert the nvram in its place
+      - Set the 3-something to diag mode (It usually won't boot otherwise,
+        at least not with a virgin nvram, as with these the checksum is
+        usually ok. this leads the poor thing into taking the dummy crap for
+        valid nvram data) 
+      - Boot 
+      - use dd to write the first 2040 bytes from your save file to /dev/eeprom.
+
+      With a Sun 3/80 you could just replace the old nvram with the new one
+      as /dev/eeprom is writable there as well.
+      I didn't test yet if it's coming up with a valid but senseless nvram,
+      though. Unlike the other Sun 3 machines, the 3/80 doesn't have a switch
+      for setting the diag mode but sets this in the nvram instead :(.
+
+      J"org uses a 3/50, equipped with a textool socket for this
+      procedure.
+
+
+
+  3.3 Your Sparc:
+      - Read the nvram out as described above.
+      - Make sure you can reboot it without the net.
+        (rename /etc/defaultdomain, turn automounter off, etc)
+      - Switch your Sun off
+      - Exchange the old idprom for the new one.
+      - Don't connect this machine to your network, with the empty nvram it
+        will come up with the broadcast address ff.ff.ff.ff as ethernet address.
+      - Boot from local disk. It will complain about the defective idprom
+        but boot anyway.
+      - Patch resettodr in your kernel to make the nvram page writable:
+         (Tested with SunOS 4.1.3 - different release might result in a
+          different location)
+          things you have to type are preceeded with a pseudo-prompt "> ",
+          to distinguish them from the output you'll get, even though
+          in kadb there will be no prompt at all.
+
+            root@hostname> adb -w -k /vmunix /dev/mem
+            > resettodr+3ac /i        
+              resettodr+3ac:    call  _mmu_setpte  # If you get anything else,
+                                                   # don't proceed!!! DANGER !!!
+            > /W1000000                            # Note the /, you don't want
+                                                   # to patch /vmunix on disk :)
+            > /i                                   # look what we've done 
+              resettodr+3ac:    nop                # should be a nop now.
+            > $q                                   # leave adb
+            root@hostname> date 9404212300         # set the date       
+
+          Now, after setting the date, the nvram is writable at the address
+          mentioned before.
+          open /dev/kmem r/w,
+          seek to the address,
+          write 2040 bytes from the save-file (don't overwrite the clock)
+          close /dev/kmem
+          reboot (you don't want to keep this page writable)
+ 
+  Everything should be as before now :)
+
+  Joerg gathered these informations by disassembling resettodr.
+  If your version of /vmunix is different (no call _mmu_setpte at resettodr+3ac)
+  you have to walk through this routine and find the location of the last 
+  call _mmu_setpte (called twice). The second and last one is the one to be
+  patched.
+            > resettodr /i        
+            > [return]                           # step through
+               .                                 # with return 
+               .                                 # until you hit
+            > [return]
+              resettodr+?:    call  _mmu_setpte  # Nr 1
+            > [return]
+               .
+               .
+            > [return]
+              resettodr+?:    call  _mmu_setpte # Nr 2 -write down the location
+                                                # and continue as descibed above
+
+  3.4 Restoring identity from prom monitor:
+      If your battery is already gone and you don't have a backup of the
+      idprom contents, you'll either have to pay Sun, or, if you do know the
+      most important values (ethernet address, and serial number or hostid),
+      you can rebuild the contents of your idprom.
+      The ethernet address you might find in /etc/ethers or the yp map ethers
+      if you ever cared to enter the ethernet addresses there.
+      The hostid is the hex notation of the serial number, so you only need
+      one of them. You might have home hostids in license files.
+      Bills might also give you the information needed.
+
+      From: adrie@ica.philips.nl (Adrie Koolen)
+      Subject: Re: SS1+: Incorrect configuration checksum
+      Date: Tue, 22 Mar 1994 13:53:41 GMT
+
+      The idprom is a 32 bytes part of the non-volatile ram. The last 16 bytes
+      of it have been reserved (i.e.: 0). The .idprom forth command and the
+      "/usr/etc/devinfo -vp | grep idprom" SunOS 4.x command give you those
+      32 bytes. A very crude way of putting data in the idprom is:
+
+        enter the forth (booot prom) monitor (e.g. via L1-a, possibly
+        followed by "n <ret>".
+
+            ok f7002000 ffd04700 pgmap!
+            ok 01 ffd047d8 c!
+            ok 51 ffd047d9 c!
+            ...
+            ok 00 ffd047f6 c!
+            ok 00 ffd047f7 c!
+            ok reset
+
+      The 32 bytes are the 32 successive bytes reported by the .idprom command
+      or devinfo command. You might use the l! forth command to store 32 bits.
+      This saves you some typing. Note that the `51' is only valid for
+      SparcStation 1 computers; other systems have other numbers...
+
+      !!! Please note that this procedure might make your SparcStation !!!
+      !!! unusable if not correctly executed. Sun definitely does NOT  !!!
+      !!! support this. Be very carefull when restoring the contents   !!!
+      !!! of your IDPROM.                                              !!!
+
+
+      From: adrie@ica.philips.nl (Adrie Koolen)
+      Subject: Re: dead NVRAM
+      Message-ID: <1994Feb10.092712.1253@ica.philips.nl>
+      Organization: Philips Consumer Electronics, Eindhoven, The Netherlands
+      Date: Thu, 10 Feb 1994 09:27:12 GMT
+
+      [...quoted posting omitted...]]
+      An answer from someone at Sun. I can imagine that they don't want people
+      poking around in the hostid and ethernet addresses, but you can of course
+      set them yourself. As Glenn already told, you first have to get a new
+      Mostek MK48T02 chip and exchange it with the broken one in your
+      SparcStation.
+      Then turn on the SS and let it discover that the NVRAM is empty. It fills
+      it with factory default values but leaves the idprom contents untouched.
+      The idprom is stored at offset 0x7D8 in the 2kB static RAM. To prevent
+      writing in the NVRAM, the NVRAM page is read-only.
+
+      **** Dangerous Action ****
+      To change the hostid, power on the SS and get into the monitor (ok prompt).
+      Then make the NVRAM page writeable:
+    
+            ok F7002000 FFD047E5 pgmap!
+
+      Now set the hostid to 51123456:
+
+            ok 51 FFD047D9 c!
+            ok 12 FFD047E4 c!
+            ok 34 FFD047E5 c!
+            ok 56 FFD047E6 c!
+
+      You should also set the format, ethernet and checksum bytes. Use the
+
+            ok .idprom
+
+      command to view the current contents and order of the bytes. The checksum
+      is an exclusive-or of the first 15 bytes of the idprom.
+      **** End Dangerous Action ****
+
+      I urge you to use extreme precaution changing the contents of the idprom!
+      Doing something wrong can make your SparcStation unusable. Always first
+      use the .idprom command and write down the current contents of the idprom
+      before changing anything.
+
+      We've got quite a few SparcStations here and I've already seen some of
+      our older SparcStation 1's failing to boot because of an empty NVRAM.
+      Sun made a design mistake using the Mostek MK48T02 (my opinion) as some
+      of them don't last for even 5 years!
+
+      Adrie Koolen (adrie@ica.philips.nl)
+      Philips Consumer Electronics, Eindhoven, the Netherlands
+
+  3.5 Getting a new nvram from Sun:
+      -----------------------------
+      If everything fails, i.e. the nvram is already dead and you don't
+      know ethernet address and serial number or hostid, you can only send
+      the nvram in to Sun. The barcode on top serves to identify the idprom
+      and they'll send you a new one back in about 2 Months.
+      Sun Germany charges DM 200 for this.
+      From this I'd guess that in the US this might be < $100
+
+4 One last possible problem:
+  --------------------------
+  The clock needs a kick in the *** to start running.
+  (In a virgin nvram it's in sleeping mode to save on battery life)
+  The clock driver should be able to handle this.
+  From /usr/include/machine/clock.h (/usr/include/sys/clock.h in solaris2)
+  you can see how this is done.
+  It's somewhat non-trivial though, so if your clock driver does not handle
+  it you can ask Joerg about the procedure (mail to js@cs.tu-berlin.de).
+-- 
+Tatjana Heuser      | pierrot@cs.tu-berlin.de
+Ettaler Str.2       |
+D-10777 Berlin      | +49 30 / 214 27 58       
+
+
+
+
+
+
+  *************************************************************************
+                               IDPROM TEMPLATE
+  *************************************************************************
+
+
+The idprom.h include file is a copyrighted document you can slurp yourself
+from any Sun Os 4.1.x server you have access to... like yours ?!
+
+Here is in short how the idprom is like on a Sun Sparcstation IPC with BOGUS
+hostid and date.  The ethernet address is the one used in the FAQ.
+Use your parameters instead!
+
+
+HOSTID:  It's the hex representation of the Serial Number with a leading CPU
+ID byte.  Here 51 and 12 34 56, so HOSTID = 51123456
+
+
+Bogus but possible machine profile :
+====================================
+Sparc IPC, sun4c 4/40
+Serial #1193046
+Ethernet: 8:0:20:7:40:c7
+HOSTID: 51123456
+date: 0 1 2 3
+Checksum: 87
+
+(All values in table are in hex !!!)
+  
+
+BYTE	Address		Value		Description
+=============================================================================
+ 1	ffd047d8	01		Always 01... Means prom number.	
+ 2	ffd047d9	51		CPU ID, 51 for sun4c, SPARC 1+
+ 3	ffd047da	08		First number of ethernet address
+ 4	ffd047db	00		Second	""   ""    ""       ""
+ 5      ffd047dc	20		Third   ""   ""    ""       ""
+ 6      ffd047dd	07		4th	""   ""    ""       ""
+ 7      ffd057de	40		5th	""   ""    ""       ""
+ 8	ffd057df	c7		6th number of ethernet address
+ 9	ffd057e0	00		1rst number for DATE
+10	ffd057e1	01		2nd number for DATE
+11	ffd057e2	02		3rd number for DATE
+12	ffd057e3	03		4th number for DATE
+13	ffd057e4	12		Serial Number (part 1 of 3)
+14	ffd057e5	34		Serial Number (part 2 of 3)
+15	ffd057e6	56		Serial Number.gif (part 3 of 3 :)
+16	ffd057e7	87		Checksum byte.
+
+17	ffd057e8	00		UNUSED
+..      ........        ..              ......
+32	ddf057f7	00		UNUSED
+
+
+
+
+
+Well that's about it.  The XOR checksum is not byte1 xor byte2 xor ...byte15
+I'm an assembler kid, not a C include file eater, so who ever got a chance
+in that direction could please E-mail me the trick.  Compiled language
+assemble weirdly :>  I'll include it in the next edition.
+
+Thanks for bearing with my silly comments...  Hope you'll recover from your
+bad nvram and don't do anything silly.
+
+
+Have fun !
+
+
+
+--
+                                     Denis Solaro -- drzob@vectrex.login.qc.ca
+
+
+
+

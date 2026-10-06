@@ -1,0 +1,252 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<title>Sun Archive System Overview</title>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<h1>Sun Archive System Overview</h1><hr>
+<h3>The Sun3/3x-Series:</h3>
+With the Sun3/3x-Series Sun switched to using the Motorola 68020.
+A few later models had 68030's, but by that time Sun was
+already moving toward SPARC processors. All models either have a 68881
+or 68882 FPU installed stock or at least have a socket for one. All
+models which are not in pizza box chassis are VMEbus. Two out of three
+pizza box models have a "P4" connector which can take a framebuffer; the
+exception is the 3/50.
+<p>
+Support for Sun-3's was introduced in SunOS 3.0. The last version of
+SunOS to support Sun-3's was 4.1.1U1.
+<p>
+During the Sun-3 era, Sun introduced the handy practice of putting
+the model number on the Sun badge on the front of the chassis.
+<p> 
+There are two different kernel architectures in the Sun-3 model line.
+All 68020-based models are "sun3" architecture; 68030-based models (the
+3/80 and 3/4xx) are "sun3x" architecture.
+<p>
+<h3>Models:</h3>
+<ul>
+<li> <a href="#3/160">3/160</a> 
+<li> <a href="#3/75">3/75</a> 
+<li> <a href="#3/140">3/140</a> 
+<li> <a href="#3/150">3/150</a> 
+<li> <a href="#3/180">3/180</a> 
+<li> <a href="#3/110">3/110</a> 
+<li> <a href="#3/50">3/50</a> 
+<li> <a href="#3/60">3/60</a> 
+<li> <a href="#3/60LE">3/60LE</a> 
+<li> <a href="#3/260">3/260</a> 
+<li> <a href="#3/280">3/280</a> 
+<li> <a href="#3/80">3/80</a> 
+<li> <a href="#3/460">3/460</a> 
+<li> <a href="#3/470">3/470</a> 
+<li> <a href="#3/480">3/480</a> 
+<li> <a href="#3/E">3/E</a> 
+</ul>
+<hr>
+<h3><a name="3/160">Sun 3/160 description:</h3>
+<h4>Processor(s):</h4>
+   68020 @ 16.67MHz, 68881, Sun-3 MMU, 8 hardware
+   contexts, 2 MIPS
+<h4>CPU:</h4>
+    501-1163/1164/1208 (1074/1094/1177/1178 are obsolete)
+<h4>Chassis type:</h4>
+    deskside
+<h4>Bus:</h4>  
+    VME, 12 slots
+<h4>Memory:</h4>
+    16M physical (documented), 256M virtual, 270ns cycle
+<h4>Notes:</h4>
+      	          	First 68020-based Sun machine. Uses the
+                        "Carrera" CPU, which is used in most other Sun
+                        3/1xx models and the 3/75. Sun supplied 4M
+                        memory expansion boards; third parties had up to
+                        32M on one card; 3/160G and 3/160CXP reported as
+                        expandable to 24M only. SCSI optional. One
+                        variant of the memory card holds a 6U VME SCSI
+                        board; there is also a SCSI board which sits in
+                        slot 7 of the backplane and runs the SCSI bus
+                        out the back of the backplane to the internal
+                        disk/tape (slot 6 in very early backplanes). CPU
+                        has two serial ports, Ethernet, keyboard. Type 3
+                        keyboard plugs into the CPU; Sun-3 mouse plugs into
+                        the keyboard. Upgradeable to a 3/260 by replacing CPU
+                        and memory boards.
+<hr>
+<h3><a name="3/75">Sun 3/75 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 16.67MHz, 68881, Sun-3 MMU, 8 hardware
+                        contexts, 2 MIPS
+        <h4>CPU:</h4>
+            501-1163/1164/1208 (1074/1094/1177/1178 are obsolete) 
+        <h4>Chassis type:</h4>   wide pizza box
+        <h4>Bus:</h4>            VME, 2 slot
+        <h4>Memory:</h4>         16M physical (documented), 256M virtual, 270ns cycle
+        <h4>Notes:</h4>          Optional SCSI sits on memory expansion board in
+                        second slot.
+
+<hr>
+<h3><a name="3/140">Sun 3/140 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 16.67MHz, 68881, Sun-3 MMU, 8 hardware
+                        contexts, 2 MIPS
+        <h4>CPU:</h4>
+            501-1163/1164/1208 (1074/1094/1177/1178 are obsolete) 
+        <h4>Chassis type:</h4>   deskside
+        <h4>Bus:</h4>            VME, 3 slots
+        <h4>Memory:</h4>         16M physical (documented), 256M virtual, 270ns cycle
+        <h4>Notes:</h4>          3/140M reported expandable to 12M only.
+<hr>
+<h3><a name="3/150">Sun 3/150 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 16.67MHz, 68881, Sun-3 MMU, 8 hardware
+                        contexts, 2 MIPS
+        <h4>CPU:</h4>
+            501-1163/1164/1208 (1074/1094/1177/1178 are obsolete) 
+        <h4>Chassis type:</h4>   deskside
+        <h4>Bus:</h4>            VME, 6 slots
+        <h4>Memory:</h4>         16M physical (documented), 256M virtual, 270ns cycle
+<hr>
+<h3><a name="3/180">Sun 3/180 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 16.67MHz, 68881, Sun-3 MMU, 8 hardware
+                        contexts, 2 MIPS
+        <h4>CPU:</h4> 
+        501-1163/1164/1208 (1074/1094/1177/1178 are obsolete)
+
+        <h4>Chassis type:</h4>   rackmount
+        <h4>Bus:</h4>            VME, 12 slots
+        <h4>Memory:</h4>         16M physical (documented), 256M virtual, 270ns cycle
+        <h4>Notes:</h4>          Rackmount version of 3/160. Upgradeable to a
+                        3/280 by replacing the CPU and memory boards.
+                        Very early backplanes have the special SCSI
+                        hookup on slot 6 rather than 7.
+<hr>
+<h3><a name="3/110">Sun 3/110 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 16.67MHz, 68881, Sun-3 MMU, 8 hardware contexts, 2 MIPS
+        <h4>CPU:</h4>            501-1134/1209
+        <h4>Chassis type:</h4>   deskside
+        <h4>Bus:</h4>            VME, 3 slots
+        <h4>Notes:</h4>          Similar to the "Carerra" CPU, but has 8-bit
+                        color frame buffer on board and uses 1M RAM
+                        chips for 4M on-CPU memory. Code-named "Prism".
+<hr>
+<h3><a name="3/50">Sun 3/50 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 12.5/15.7MHz, 68881 (socket), 
+				 Sun-3 MMU, 8 hardware contexts, 1.5 MIPS
+        <h4>CPU:</h4> 
+        501-1162/1207 (501-1075/1133, 599-1219/1220/1267/1268/1399 are obsolete)
+
+        <h4>Chassis type:</h4>   wide pizza box
+        <h4>Bus:</h4>            none
+        <h4>Memory:</h4>         4M physical (documented), 256M virtual, 270ns cycle
+        <h4>Notes:</h4>          Cycle-stealing monochrome frame buffer. 4M
+                        memory maximum stock, but third-party memory
+                        expansion boards were sold, allowing at least
+                        12M. No bus or P4 connector. Onboard SCSI. Thin
+                        coax or AUI Ethernet. Code-named "Model 25".
+<hr>
+<h3><a name="3/60">Sun 3/60 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 20MHz, 68881 @ 20MHz (stock), 
+				 Sun-3 MMU, 8 hardware contexts, 3 MIPS
+        <h4>CPU:</h4>            501-1205/1322/1334/1345
+        <h4>Chassis type:</h4>   wide pizza box
+        <h4>Bus:</h4>            P4 connector (not same as P4 on 3/80)
+        <h4>Memory:</h4>         24M physical, 256M virtual, 200ns cycle
+        <h4>Notes:</h4>          VRAM monochome frame buffer. Optional color
+                        frame buffer (could run mono and color from same
+                        board) on P4 connector. Onboard SCSI. SIMM
+                        memory (100ns 1M x 9 SIMMs). High (1600*1100) or
+                        low (1152*870) resolution mono selectable by
+                        jumper. Thin coax or AUI Ethernet. Code-named
+                        "Ferrari".
+<hr>
+<h3><a name="3/60LE">Sun 3/60LE description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 20MHz, 68881 @ 20MHz (stock), Sun-3 MMU,
+                        8 hardware contexts, 3 MIPS
+        <h4>CPU:</h4>            501-1378
+        <h4>Memory:</h4>         12M physical, 256M virtual, 200ns cycle
+        <h4>Notes:</h4>          A version of the 3/60 with no onboard
+                        framebuffer and limited to 12M of RAM (4M of
+                        256K SIMMs and 8M of 1M SIMMs).
+<hr>
+<h3><a name="3/260">Sun 3/260 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 25MHz, 68881 @ 20MHz (stock), Sun-3 MMU,
+                        8 hardware contexts, 4 MIPS
+        <h4>CPU:</h4>            501-1100/1206
+        <h4>Chassis type:</h4>   deskside
+        <h4>Bus:</h4>            VME, 12 slot
+        <h4>Memory:</h4>         64M (documented) physical with ECC, 256M virtual;
+                        64K write-back cache, direct-mapped,
+                        virtually-indexed and virtually-tagged, with
+                        16-byte lines; 80ns cycle
+        <h4>Notes:</h4>          Two serial ports, AUI Ethernet, keyboard, and
+                        video on CPU. Video is mono, high-resolution
+                        only. Sun supplied 8M memory boards. Sun 4/2xx
+                        32M boards work up to 128M. 3/260CXP model
+                        reported as expandable to 24M only. First Sun
+                        with an off-chip cache. Upgradeable to a 4/260
+                        by replacing the CPU board. Code-named "Sirius."
+<hr>
+<h3><a name="3/280">Sun 3/280 description:</h3>
+        <h4>Processor(s):</h4>   68020 @ 25MHz, 68881 @ 20MHz (stock), Sun-3 MMU,
+                        8 hardware contexts, 4 MIPS
+        <h4>CPU:</h4>            501-1100/1206
+        <h4>Chassis type:</h4>   rackmount
+        <h4>Bus:</h4>            VME, 12 slot
+        <h4>Memory:</h4>         64M (documented) physical with ECC, 256M virtual;
+                        64K write-back cache, direct-mapped,
+                        virtually-indexed and virtually-tagged, with
+                        16-byte lines; 80ns cycle
+        <h4>Notes:</h4>          Rackmount version of the 3/260. Upgradeable to a
+                        4/280 by replacing the CPU board. Code-named
+                        "Sirius."
+
+<hr>
+<h3><a name="3/80">Sun 3/80 description:</h3>
+        <h4>Processor(s):</h4>   68030 @ 20MHz, 68882 @ 20 or 40MHz, 68030 on-chip
+                        MMU, 3 MIPS, 0.16 MFLOPS
+        <h4>CPU:</h4>            501-1401/1537/1650
+        <h4>Chassis type:</h4>   square pizza box
+        <h4>Bus:</h4>            P4 connector (not same as P4 on 3/60)
+        <h4>Memory:</h4>         16M or 64M physical, 4G virtual, 100ns cycle
+        <h4>Notes:</h4>          Similar packaging to SparcStation 1. Parallel
+                        port, SCSI port, AUI Ethernet, 1.44M 3.5" floppy
+                        (720K on early units?). No onboard framebuffer.
+                        Code-named "Hydra". Type-4 keyboard and Sun-4 mouse,
+                        plugged together and into the machine with a small
+                        DIN plug. Boot ROM versions 3.0.2 and later allow
+                        using 4M SIMMs in some slots for up to 64M. 4M standard.
+<hr>
+<h3><a name="3/460">Sun 3/460 description:</h3>
+        <h4>Processor(s):</h4>   68030 @ 33 MHz, 68882, 68030 on-chip MMU,
+                        7 MIPS, 0.6 MFLOPS
+        <h4>CPU:</h4>            501-1550 (501-1299 is obsolete)
+        <h4>Bus:</h4>            VME, 12 slot
+        <h4>Memory:</h4>         128M physical with ECC, 4G/process virtual,
+                        64K cache, 80ns cycle
+        <h4>Notes:</h4>          Rare.
+<hr>
+<h3><a name="3/470">Sun 3/470 description:</h3>
+        <h4>Processor(s):</h4>   68030 @ 33 MHz, 68882, 68030 on-chip MMU,
+                        7 MIPS, 0.6 MFLOPS
+        <h4>CPU:</h4>            501-1550 (501-1299 is obsolete)
+        <h4>Bus:</h4>            VME
+        <h4>Memory:</h4>         128M physical with ECC, 4G/process virtual,
+                        64K cache, 80ns cycle
+        <h4>Notes:</h4>          Rare. Code-named "Pegasus." 8M standard.
+<hr>
+<h3><a name="3/480">Sun 3/480 description:</h3>
+        <h4>Processor(s):</h4>   68030 @ 33 MHz, 68882, 68030 on-chip MMU,
+                        7 MIPS, 0.6 MFLOPS
+        <h4>CPU:</h4>            501-1550 (501-1299 is obsolete)
+        <h4>Bus:</h4>            VME
+        <h4>Memory:</h4>         128M physical with ECC, 4G/process virtual,
+                        64K cache, 80ns cycle
+        <h4>Notes:</h4>          Rare. Code-named "Pegasus." 8M standard.
+<hr>
+<h3><a name="3/E">Sun 3/E description:</h3>
+        <h4>Processor(s):</h4>   68020
+        <h4>CPU:</h4>            501-8028
+        <h4>Bus:</h4>            VME
+        <h4>Notes:</h4>          Single-board VME Sun-3, presumably for use as a
+                        controller, not as a workstation. 6U form
+                        factor.
+<hr>
+This informations were compiled by James W. Birdsall and can be found in the
+<a href="../FAQ/sun.hardware.FAQ">sun.hardware.FAQ</a> some Parts of this Info
+where changed and updated by Heiko Krupp.
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

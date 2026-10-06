@@ -1,0 +1,507 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<title>SunOS Install Media</title>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<body>
+<h1>SunOS Install Media</h1><hr>
+by Peter Koch, March 1995
+<h2>1. Abstract</h2>
+Every Computer needs an Operating System to do it's task. If a
+customer buys a machine, regardless, if the machine is new or
+used, it can have a preinstalled OS or be completely uninstalled.
+In most cases, it is desirable to install the OS from scratch.
+This has two reasons: First, you get an idea, what software comes
+with the OS and second, you shouldn't trust other people's work
+with something as critical as the entire OS.
+<p>
+In the rare case of a disk crash (or some novice removing /boot),
+the sysadmin needs an alternative way to boot the machine and
+restore a backup. The install medium usually provides a possibility
+to repair boot problems or format a defective disk.
+<p>
+Today we're talking about SunOS 4.1.1 for the Sun3 series of Sun
+Microsystems Inc. Sun has recently dropped the support for the
+Sun3 line completely, but most of these machines are still in
+good working condition (this paper was written on a Sun 3/60)
+and are still usefull for people, that can't afford thousands
+of dollars to buy a high-end PC or SPARC workstation.
+<p>
+This paper copes with install media for the SunOS 4.1.1 in general
+and it might help such people, that are in big trouble or have
+the need for (re-)installing the OS. 
+<h2>2. Available media</h2>
+SunOS 4.1.1 was sold on two differnt media: on tapes and on
+cdrom. Unfortunately, many Sun3 owners have neither a tape
+drive nor a cdrom drive. And worse, many older Sun3's can't
+boot from cdrom or even anything else than a QIC-24 tape.
+There is a third method of installing the OS: from the net.
+But this assumes, that there is a server, from which the
+machine in question can boot and which itself does have a
+tape or cdrom drive.
+<p>
+Clever sysadmins do have an alternative boot partition on
+a secondary disk. This will help in case of troubles. But
+it is even possible to install SunOS from a disk. This was
+never supported by Sun, but it can be made to work.
+<h2>3. Available devices</h2>
+As mentioned before, there are a couple of devices, from
+which a Sun3 can be booted/installed. We will discuss them
+now briefly. Sometimes, i'll use the short-term name of the
+devices as they are configured into the generic kernel. 
+Here are the SCSI devices with their corresponding SCSI-id
+and boot commands:
+<p>
+<pre>
+Device	SCSI-id	PROM boot command
+sd0	0	sd(0,0,slice)
+sd2	1	sd(0,8,slice)
+sd4	2	sd(0,10,slice)
+sd6	3	sd(0,18,slice)
+st0	4	st(0,0,file)
+st1	5	st(0,8,file)
+sr0	6	sd(0,30,slice)
+</pre>
+<h3>3.1 Tape drives</h3>
+Since many people, that run an Unix machine, don't want to
+loose their data by accident, they make backups. Tapes are
+cheap and reliable, so it is likely to find a tape drive
+near a Sun3. We will concentrate on SCSI tape drives (st),
+because the others (xt and mt) are heavy, rare and
+considered obsolete today. Of course, the old server
+machines, which have these devices, can still boot from
+them, so you might give them a try.
+<pre>
+Device		MB	Comment
+Archive Phyton	60	QIC-11 and QIC-24
+Wangtec		60	QIC-11 and QIC-24
+Archive Phyton	150	QIC-150, can read QIC-11 and QIC-24
+Wangtec		150	QIC-150, can read QIC-11 and QIC-24
+Exabyte	8200	2000	8mm
+Exabyte 8205	5000	8mm
+Exabyte 8500	5000	8mm
+Exabyte	8505	12000	8mm
+DDS-1 DAT	2000	4mm
+DDS-2 DAT	12000	4mm
+</pre>
+Every Sun3 can boot from a QIC-24 tape streamer, as long as
+the machine does have an SCSI controller. Some Sun3's with
+newer PROM versions can boot from QIC-150 tapes.
+<h3>
+3.2 Cdrom drives
+</h3>
+Most Sun3 can't boot from cdrom. But boot partitions for
+both sun3 and sun3x architectures exist on the medium. If
+you have PROM versions greater than 3.0, you might try it:
+<pre>
+	>b sd(0,30,4)	sun3 architecture
+	>b sd(0,30,3)	sun3x architecture
+</pre>
+<h3>
+3.3 Disk drives
+</h3>
+Sun3's with very old PROM versions can only boot from the
+disk with SCSI id 0 (sd0). But this is not a big problem. It
+might require some screwing though. For VME-Bus machines,
+there are two SCSI controllers available: the older Sun2
+controller and the newer Sun3 controller. The old controller
+does have problems with disks, which have parity enabled and
+probably won't work with modern disks. One type of Sun2 
+controllers connects through the backplane with an internal
+cable to an internal disk and/or tape drive. It has no
+external connector. You'll need to open the case to access
+this SCSI bus. But this is still better than a machine
+without SCSI controller at all!
+<h3>
+3.4 Diskettes
+</h3>
+The Sun 3/80 comes with a floppy disk drive. It can boot
+from the floppy drive, although it is not fun to install the
+entire OS from hundreds of 1.4 MB disks. But it provides an
+alternate way to get into the miniroot. I haven't
+investigated in this, because i don't own a 3/80 (yet).
+<h3>
+3.5 Ethernet
+</h3>
+Since this device only moves the problematic of the install
+medium to the server, we won't discus it here. But it is
+yet another possibility to boot or install SunOS. Suninstall
+is prepared to work with remote tape and cdrom drives and
+in case of disk troubles, the ethernet can be used to bring
+the machine up again and solve the problem.
+<h2>
+4. PROM versions
+</h2>
+The following table lists PROM version numbers with some
+comments from me. It is in no way complete and if you can
+add a new entry, send me an e-mail.
+<pre>
+Machine	Version	Comment
+
+3/50	1.3	can only boot from sd0 and QIC-24
+3/50	2.6	can boot from any disk and QIC-150
+
+3/60	1.6	can only boot from sd0 and QIC-24
+3/60	2.8	can boot from any disk and QIC-150
+3/60	3.01	can't boot from QIC-150 but from cdrom
+3/60	3.02	can boot from QIC-150 and cdrom
+
+3/260	2.0	can't boot from QIC-150 and cdrom
+
+3/470	3.0	can boot from QIC-150 and cdrom
+</pre>
+<h2>
+5. The boot sequence
+</h2>
+Understanding the boot sequence of any install medium is necessary
+to find alternative ways to use it. I'll give a step by step
+introduction, how to boot from every install medium and describe,
+what happens.
+<h3>
+5.1 Munix
+</h3>
+This first step is not necessary for booting from disk. Exactly,
+this step will allow you to start an Unix kernel, which doesn't 
+need a disk, so you can format or partition the disk before it
+it is really needed and used.
+<p>
+Insert the tape or cdrom into the drive. To boot from tape,
+enter from the boot monitor:
+<pre>
+	>b st()
+</pre>
+This loads the first file (called tpboot) on tape into memory
+and executes it. Tpboot then loads file #3 (called munix) and
+runs it.
+<p>
+With the cdrom, enter:
+<pre>
+	>b sd(0,30,4)		(sun3)
+	>b sd(0,30,3)		(sun3x)
+</pre>
+This will load munix directly.
+<p>
+Munix is a special kernel (a vmunix without v), that resides
+completely in memory. It's root file system is loaded from
+file #4 of the tape or from cdrom into the memory too. Two
+special device drivers are involved here: the ns-device
+(no-swap) and the rd-device (ramdisk). Xkernel user should
+have heard about them already. They are not part of the SunOS
+distribution; they are only built into the munix kernel.
+This makes it impossible to configure such a munix kernel.
+<h3>
+5.2 Miniroot
+</h3>
+When munix is running, it asks you, if to install the miniroot or
+to exit to a shell. It is very funny to choose the second option
+and snoop around a little bit. You can see an absolute minimalist
+Unix here. If you choose the first option, you can run format then.
+After partitioning the disk, munix copies file #5 (the miniroot) on
+partition b of the choosen disk. It uses the command:
+<pre>
+	#dd if=/dev/nrst8 of=/dev/rsd0b bs=100k conv=sync
+</pre>
+Then the system is rebooted with the command:
+<pre>
+	>b sd(0,0,1) -sw
+</pre>
+Notice, that the miniroot kernel uses partition b both for the root
+filesystem and swapping! This can only work, if the real partition
+b is bigger than the miniroot filesystem (7 MB). I'd recommend about
+4 times the main memory of the machine (e.g. at least 16 MB) for swap.
+<h3>
+5.3 Suninstall
+</h3>
+Call "suninstall" from the miniroot. If you have choosen, which
+software packages to install, there comes the first big difference
+between CD and tape: With a CD, suninstall can simply mount the
+data partition onto /usr/etc/install/tar, but from tape, it has to
+read file by file, uncompress them and untar them on the fly.
+<h2> 
+6. The table of contents
+</h2>
+Sun uses a XDR-encoded table of contents (called xdrtoc) for their
+install media. It can be found on top level of the cdrom or as
+file #2 of each tape volume. A xdrtoc file has the following
+entries: A header, which contains the volume number and an entry
+for each file, which consists of the file length, file name, file
+description, file type, file position and the volume, where the
+file can be found. File types are (for example): image, text, tar
+and tarZ (compressed tar). You can translate a xdrtoc into human
+readable format, if you feed it into /usr/etc/install/xdrtoc.
+<pre>
+	#/usr/etc/install/xdrtoc &lt /tmp/xdrtoc
+</pre>
+It is not easy to make xdrtoc files. I used "hexvi" and "beav"
+to modify existing ones and this worked great. You can find a
+couple of usefull xdrtoc files in Appendix C.
+<h2>
+7. Extracting the install media
+</h2>
+It is essential to be able to extract the media files, if you
+want to rearrange them. 
+<h3>
+7.1 Tape medium
+</h3>
+The tape files can be read off the tape with the "dd" command.
+Make yourself familliar with it's odd parameter style (RTFM).
+There is a nice little program called "copytape", which will
+do the trick too.
+<h3>
+7.2 Cdrom medium
+</h3>
+Simply use "tar" to copy the partition a of the cdrom to your
+disk:
+<pre>
+	#mount -r -t hsfs /dev/sr0 /cdrom
+	#cd /cdrom
+	#tar cf - . | ( cd /tmp ; tar xpf - )
+</pre>
+The only files, which are still missing now are munix and the
+munix filesystem. Unfortunately, it is nearly impossible to
+extract them.
+<h2>
+8. Alternatives
+</h2>
+It is possible to install SunOS from any tape, cdrom and disk
+drive, which works without additional device drivers on a Sun3.
+And you can do even more: I've sucessfully used "gzip" instead
+of "compress" to pack the tar archives, so the complete SunOS
+install files fit on a single QIC-24 60 MB cartridge. Then i
+modified the miniroot to use "gunzip" instead of "uncompress"
+and "suninstall" still worked.
+<h3>
+8.1 Installing from disk
+</h3>
+This can be done by making a fake cdrom image. Get an empty
+disk, make a 150 MB partition a and a 30 MB partition b.
+Copy the contents of the cdrom partition a to the disk:
+<pre>
+	#newfs /dev/rsd2a
+	#mount -r -t hsfs /dev/sr0 /cdrom
+	#mount /dev/sd2a /mnt
+	#cd /cdrom
+	#tar cf - . | ( cd /mnt ; tar xpf -)
+</pre>
+If you only have the tape files, refer to Appendix A, how to
+convert them. At last, copy the miniroot onto partition b:
+<pre>
+	#cd /mnt/export/exec/kvm/sun3_sunos_4_1_1
+	#dd if=miniroot.sun3 of=/dev/rsd2b bs=100k conv=sync
+</pre>
+<pre>
+Now boot into the miniroot:
+	#halt
+	>b sd(0,8,1) -sw
+</pre>
+If the miniroot prompt shows up, mount the faked partition:
+<pre>
+	#/etc/mount -r /dev/sd2a /usr/etc/install/tar
+</pre>
+Rename the "umount" command, so "suninstall" cannot unmount the
+fake partition by accident (and it tries to do so several times):
+<pre>
+	#mv /etc/umount /etc/um
+	#suninstall
+</pre>
+If you're done, rename "umount" back before you reboot:
+<pre>
+	#mv /etc/um /etc/umount
+	#reboot
+</pre>
+<h3>
+8.2 Using GNU zip
+</h3>
+On tape, most of the files are compressed tar archives. If
+you uncompress and gzip these files, the complete distribution
+will only have about 50 MB instead of 69 MB before. Thus, the
+distribution now fits onto a single QIC-24 tape. The only
+change which is necessary, is to replace "uncompress" and
+"zcat" by a statically linked version of "gzip". "gzip" is
+drop-in compatible to "compress", so this will suffice:
+<pre>
+	#cd /tmp
+	#dd if=tape1.05 of=/dev/rsd2e bs=100k
+	#ftp <your favourite gnu mirror site>
+	>bin
+	>cd /pub/gnu
+	>get gzip-1.2.4.tar
+	>bye
+	#tar xvf gzip-1.2.4.tar
+	#cd gzip-1.2.4
+	#./configure
+</pre>
+Change the Makefile to produce a staically linked "gzip" by
+adding "-static" to the LDFLAGS.
+<pre>
+	#make
+	#strip gzip
+	#mount /dev/sd2e /mnt
+	#rm /mnt/usr/ucb/uncompress /mnt/usr/ucb/zcat
+	#cp gzip /mnt/usr/ucb/uncompress
+	#ln /mnt/usr/ucb/uncompress /mnt/usr/ucb/zcat
+	#umount /mnt
+	#dd if=/dev/rsd2e of=tape1.05 bs=100k count=70
+	#foreach i (`file *|grep compress|sed -e "s/:.*$//"`)
+	#mv $i $i.Z
+	#uncompress $i.Z
+	#gzip $i
+	#end
+	#rm tape1.29 tape1.30 tape2.01 tape2.02
+</pre>
+Copy the xdrtoc file for the QIC-150 tapes to tape1.02
+and save all files onto a QIC-24 tape.
+<h3>
+8.3 Uncompressed tape files
+</h3>
+On slow machines like the Sun 3/50, uncompress is the
+bottleneck of the installation procedure. If you have a
+faster tape device like an Exabyte or DAT, you can save
+the tar archives uncompressed. This will speed up the
+installation procedure considerably. You only need another
+xdrtoc file.
+<h2>
+9. Customizing the miniroot
+</h2>
+The miniroot is a normal filesystem. If you have a spare
+partiton (say sd2e) , you can try this:
+<pre>
+	#dd if=/tmp/miniroot of=/dev/rsd2e bs=100k
+	#mount /dev/sd2e /mnt
+</pre>
+And you can modify the miniroot for your needs. Later,
+save it back to file:
+<pre>
+	#umount /mnt
+	#dd if=/dev/rsd2e of=/tmp/miniroot bs=100k count=70
+</pre>
+I made a couple of modifications to the miniroot filesystem
+to suit my personal needs: I added some usefull commands
+like gzip, tcsh and others. Then i compiled a new kernel
+with some third party device drivers and more devices.
+<h2>
+Appendix A
+</h2>
+Here comes the list, how the cdrom files correspond to the tape files.
+<pre>
+tape files	cdrom files
+--------------------------------------------------------------------
+-		./avail_arches
+tape1.08	./export/exec/kvm/sun3_sunos_4_1_1/kvm
+tape1.05	./export/exec/kvm/sun3_sunos_4_1_1/miniroot_sun3
+tape1.12	./export/exec/kvm/sun3_sunos_4_1_1/sys
+tape1.02	./export/exec/kvm/sun3_sunos_4_1_1/xdrtoc
+tape1.06	./export/exec/proto_root_sunos_4_1_1
+tape1.24	./export/exec/sun3_sunos_4_1_1/debugging
+tape1.16	./export/exec/sun3_sunos_4_1_1/demo
+tape2.03	./export/exec/sun3_sunos_4_1_1/games
+tape1.27	./export/exec/sun3_sunos_4_1_1/graphics
+tape1.09	./export/exec/sun3_sunos_4_1_1/install
+tape1.10	./export/exec/sun3_sunos_4_1_1/networking
+tape1.18	./export/exec/sun3_sunos_4_1_1/openwindows_demo
+tape1.19	./export/exec/sun3_sunos_4_1_1/openwindows_fonts
+tape2.06	./export/exec/sun3_sunos_4_1_1/openwindows_programmers
+tape1.17	./export/exec/sun3_sunos_4_1_1/openwindows_users
+tape1.23	./export/exec/sun3_sunos_4_1_1/rfs
+tape2.05	./export/exec/sun3_sunos_4_1_1/security
+tape1.26	./export/exec/sun3_sunos_4_1_1/shlib_custom
+tape1.14	./export/exec/sun3_sunos_4_1_1/sunview_demo
+tape1.25	./export/exec/sun3_sunos_4_1_1/sunview_programmers
+tape1.13	./export/exec/sun3_sunos_4_1_1/sunview_users
+tape1.11	./export/exec/sun3_sunos_4_1_1/system_v
+tape1.15	./export/exec/sun3_sunos_4_1_1/text
+tape1.22	./export/exec/sun3_sunos_4_1_1/tli
+tape1.20	./export/exec/sun3_sunos_4_1_1/user_diag
+tape1.07	./export/exec/sun3_sunos_4_1_1/usr
+tape1.28	./export/exec/sun3_sunos_4_1_1/uucp
+tape2.04	./export/exec/sun3_sunos_4_1_1/versatec
+tape1.21	./export/share/sunos_4_1_1/manual
+tape1.29+
+tape2.10	./_copyright
+tape2.08	./patches/sunos_4_1_1/patch_cplusplus_2_0
+tape2.07	./patches/sunos_4_1_1/patch_ipc
+tape2.09	./patches/sunos_4_1_1/patch_taac
+-		./patches/sunos_4_1_1/_readme
+</pre>
+<h2>
+Appendix B
+</h2>
+Here comes the list, how the tape files correspond to the cdrom image.
+<pre>
+tape files	cdrom files
+---------------------------------------------------------------------
+tape1.01	/usr/kvm/stand/tpboot.sun3
+tape1.02	./export/exec/kvm/sun3_sunos_4_1_1/xdrtoc
+tape1.03	munix	(vmunix on partition d of CDROM)
+tape1.04	munixfs (hm... it is somewhere on part. d too)
+tape1.05	./export/exec/kvm/sun3_sunos_4_1_1/miniroot_sun3
+tape1.06	./export/exec/proto_root_sunos_4_1_1
+tape1.07	./export/exec/sun3_sunos_4_1_1/usr
+tape1.08	./export/exec/kvm/sun3_sunos_4_1_1/kvm
+tape1.09	./export/exec/sun3_sunos_4_1_1/install
+tape1.10	./export/exec/sun3_sunos_4_1_1/networking
+tape1.11	./export/exec/sun3_sunos_4_1_1/system_v
+tape1.12	./export/exec/kvm/sun3_sunos_4_1_1/sys
+tape1.13	./export/exec/sun3_sunos_4_1_1/sunview_users
+tape1.14	./export/exec/sun3_sunos_4_1_1/sunview_demo
+tape1.15	./export/exec/sun3_sunos_4_1_1/text
+tape1.16	./export/exec/sun3_sunos_4_1_1/demo
+tape1.17	./export/exec/sun3_sunos_4_1_1/openwindows_users
+tape1.18	./export/exec/sun3_sunos_4_1_1/openwindows_demo
+tape1.19	./export/exec/sun3_sunos_4_1_1/openwindows_fonts
+tape1.20	./export/exec/sun3_sunos_4_1_1/user_diag
+tape1.21	./export/share/sunos_4_1_1/manual
+tape1.22	./export/exec/sun3_sunos_4_1_1/tli
+tape1.23	./export/exec/sun3_sunos_4_1_1/rfs
+tape1.24	./export/exec/sun3_sunos_4_1_1/debugging
+tape1.25	./export/exec/sun3_sunos_4_1_1/sunview_programmers
+tape1.26	./export/exec/sun3_sunos_4_1_1/shlib_custom
+tape1.27	./export/exec/sun3_sunos_4_1_1/graphics
+tape1.28	./export/exec/sun3_sunos_4_1_1/uucp
+tape1.29	./_copyright
+tape2.01	xdrtoc
+tape2.02	xdrtoc
+tape2.03	./export/exec/sun3_sunos_4_1_1/games
+tape2.04	./export/exec/sun3_sunos_4_1_1/versatec
+tape2.05	./export/exec/sun3_sunos_4_1_1/security
+tape2.06	./export/exec/sun3_sunos_4_1_1/openwindows_programmers
+tape2.07	./patches/sunos_4_1_1/patch_ipc
+tape2.08	./patches/sunos_4_1_1/patch_cplusplus_2_0
+tape2.09	./patches/sunos_4_1_1/patch_taac
+tape2.10	./_copyright
+</pre>
+<h2>
+Appendix C
+</h2>
+Here you can download XDRTOC files for all described install configurations.
+Notice, that for QIC-24, there are two files, one for each tape.
+<ul>
+<li><a href="SunOS411.sun3.QIC-24a.xdrtoc">Sun3 QIC-24a</a></li>
+<li><a href="SunOS411.sun3.QIC-24b.xdrtoc">Sun3 QIC-24b</a></li>
+<li><a href="SunOS411.sun3.QIC-150.xdrtoc">Sun3 QIC-150 or gzip'ed QIC-24</a></li>
+<li><a href="SunOS411.sun3.CDROM.xdrtoc">Sun3 CDROM/disk</a></li>
+<li><a href="SunOS411.sun3.Exa.xdrtoc">Sun3 uncompressed Exabyte/DAT</a></li>
+<li><a href="SunOS411.sun3.CDZ.xdrtoc">Sun3 compressed or gzip'ed disk</a></li>
+<li><a href="SunOS411.sun3x.QIC-24a.xdrtoc">Sun3x QIC-24a</a></li>
+<li><a href="SunOS411.sun3x.QIC-24b.xdrtoc">Sun3x QIC-24b</a></li>
+<li><a href="SunOS411.sun3x.QIC-150.xdrtoc">Sun3x QIC-150 or gzip'ed QIC-24</a></li>
+<li><a href="SunOS411.sun3x.CDROM.xdrtoc">Sun3x CDROM/disk</a></li>
+<li><a href="SunOS411.sun3x.Exa.xdrtoc">Sun3x uncompressed Exabyte/DAT</a></li>
+<li><a href="SunOS411.sun3x.CDZ.xdrtoc">Sun3x compressed or gzip'ed disk</a></li>
+</ul>
+<h2>
+Appendix D
+</h2>
+How to install 4.1.1_U1 without using a tape drive (by M. Etteldorf)
+<ul>
+<li>get Sun_4.1.1U1.tar.gz</li>
+<li>gzip -cd Sun_4.1.1U1.tar.gz | tar xvf -</li>
+<li>mkdir -p /var/tmp/unbundled /var/tmp/4.1.1_U1/bin</li>
+<li>cd /var/tmp/unbundled</li>
+<li>tar xvf [...]/Sun_4.1.1U1/tapeu1.02</li>
+<li>cd ../4.1.1_U1/bin</li>
+<li>cp [...]/Sun_4.1.1U1/tapeu1.03 tar.2</li>
+<li>cp [...]/Sun_4.1.1U1/tapeu1.04 tar.3</li>
+<li>cp [...]/Sun_4.1.1U1/tapeu1.05 tar.4</li>
+<li>cd ../../unbundled</li>
+<li>./install_unbundled -m/var/tmp/4.1.1_U1</li>
+</ul>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

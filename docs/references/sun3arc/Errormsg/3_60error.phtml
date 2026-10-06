@@ -1,0 +1,25 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<title>Sun Archive Error-Messages Page</title>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<body>
+<h1>Sun Archive Error-Messages Page</h1><hr>
+<h3>Sun3/60 Self-Test Error Codes:</h3>
+<IMG SRC="../gif/leds/0LEDS7.gif" ALT="7 LEDS 0"> <br>
+<IMG SRC="../gif/leds/00000001.gif" ALT="-------*"> PROM checksum test (ERROR: CPU) <br>
+<IMG SRC="../gif/leds/00000011.gif" ALT="------**"> Context register test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00000100.gif" ALT="-----*--"> Segment Map rd/wr test (ERROR: Boot PROM) <br>
+<IMG SRC="../gif/leds/00000101.gif" ALT="-----*-*"> Segment Map address test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00000110.gif" ALT="-----**-"> Page Map Test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00000111.gif" ALT="-----***"> Memory path data test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00001000.gif" ALT="----*---"> NXM buss error test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00001001.gif" ALT="----*--*"> Interrupt test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00001010.gif" ALT="----*-*-"> TOD clock interrupt test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00001011.gif" ALT="----*-**"> MMU protection/status test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00001110.gif" ALT="----***-"> Parity error test #1 (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00001111.gif" ALT="----****"> Parity error test #2 (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00010000.gif" ALT="---*----"> Memory test (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/10000000.gif" ALT="*-------"> Error found (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/01000000.gif" ALT="-*------"> Exception class error found (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/00100000.gif" ALT="--*-----"> Self-test done [LED flashing] (ERROR: CPU Board) <br>
+<IMG SRC="../gif/leds/11111111.gif" ALT="********"> Reset (ERROR: CPU Board) <br>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

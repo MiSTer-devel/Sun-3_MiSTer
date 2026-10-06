@@ -1,0 +1,175 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?> 
+<TITLE>Sun3/I: CPU - Sun PROM Monitor</TITLE>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<H2><A NAME="H1_99999">Volume I: CPU</A></H2>
+<H2>Sun PROM Monitor</H2>
+<P >
+To program the EEPROM or NVRAM using the Sun PROM Monitor, enter
+<TT><b>q</b></TT>
+followed by the hexadecimal address in the EEPROM or NVRAM to open and display
+the contents. Change the contents by typing in the new value followed by
+a carriage return. To exit, type a space and &lt;CR&gt;, or a "." and
+&lt;CR&gt;.
+</P>
+<P >
+</P>
+<H3>
+Common EEPROM or NVRAM Parameters
+</H3>
+<DL>
+<DT> <B>Location 0x14 [Installed Memory]</B>
+<DD> Amount of installed Memory in hexadecimal<BR><BR>
+<DT> <B>Location 0x15 [Tested Memory]</B>
+<DD> Amount of memory to test during Power On Self-Test<BR><BR>
+<DT> <B>Location 0x16 [Monitor Screen Size]</B>
+<DD> 00 = 1152x900 (standard resolution)<BR>
+     12 = 1024x1024 (1Kx1K) <BR>
+     13 = 1600x1280 (high resolution) (see 0x50 &amp; 0x51)<BR>
+     14 = 1440x1440<BR>
+     15 = 1024x768 (low resolution)<BR><BR>
+<DT> <B>Location 0x17 [Watchdog Reset Action]</B>
+<DD>
+     00 = Watchdog Reset returns to the PROM monitor<BR>
+     12 = Watchdog Reset causes a Power On Reset (default)<BR><BR>
+<DT> <B>Location 0x18 [Operating System Boot Device]</B>
+<DD> 00 = polls devices (default)<BR>
+     12 = use EEPROM/NVRAM specified boot device<BR><BR>
+<DT> <B>Location 0x19 - 0x1a [SunOS Boot Device in ASCII]</B>
+<DD> xy 78 79<BR>
+     xd 78 64<BR>
+     sd 73 64<BR>
+     ie 69 65<BR>
+     id 69 64<BR>
+     gn 67 6e<BR>
+     le 6c 65<BR><BR>
+<DT> <B>Location 0x1b, 0x1c, and 0x1d [Controller, Unit, Partition]</B>
+<DD> 00   00   00 (default)<BR><BR>
+<DT> <B>Location 0x1f [Primary Terminal] </B>
+<DD> 00 = Monochrome Frame Buffer<BR>
+     10 = Serial Port A<BR>
+     11 = Serial Port B<BR>
+     12 = VMEbus and Sun-3/60 P4 Color Frame Buffers<BR><BR>
+     Configure locations 0x60c - 0x613 when VX and MVX Graphics Options
+     are installed.<BR><BR>
+     20 = P4 Color Frame Buffer<BR><BR>
+<DT> <B>Location 0x20 [Power-Up Banner] </B>
+<DD> 00 = Sun Banner<BR>
+     12 = Custom Banner<BR><BR>
+<DT> <B>Location 0x21 [Keyboard Click] </B>
+<DD> 00 = turns keyboard click OFF<BR>
+     12 = turns keyboard click ON (default)<BR><BR>
+<DT> <B>Location 0x22 - 0x23 [Diagnostic Boot Device in ASCII] </B>
+<DD> xy 78 79<BR>
+     xd 78 64<BR>
+     sd 73 64<BR>
+     ie 69 65<BR>
+     id 69 64<BR>
+     gn 67 6e<BR>
+     le 6c 65<BR><BR>
+<DT> <B>Location 0x24, 0x25, and 0x26 [Controller, Unit, Partition] </B>
+<DD> 00   00   00 (default)<BR><BR>
+<DT> <B>Location 0x28 - 0x4f [Diagnostic Boot Path] </B>
+<DD> These 40 bytes represent the ASCII values for the desired diagnostic
+boot path.<BR><BR>
+<DT> <B>Location 0x50 [Hi Res # Columns] </B>
+<DD> 50 = 80 columns (standard display)<BR>
+     78 = 120 columns (full screen display)<BR><BR>
+<DT> <B>Location 0x51 [Hi Res # Rows] </B>
+<DD> 22 = 34 rows (standard display)<BR>
+     30 = 48 rows (full screen display)<BR><BR>
+<DT> <B>Location 0x58 [Serial Port A Default Baud Rate] </B>
+<DD> 00 = uses 9600 baud<BR>
+     12 = uses EEPROM/NVRAM defined baud rate<BR><BR>
+<DT> <B>Location 0x59 - 0x5a [Serial Port A Baud Rate] </B>
+<DD> 1200 baud - 04 b0<BR>
+     4800 baud - 12 c0<BR>
+     9600 baud - 25 80<BR><BR>
+<DT> <B>Location 0x5b [Serial Port A DTR/RTS] </B>
+<DD> 00 = asserts DTR and RTS signals<BR>
+     12 = does not assert DTR and RTS signals<BR><BR>
+<DT> <B>Location 0x60 [Serial Port B Default Baud Rate] </B>
+<DD> 00 = uses 9600 baud <BR>
+     12 = uses EEPROM/NVRAM defined baud rate<BR><BR>
+     In the diag position, port B is set to output at 1200 baud. The setting
+     of location 0x60 - 0x62 is ignored.<BR><BR>
+<DT> <B>Location 0x61 - 0x62 [Serial Port B Baud Rate] </B>
+<DD> 1200 baud - 04 b0<BR>
+     4800 baud - 12 c0<BR>
+     9600 baud - 25 80<BR><BR>
+<DT> <B>Location 0x63 [Serial Port B DTR/RTS] </B>
+<DD> 00 = asserts DTR and RTS signals<BR>
+     02 = does not assert DTR and RTS signals<BR><BR>
+<DT> <B>Location 0x111 [Sun386i CPU Revision Level] </B>
+<DD> 0x01 = P1.5 CPU (Should not be in the field)<BR>
+     0x02 = 501-1241-xx and 501-1423-xx CPU Board<BR>
+     0x03 = 501-1413-xx and 501-1414-xx CPU Boards<BR><BR>
+<DT> <B>Location 0x112 [Sun386i CPU Revision Level] </B>
+<DD> 0x00 = P1.5 CPU (Should not be in the field)<BR>
+     0x00 = &lt;=501-1241-02, Rev.15 <BR>
+     0x00 = &lt;=501-1324-02, Rev.15<BR>
+     0x02 = &gt;=501-1241-02, Rev.16 <BR>
+     0x02 = &gt;=501-1324-02, Rev.16<BR>
+     0x00 = 501-1413-xx and 501-1414-xx<BR><BR>
+<DT> <B>Location 0x154 [Sun386i SCSI Spin Up Delay] <BR>
+Boot PROM &gt;= 4.5 </B>
+<DD> 00 = no delay (default)<BR>
+     xx = delay in seconds<BR><BR>
+<DT> <B>Location 0x162 [Sun386i Password Mode Select]<BR>
+Boot PROM &gt;= 4.5</B>
+<DD> 5E = fully secure mode<BR>
+     01 = command secure mode<BR>
+     All else = non-secure mode<BR><BR>
+<DT> <B>Location 0x163 - 0x16a [Sun386i Password] <BR>
+Boot PROM &gt;= 4.5</B>
+<DD> 8 bytes of password in ASCII<BR><BR>
+<DT> <B>Location 0x18f [LogoType] </B>
+<DD> 00 = Sun<BR>
+     06 = 3D for CG6<BR>
+     12 = Custom<BR><BR>
+<DT> <B>Location 0x492 [Sun386i Power-On Mode]</B> </Location>
+<DD> 07 = normal boot<BR>
+     06 = diagnostic boot<BR>
+     02 = bypass mode <BR><BR>
+<DT> <B>Location 0x494 [Sun386i Auto Config Message Flag] </B>
+<DD> 00 = no messages<BR>
+     01 = Sun-3 (UNIX expert type messages)<BR>
+     02 = verbose messages<BR><BR>
+<DT> <B>Location 0x492 [Password Mode Select]<BR>
+Sun-3 &amp; Sun-4 Boot PROM &gt;= 2.7.1</B>
+<DD> 5E = fully secure mode<BR>
+     01 = command secure mode<BR>
+     All else = non-secure mode<BR><BR>
+<DT> <B>Location 0x493-0x49a [Password Bytes]<BR>
+Sun-3 &amp; Sun-4 Boot PROM &gt;= 2.7.1</B>
+<DD> 8 bytes of password in ASCII<BR><BR>
+If the PROM Rev level is 2.8, enter a @ character before each letter of the
+password. Enter one letter before each location, followed by &lt;Return&gt;.
+If the password is less than 8 letters, enter 00 in the remaining locations.
+The hexidecimal value of the letters can also be used to enter the
+password.<BR><BR>
+<DT> <B>Location 0x60c - 0x60f [VX and MVX Options Boot Code] </B>
+<DD> 31 40 00 00 = Use the VX/MVX as the system console<BR><BR>
+<DT> <B>Location 0x610 - 0x613 [VX and MVX Options Bus Type] </B>
+<DD> FC 00 00 00 = Use the VX/MVX as the system console<BR><BR>
+<DT> <B>Location 0x70b [Sun-3/80 Power-On Mode]<BR>
+Boot PROM &gt;= 2,3 </B>
+<DD> 06 = normal boot<BR>
+     12 = diagnostic mode<BR>
+     All else = full diagnostic boot
+</DL>
+<BR>
+<H4> References </H4>
+<OL>
+<LI> <i>Sun Bootstrap PROM Security Features User's Guide for the Sun
+Workstation</i>, 800-8836.
+<LI> <i>Sun Workstation Bootstrap PROM Security Features User's Guide</i>,
+800-8843.
+<LI> <i>Sun-3/80 Self-Tests and Monitor Commands</i>, 800-5027.
+<LI> <i>SPARCsystem 300 Series Self-Tests and Monitor Commands</i>, 800-4950. 
+<LI> <i>SPARCsystem 400 Series Self-Tests and Monitor Commands</i>, 800-4833.
+<LI> <i>PROM User's Manual</i>, 800-1736. 
+<LI> <i>EEPROM Users Guide for Sun-3, Sun-4, and SPARCsystems 300/400</i>,
+800-3512.
+<LI> <i>Boot PROM User's Guide</i>, 800-4852.
+</OL>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

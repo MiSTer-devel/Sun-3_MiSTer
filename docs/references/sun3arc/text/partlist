@@ -1,0 +1,260 @@
+150-1537	Internal SCSI Terminator, Keyed
+270-1059	VME 3x2 Adapter FAB with P2 Rows A&C
+270-1138	VME 3x2 Adapter FAB without P2 Rows A&C
+340-1569	Rack Mounting Bracket
+340-1587	Wall Mounting Bracket
+340-1914	Rack Mounting Bracket, Short, 56" Rack
+340-1915	Rack Mounting Bracket, Long, 56" Rack
+340-2468	VX & MVX Frontplane EMI Cover
+340-2469	VX Frontplane EMI Cover
+370-0502	Ciprico Tapemaster Multibus 1/2" Tape Controller
+370-0502	Ciprico Tapemaster Multibus 1/2" Tape Controller
+370-0552	Emulex MD-21 SCSI Disk Controller
+370-1096	MTI- 1 650B Multi-Channel Communication Board Set
+370-1010	Adaptec ACB-4000 SCSI Disk Controller
+370-1011	Sysgen 5C4000 SCSI Tape Controller
+370-1012	Xylogics 450 Multibus SMD Disk Controller
+370-1012	Xylogics 450 Multibus SMO Disk Controller
+370-1026	Archive Stand Alone Controller
+370-1039	MTI-800 Multi-Channel Communication Board Set
+370-1040	MTI-1600 Multi-Channel Communication Board Set
+370-1040	Systech MTI-1600 Board Set
+370-1046	Systech MTI-800 USART Board
+370-1047	MTI-800/1600 Controller Board
+370-1047	MTI-800/1600 Controller Board
+370-1047	Systech MTI-1600 Controller Board
+370-1048	Systech MTI-1600 USART Board
+370-1048	Systech MTI-800 USART Board
+370-1049	Systech DCP-8804 Communications Processor
+370-1049	Systech DCP-8804 Communications Processor
+370-1061	Emulex MTO2 SCSI Tape Controller
+370-1067	Xylogics 472 Multibus 1/2" Tape Controller
+370-1067	Xylogics 472 Multibus 1/2" Tape Controller
+370-1082	Xylogics 451 Multibus SMD Disk Controller
+370-1082	Xylogics 451 Multibus SMD Disk Controller
+370-1096	Systech MTI-1650A Board Set
+370-1097	MTI- 1 650B Multi-Channel Communication Board Set
+370-1097	Systech MTI-1650B Board Set
+370-1098	MTI-850B Multi-Channel Communication Board Set
+370-1099	MTI-850/1650 Controller Board
+370-1099	MTI-850/1650 Controller Board
+370-1099	MTI-850/1650 Controller Board
+370-1099	Systech MTI-1650B Controller Board
+370-1099	Systech MTI-1650B Controller Board
+370-1100	Systech MTI-1650B USART Board
+370-1100	Systech MTI-1650B USART Board
+370-1102	Systech MTI-850B USART Board
+370-1125	Floppy Drive Cable, SunIPO to Floppy Drive
+370-1128	SunLink Channel Adapter (do NOT use, see FCC A0003- 1)
+370-1129	Tag & Bus In Cable, 8' (do not use -01, -02, or -03)
+370-1130	Tag & Bus Out Cable, 8' (do not use -01, -02, or -03)
+370-1131	Tag & Bus Out Cable, 5' (obsolete)
+370-1132	Tag & Bus In Cable, 5' (obsolete)
+370-1135	Bus Terminator
+370-1136	Tag Terminator
+370-1235	Emulex MT02 SCSI Tape Controller
+370-1236	Emulex MD-21 SCSI Disk Controller
+501-0526	Sun 256Kb Multibus Memory & 1/4" Tape Controller
+501-1004	Sun-2 Multibus Ethernet Controller
+501-1004	Sun-2 Multibus Ethernet Controller
+501-1014	CG2 Color Frame Buffer
+501-1045	Sun-2 VMEbus SCSI Host Adapter
+501-1055	OP Graphics Processor
+501-1058	OB Graphics Buffer
+501-1074	2MB Sun 3004 CPU, 12.5MHz 68881 (obsolete)
+501-1075	4MB 3/50, 12.5MHz w/o 12.5MHz 68881 (obsolete)
+501-1089	CO3 Double Buffered Color Frame Buffer
+501-1092	12-Slot VMEbus Backplane, (obsolete)
+501-1093	2-Slot VMEbus Backplane, Sun-3/75
+501-1094	4MB Sun 3004 CPU, 12.5MHz 68881 (obsolete)
+501-1100	0MB Sun 3200 CPU
+501-1102	8MB Sun 3200 & Sun 3400, Sun 4200 ECO Memory
+501-1109	1-Slot Backplane, Sun-3/50
+501-1111	2MB Sun 3/75 Parity Memory
+501-1116	CG3 Color Frame Buffer
+501-1116	CG3 Color Frame Buffer
+501-1117	12-Slot VM Ebus Backplane, Rressfit
+501-1121	0MB Sun 3/75 Parity Memory (obsolete)
+501-1122	4MB Sun 3/75 Parity Memory
+501-1125	SunIPC without 80287
+501-1127	3-Slot VMEbus Backplane, Pressfit
+501-1128	6-Slot VMEbus Backplane, Pressfit
+501-1131	2MB Sun 3004 Parity Memory
+501-1132	4MB Sun 3004 Parity Memory
+501-1133	4MB 3/50,1 2.5MHz/i 6.67MHz w/o 12.5MHz 68881 (abs)
+501-1134	4MB Sun-3/110 CPU
+501-1138	Sun-2 SCSI Host Adapter Assembly, External SCSI
+501-1139	GP+ Graphics Processor Plus
+501-1139	GP+ Graphics Processor Plus
+501-1147	Sun-2/50 SCSI Host Adapter Assembly, External SCSI
+501-1149	Sun-2 SCSI Host Adapter Assembly, Internal SCSI
+501-1153	Sun-2 Ethernet Controller Assembly
+501-1154	Xylogics 450 VMEbus SMD Disk Controller Assembly
+501-1155	Xylogics 4721/2" Tape Controller Assembly, 9U VMEbus
+501-1157	16-Channel Asychronous Line Multiplexer (ALM)
+501-1158	SunLink Serial Communications Processor Assembly (SCP)
+501-1162	4MB 3/50, 16.67MHz w/ol 6.67MHz 68881
+501-1163	2MB Sun 3004 CPU, 16.67MHz 68881
+501-1164	4MB Sun 3004 CPU, 16.67MHz 68881
+501-1165	Rackmounted 16-Channel Asychronous Line Multiplexer
+501-1166	Xylogics 451 VMEbus SMD Disk Controller Assembly
+501-1167	Sun-2 SCSI Host Adapter Assembly, External SCSI
+501-1170	Sun-3 SCSI Host Adapter Assembly, Internal SCSI
+501-1172	Sun-3 SCSl Host Adapter Assembly, External SCSI
+501-1186	9U VME Adapter Assembly for Xylogics 450/451
+501-1186	9U VME Adapter Assembly for Xylogics 450/451
+501-1187	9U VME Adapter Assembly for Xylogics 472
+501-1187	9U VME Adapter Assembly for Ciprico Tapemaster
+501-1191	VME 3x2 Adapter Assembly, without P2 A&C, Option 160B
+501-1196	Parallel Port Loopback Test Plug
+501-1203	16 Channel Asychronous Line Multiplexer-2 (ALM-2)
+501-1205	4MB Sun-3/60 CPU w Monochrome Video, 1MB SIMMs
+501-1206	0MB Sun 3200 CPU
+501-1207	4MB 3/50,16.67MHz w1 6.67MHz 68881
+501-1208	4MB Sun 3004 CPU, 16.67MHz 68881
+501-1209	4MB Sun-3/ll0CPU
+501-1214	SunIPC with 80287
+501-1217	Sun-3 SCSI Host Adapter Assembly, External SCSI
+501-1220	VME 3x2 Adapter Assembly, without P2 A&C
+501-1221	Sun Link Multiprotocol Communications Processor (MCP)
+501-1236	Sun-3 SCSI Host Adapter
+501-1239	1MB, 1Mbit x 9-Bit SIMM, Sun-3/60
+501-1249	Ciprico Tapemaster 1/2" Tape Controller
+501-1254	32MB Sun 3200 & Sun 4200 ECC Memory
+501-1267	CG5 Color Frame Buffer
+501-1268	GP2 Graphics Processor Two
+501-1268	GP2 Graphics Processor Two
+501-1268	GP2 Graphics Processor Two
+501-1269	VME 3x2 Adapter Assembly, with P2 A&C, Option 1 60A
+501-1277	1-Slot Backplane, Pressfit, Sun-3/50/60
+501-1298	8MB Sun386i Paritv Memorv with Cache
+501-1299	0MB Sun 3400 CPU (obsolete)
+501-1319	CG3 Double Buffered Color Frame Buffer 1O24x1O24
+501-1322	4MB Sun-3/60 CPU w/o Monochrome Video, 1MB SlMMs
+501-1325	4MB Sun386i Parity Memory with Cache
+501-1334	0MB Sun-3/60 CPU w Monochrome Video
+501-1338	SunLink High-Speed Serial Interface (HSl)
+501-1345	0MB Sun-3/60 CPU w/0 Monochrome Video
+501-1346	1MB, 1Mbit x 9-Bit SIMM, Sun-3/60LE
+501-1349	256KB, 256KB x 9-Bit DIP SIMM, Sun-3/60LE
+501-1354	5-Slot VMEbus Backplane, Pressfit
+501-1383	TAAC-i Application Accelerator
+501-1394	4MB Sun386i Parity Memory
+501-1401	4MB Sun-3/80 CPU
+501-1408	1MB, 1Mbit x 9-Bit SIMM, Sun-3/80
+501-1434	CG9 24-bit Color Frame Buffer
+501-1439	12-Slot Backplane, 9 VMEbus Slots, Pressfit (obsolete)
+501-1441	8MB Sun386i Parity Memory
+501-1447	TAAC-1 Application Accelerator
+501-1451	32MB Sun 3200, Sun 3400 & Sun 4200 ECC Memory
+501-1460	SunLink Channel Adapter
+501-1482	0MB Sun386i Parity Memory with Cache
+501-1498	16-Slot Backplane, 13 VMEbus Slots, Pressfit (obsolete)
+501-1537  	Visualization Accelerator Pixel Processor
+501-1538	Visualization Accelerator Super Frame Buffer
+501-1550	0MB Sun 3400 CPU
+501-1576	16MB Sun 3200, Sun 3400 & Sun 4200 ECO Memory
+501-1584	Sun-3/E Ethernet Controller Assembly
+501-1596	Pixel Processor to Super Frame Buffer Connector
+501-1597	16-Slot Backplane, 13 VMEbus Slots, Pressfit, Fused
+501-1598	12-Slot Backplane, 9 VMEbus Slots, Pressfit
+501-1650	4MB Sun-3/80 CPU
+501-1666	VME 3x2 Adapter Assembly, with P2 A&C
+501-1832	12-Slot Backplane, 9 VMEbus Slots, Pressfitwith cutout
+501-8020	Sun-3/E Monochrome Frame Buffer
+501-8027	Sun-3/E Ethernet Controller
+501-8027	Sun-3/E SCSI/Ethernet Controller
+501-8028	4MB Sun-3/E CPU
+501-8029	Sun-3/E Color Frame Buffer
+501-8030	12MB Sun-3/E Parity Memory
+501-8031	4MB Sun-3/E Parity Memory
+530-1079	Ext SMD Command Cable, 0.7M
+530-1079	Ext SMD Command Cable, 0.7M
+530-1080	Ext SMD Data Cable, 0.7M
+530-1080	Ext SMD Data Cable, 0~7M
+530-1134	loopback Test Cable
+530-1147	SMD Data Cable, 9U Adapter Assembly
+530-1147	SMD Data Cable, 9U Adapter Assembly
+530-1148	SMD Command Cable, 9U Adapter Assembly
+530-1148	SMD Command Cable, 9U Adapter Assembly
+530-1165	Tape Command Cable, Xylogics 472 to 9U Backpanel
+530-1165	Tape Command Cable, Tapemasterto 9U Backpanel
+530-1173	Ethernet Cable, Ethernet Controller to Backpanel
+530-1178	RS-232 Cable, 19cm
+530-1179	RS-232 Cable, 135cm
+530-1180	RS-449 Cable, 17.5cm
+530-1181	RS-449 Cable, 13cm
+530-1209	Ext SMD Command Cable, 2.0M
+530-1209	Ext SMD Command Cable, 2.OM
+530-1209	External Tape Command Cable, 2.0M
+530-1209	External Tape Command Cable, 2.0M
+530-1210	Ext SMD Data Cable, 2.0M
+530-1210	Ext SMD Data Cable, 2~0M
+530-1251	Cable, Systech Controller to Systech USART
+530-1252	Cable, Systech MTI-1600/1650Bto Backpanel
+530-1255	DC Power Cable
+530-1276	RS-232 Cable, Systech MTI-16SOAto Backpanel
+530-1281	DC Power Cable, ALM to Backpanel
+530-1295	DC Power Cable, ALM to USART Panel
+530-1312	Internal Parallel Port Cable, 14.5cm
+530-1313— 	Internal RS-232 Cable, 17.5cm
+530-1314	I nternal RS-449 Cable, 17.5cm
+530-1315	Internal Cable, 50-Pin, 11.5 cm
+530-1331	SMD Command Cable, 2.0M, Mass Storage Pedestal
+530-1331	SMD Command Cable, 2.0M, Sun Expansion Pedestal
+530-1334	Cable, ALM-2 to DCA, 2.4M
+530-1354	SMD Command Cable, 2.5M, 892MB Disk Drive
+530-1355	SMD Data Cable, 2.5M, 892MB Disk Drive
+530-1356	SMD Daisy Chain Cable, 2.5M, 892MB Disk Drive
+530-1356	Ext SMD Daisy Chain Command Cable, 892MB Disk Drive
+530-1364	RS-232 Diagnostic Port Cable, 20'
+530-1378	Ext SMD Command Cable, 892MB Disk Drive
+530-1379	Ext SMD Data Cable, 892MB Disk Drive
+530-1425	V.35 Cable, HSl to DSU, 2.9M
+530-1426	—V.35 LoopbackTest Plug
+530-1430	—RS-449 LoopbackTest Plug
+530-1475	SMD Data Cable, 6.0M, 892MB Disk Drive
+530-1476	SMD Command Cable, 6.0M, 892MB Disk Drive
+530-1607	Ethernet Cable, Ethernet Controller to Backpanel
+530-1691	External Tape Command Cable, 5.5M
+530-1691	External Tape Command Cable, 5.SM
+530-1692	SMD Data Cable, 6.OM, 575MB Disk Drive
+530-1693	SMD Command Cable, 6.0M, 575MB Disk Drive
+540-1108	VME 3x2 Adapter Assembly (obsolete)
+540-1126	C02 Color Frame Buffer (obsolete)
+540-1250	VMEbus to Multibus Adapter Assembly (obsolete)
+540-1281	RS-232 Loopback Test Plug
+540-1281	RS-232 Loopback Test Plug (obsolete)
+540-1281	RS-232 Loopback Test Plug (obsolete)
+540-1281	RS-232 LoopbackTest Plug
+540-1309	RS-449 Loopback Test Plug
+540-1309	RS-449 Loopback Test Plug
+540-1526	DCA Assembly
+540-1558	RS-232 Loopback Test Plug
+540-1558	RS-232 Loopback Test Plug
+540-1558	RS-232 Loopback Test Plug
+540-1558	RS-232LoopbackTestPlug
+540-1559	RS-449 Loopback Test Plug
+540-1560	Parallel Port LoopbackTest Plug
+555-1054	0MB Sun386i Parity Memory with Cache
+555-1423	0MB Sun386i Parity Memory
+599-1165	CG2 Color Frame Buffer (obsolete)
+599-1177	2MB Sun 3004 CPU, 12.5MHz 68881 (obsolete)
+599-1178	4MB Sun 3004 CPU, 12.5MHz 68881 (obsolete)
+599-1179	2MB Sun 3004 Parity Memory (obsolete)
+599-1180	4MB Sun 3004 Parity Memory (obsolete)
+599-1188	2MB Sun 3004 Parity Memory (obsolete)
+599-1189	4MB Sun 3004 Parity Memory (obsolete)
+599-1219	4MB 3/50,12.5MHz w/o 12.5MHz 68881 (obsolete)
+599-1220	2MB 3/50, 12.5MHz w/o 12.5MHz 68881 (obsolete)
+599-1240	2MB Sun 3/75 Parity Memory (obsolete)
+599-1241	4MB Sun 3/75 Parity Memory (obsolete)
+599-1242	0MB Sun 3/75 Parity Memory (obsolete)
+599-1267	2MB 3/50, 12.5MHz or 16.67MHz w 12.5MHz 68881 (abs)
+599-1268	4MB 3/50, 12.5MHz or 16.67MHz w 12.5MHz 68881 (abs)
+599-1309	4MB 3/50, 16.67MHz w 16.67MHz 68881 (obsolete)
+5O1-1154  	VMEbus to Multibus Adapter Assembly, Blank Backpanel
+5O1-11O5  	Floating Point Accelerator
+811-1100	16-Channel USART Panel
+811-1100	Systech MTI-1650A USART Panel
+501-8006	4MB Sun 3004 Memory

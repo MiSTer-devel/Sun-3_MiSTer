@@ -1,0 +1,173 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<title>Sun Archive BOOTROM Page</title>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+
+<h1>Sun Archive BOOTROM Page</h1><hr>
+
+<h3>How to use:</H3>
+<pre>
+> q loc       - will let you change the byte value at loc.
+> q [ret]     - will step you through the locations, letting you change them
+                as you go. A q by itself will exit you back to the > prompt.
+</pre>
+
+<h3>Here are some important locations and possible contents:</h3>
+<pre>
+0x000-0x003 - Diagnostic Test Write Area (used by diagnostics) 4 bytes
+0x004-0x009 - Diagnostic Area Write Counters (used by diagnostics) 6 bytes
+0x00c-0x00e - Diagnostic Area Checksum *used by daignostics) 3 identical bytes
+
+0x010-0x013 - Date of Last System Hardware Update (Total seconds since 1/1/70)
+              0x010 - bits 31-24
+              0x011 - bits 23-16
+              0x012 - bits 15-8
+              0x013 - bits 7-0
+
+0x014       - Total number in hex of installed memory in the system. 1 byte
+0x015       - Total number of MB (in hex) to test prior to booting.
+              Firmware ignores this value if diagnostic switch set to DIAG.
+              1 byte.
+
+0x016       - Monitor Screen Size (1 byte)
+              Set to:
+              0x00  for 1152x900 (Most Sun-3 Systems)
+              0x12  1024x1024
+              0x13  1600x1280 (HiRes for Sun 3/200 series)
+              0x14  1440x1440
+  	      0x15  1024x768 (low resolution)		
+
+0x017       - Watchdog Reset Action (1 byte)
+              Set to:
+              0x00  Watchdog Reset will fall into Boot PROM Monitor
+              0x12  Watchdog Reset will cause a Power On Reset
+
+0x018       - Operating System Boot Up (1 byte)
+              Set to:
+              0x00  Poll devices for the SunOS (i.e., xy, sd, etc)
+              0x12  Use EEPROM specified boot device
+ 
+0x019-0x01d - Boot device (the one you wanted! - 5 bytes)
+
+  0x019-0x01a Default boot device (see table below)
+  0x01b       Controller number in hex
+  0x01c       Unit number in hex
+  0x01d       Partition number in hex
+
+  Table for 0x019-0x01d:
+
+  OS Boot Device:             Ox019:         0x01a:
+
+  xy: Xylogics 450/451 disk   0x78           0x79
+  xd: Xylogics Disk (7053)    0x78           0x64
+  sd: SCSI disk (!)           0x73           0x64
+  ie: Intel Ethernet          0x69           0x65
+  le: AMD (Lance) Ethernet    0x6c           0x65
+  st: SCSI 1/4" Tape          0x73           0x74
+  xt: Xylogics 1/2" Tape      0x78           0x74
+  mt: Tapemaster 1/2" Tape    0x6d           0x74
+
+  (So if you want to boot a 3/50, 3/60, 3/75/140, 1/160/180, 3/110,
+  3/260, 3/280 or 3/80 from SCSI sd(0,0,0), set EEPROM locations
+  0x019-0x01d to 73 64 00 00 00.)
+
+0x01e       - Keyboard type (1 byte) Not implemented
+
+0x01f       - Primary Terminal (1 byte)
+              Set to:
+              0x00  Use B/W Monitor (monochrome on-board frame buffer)
+              0x10  Use Serial Port A
+              0x11  Use Serial Port B
+              0x12  Use Color Monitor (CG2, CG3, CG5, or color daughter board)
+              0x20  Use single of first head of multiheaded P4 board (CG6)
+
+0x020       - Display Sun Banner (You can have the default Sun logo or
+              a custom logo) (1 byte)
+              Set to:
+              0x00  Display the Sun Banner
+              0x12  Display Custon Banner
+
+0x021       - KeyClick on/off (1 byte)
+              Set to:
+              0x00  Turn Click OFF
+              0x12  Turn Click ON
+
+0x022-0x026 - Diagnostic Boot Device (5 bytes)
+              (See Boot device table above)
+
+0x028-0x04f - Diagnostic boot path (40 bytes) in ASCII.
+
+0x050       - HiRes Screen Size
+              # of columns (default 0x50 is hex for 80 columns)
+	      # of columns (0x78 is hex for 120 columns)
+
+0x051	    - HiRes Screen Size 
+              # of rows (default 0x22 is hex for 34 rows)
+	      # of columns (0x30 is hex for 48 rows)
+
+0x058       - SCC Port A Default Baud Rate (1 byte)
+              Set to:
+              0x00  Use Default Baud Rate of 9600 baud
+              0x12  Use EEPROM defined baud rate (see below)
+
+0x059-0x05a - SCC Port A Baud Rate (2 bytes)
+
+  Table:
+
+  Baud Rate:      Hex Equiv:       0x059:         0x05a:
+
+    300           0x012c           0x01           0x2c
+    600           0x0258           0x02           0x58
+   1200           0x04b0           0x04           0xb0
+   2400           0x0960           0x09           0x60
+   4800           0x12c0           0x12           0xc0
+   9600           0x2580           0x25           0x80
+  19200           0x4b00           0x4b           0x00
+  38400           0x9600           0x96           0x00
+
+  (Note: SunOS 4.1.1 apparently ignores what you set when it comes
+  to configuring the serial ports, so this isn;t as important as it looks.)
+
+0x05b       - SCC Port A DTR/RTS (1 byte)
+              Set to:
+              0x00  Assert the DTS and RTS signals
+              0x12  Do NOT assert the DTS and RTS signals
+
+0x060       - SCC Port B Default Baud Rate (1 byte)
+0x061-0x062 - SCC Port B Baud Rate (2 bytes)
+0x063       - SCC Port B DTR/RTS (1 byte)
+  (see table and infor for Port A, above)
+
+0x068-0x0b7 - Custom Banner (80 bytes)
+              These 80 bytes represent a character buffer for a user
+              specified custom banner to be displayed instead of the
+              Sun banner, when the value of EEPROM location 0x020 is
+              0x012. All locations up to the terminator (0x00) are
+              displayed; each byte not filled with the hexadecimal
+              equivalent of an ASCII character should contain zeroes.
+
+0x0b8-0x0b9 - Test Pattern (2 bytes)
+              These two bytes are used to provide a known data test pattern
+              to check the EEPROM data lines.
+              0x0b8 is 0xAA
+              0x0b9 is 0x55
+
+0x492	    - Password Mode Select (ROM Rev. > 2.7.0)
+	      0x5E = fully secure mode
+	      0x01 = command secure mode
+	      Rest = non-secure mode
+
+0x493-0x49a - Password Bytes (ROM Rev. > 2.7.0)
+	      8 Bytes of password in ASCII
+
+	      If the PROM Rev. level is 2.8, enter a @ character before
+	      each letter of the password. Enter one letter before each
+	      location, followed by <RETURN>. If the password is less than
+	      8 letters, enter 00 in the remaining locations. The HEX-Value
+	      of the letters can also be used to enter the password.
+
+0x70b	    - Sun 3/80 Power-On Mode
+	      0x06 = normal boot
+	      0x12 = diagnostic mode
+	      Rest = full diagnostic boot
+</pre>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

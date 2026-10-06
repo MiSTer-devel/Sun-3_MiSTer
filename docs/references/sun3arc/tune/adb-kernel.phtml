@@ -1,0 +1,68 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<TITLE>Sun3 'adb your kernel' Page</TITLE>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<BODY>
+<H1>Tune your Kernel using adb</H1>
+
+<H2>How to use adb</H2>
+adb -w -k /vmunix /dev/mem
+<P>
+This line starts adb ready to manipulate your kernel-image and
+the running kernel.
+
+<UL>
+<LI><H3> UDP-checksum enable</H3></LI>
+<p>
+	This changes the value in /vmunix	<br>
+	<strong>udp_cksum?W1</strong>	<br>
+	This changes the value in /dev/mem<br>
+	<strong>udp_cksum/W1</strong><br>
+<p>
+<LI><H3> Async. NFS writes enable</H3> </LI>
+<p>
+	<strong>_rfs_write+0x130?W48780000</strong><br>
+	<strong>_rfs_write+0x1ee?W48780000</strong><br>
+	<strong>_rfs_write+0x130/W48780000</strong><br>
+	<strong>_rfs_write+0x1ee/W48780000</strong><br>
+<p>
+<LI><H3> Paging policy: handspread set to 1/4 of main memory</H3> </LI>
+<p>
+	<strong>handspread?W0t4194304</strong><br>
+	<strong>handspread/W0t4194304</strong><br>
+<p>
+<LI><H3> Disable kernel console messages, which don't go thru syslog</H3> </LI>
+<p>
+	<strong>noprintf/W 1</strong><br>
+	<strong>noprintf?W 1</strong><br>
+<p>
+<LI><H3> Swap out idle processes after 128 seconds (not 20)</H3></LI>
+<p>
+	<strong>maxslp/W0x80</strong><br>
+	<strong>maxslp?W0x80</strong><br>
+<p>
+<LI><H3> IP-forwarding</H3> </LI>
+<p>
+	<strong>_ip_forwarding/Wt-1</strong><br>
+	<strong>_ip_forwarding?Wt-1</strong><br>
+<p>
+or in your KERNEL-Config-File
+<p>
+	<strong>options IP_FORWARDING=-1</strong><br>
+<p>
+<LI><H3> Disable Keyboard Break (L1-A)</H3> </LI>
+<p>
+	<strong>montrap/w4e75</strong><br>
+	<strong>montrap?w4e75</strong><br>
+<p>
+<LI><H3> Set SCSI-Hostadapter (NCR5380) ID to != 7</H3> </LI>
+<p>
+	<strong>scsi_host_id?W0x40</strong>              eg. SCSI-ID 6<br>
+	<strong>scsi_disre_enable?W0</strong><br>
+<p>
+Restore old Values:
+<p>
+	<strong>scsi_host_id?W0x80</strong><br>
+	<strong>scsi_disre_enable?W2</strong><br>
+<p>
+</UL>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

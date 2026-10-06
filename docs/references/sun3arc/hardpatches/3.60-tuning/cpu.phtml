@@ -1,0 +1,24 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<title>Sun Archive CPU-Replacement Page</title>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<body>
+<h1>Replacing the CPU</h1><hr>
+<h3>Description:</h3>
+The standard CPU for the Sun3-Series is the MC68020. This chip
+can be replaced by the MC68030 CPU. You'll have to solder a socket 
+into the empty space lefto to the MC68020. After this just remove
+the 68020 and the system will work as before.
+<p>
+<h3>Location:</h3> 
+The Socket ID is U111. The empty solder-field to the left is an empty
+68030 socket. In the middle you can see the CPU (MC68020-20) and to the
+right is the FPU (MC68881-20).
+<p>
+<IMG SRC="cpu.gif">
+<h3>Result:</h3>
+There's no speed improvement because the 68030 isn't faster than the
+68020. The MMU is disabled because the CPU-Board implements the standard
+Sun3 MMU with 8 Contexts. The Data-Cache of the 68030 isn't used. The only
+adventage of usen the 68030 is it beeing available at higher clock speeds.
+I use a 50MHz version in my system.
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

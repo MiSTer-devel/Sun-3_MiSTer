@@ -1,0 +1,63 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<TITLE>Sun3 Archive</TITLE>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<H1>Fixing a 3/80 NVRAM IDPROM</H1><HR>
+
+<B>Use the following at your own risk.
+All numbers in hex.</B>
+
+<p>
+Hit <B>L1-A</B>after you turn it on. 
+<br>
+Comment: <B>^t</B> is a command. Don't try control-T.
+<br>
+<pre>> ^t fef04000</pre>
+<p>
+you'll get output which includes the following (samples included)
+<pre>
+TIA entry = 33FA500
+TIB entry = 33FB80A
+PTE = 64000049
+</pre>
+<B>Write these values down!!!</B>
+<P>
+now change the TIA entry for fedfa000 to match the above
+
+<pre>> m a fedfa000
+TIA MAP FEDFA000 [...] ? 33FA500
+</pre>
+hit control-D at next ? prompt
+<p>
+now change the TIB entry to match the above
+<pre>
+> m b fedfa000
+TIB MAP FEDFA000 [...] ? 33FB80A
+</pre>
+now change the pagemap entry to match the above
+<pre>
+> p fedfa000
+PageMap FEDFA000 [...] ? 64000049
+
+> o fedfa7d8 </pre>
+....
+
+now enter new IDPROM values. You need to get the checksum right.
+If you don't, you still won't be able to boot.
+<p>
+<pre>
+byte          contents
+fedfa7d8      01    - version number - always 01
+fedfa7d9      first byte of hostid (system type, 42 for sun 3/80)
+fedfa7da-df   6 byte ethernet address (first three bytes are 08,00,20)
+fedfa7e0-e3   date of manufacture. Often all 0s
+fedfa7e4      second byte of hostid
+fedfa7e5      third byte of hostid
+fedfa7e6      fourth byte of hostid
+fedfa7e7      idprom checksum  - xor of contents of bytes d8-e6
+</pre>
+Click<A HREF="/cgi-bin/mknvram.cgi"> here </A>to get the values calculated.
+<HR>
+I don't know the original author of this Text but I tried this way of
+fixing a 3/80 several times and I can say it works :)<P>
+Heiko.
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>

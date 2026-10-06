@@ -1,0 +1,20 @@
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr1incl.phtml" ?>
+<title>Sun Archive FPU-Replacement Page</title>
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/hdr2incl.phtml" ?>
+<body>
+<h1>Replacing the FPU</h1><hr>
+<h3>Description:</h3>
+The standard FPU for the Sun3-Series is the MC68881. This chip
+can be replaced by the Pin and Commandcompatible MC68882 FPU.
+Just take the 68881 out of it's socket and put a 68882 in.
+<p>
+<h3>Location:</h3> 
+The FPU's ID is U101. The empty solder-field to the left is an empty
+68030 socket. In the middle you can see the CPU (MC68020-20) and to the
+right is the FPU (MC68881-20).
+<p>
+<IMG SRC="cpu.gif">
+<h3>Result:</h3>
+You gain up to 60% Float-Performance or more because the 68882
+has a better cycle-time for several FPU-Commands.
+<? include "/var/www/vhosts/sun3arc.org/htdocs/include/footer.phtml" ?>
