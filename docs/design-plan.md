@@ -169,23 +169,32 @@ Sun-2.
 
 ```
 Sun-3;UART9600;
+-;
 SC0,IMGVHD,SCSI disk ID 0 (sd0);
 SC1,IMGVHD,SCSI disk ID 1 (sd2);
 S2,QIC,Tape (st0);
 O[4:3],Tape volume,1,2,3;
 SC3,NVR,EEPROM;
 -;
-O[2:1],Aspect ratio,Original,Full Screen,4:3;
-O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;
-O[12],Colour board,On,Off;
-O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;
+P1,Machine;
+P2,Video;
+P3,Input;
 -;
-O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;
-O[16],Clock,MiSTer's time,28 years back;
-O[11:9],Network,eth0,Off,eth1,macvlan,tap0;
-O[15],Diag switch,Normal,Diag;
--;
-R0,Reset;
+h0-,Changes pending;
+R[0],Apply and reset;
+
+P1O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;
+P1O[15],Diag switch,Normal,Diag;
+P1O[16],Clock,MiSTer's time,28 years back;
+P1O[11:9],Network,eth0,Off,eth1,macvlan,tap0;
+
+P2O[2:1],Aspect ratio,Original,Full Screen,4:3;
+P2O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;
+P2O[12],Colour board,On,Off;
+
+P3O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;
+
+v,1;
 ```
 
 Three rules for the status bits:

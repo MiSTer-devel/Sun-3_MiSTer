@@ -44,6 +44,9 @@ run "first delta not kept off 0x80" bridge -e "s/hx = lim(ax, -13'sd112, 13'sd12
 run "packet total not limited"     bridge -e "s/hx = lim(ax, lo2x, hi2x);/hx = lim(ax, -13'sd112, 13'sd127);/"
 run "button changes never queued"  bridge -e 's/if (eb != btn_new) begin/if (1'"'"'b0) begin/'
 run "backlog not capped"           bridge -e "s/ACC_MAX = 13'sd255;/ACC_MAX = 13'sd4095;/"
+run "Stop-A never sends"          bridge -e "s/if (stop_a \&\& !stop_a_d \&\& sa_step == 3'd0)/if (1'b0)/"
+run "Stop-A on the level, not edge" bridge -e "s/if (stop_a \&\& !stop_a_d \&\& sa_step == 3'd0)/if (stop_a \&\& sa_step == 3'd0)/"
+run "Stop-A releases L1 before A"  bridge -e "s/3'd3: kdata <= 8'hCD;/3'd3: kdata <= 8'h81;/" -e "s/3'd4: kdata <= 8'h81;/3'd4: kdata <= 8'hCD;/"
 run "no packet ever starts"        bridge -e "s/m_room == 7'd64/m_room == 7'd65/"
 # the SCC's channel B
 run "B receives A's line"          scc    -e 's/: rxdb_sync_s\[2\];/: rxda_sync_s[2];/'

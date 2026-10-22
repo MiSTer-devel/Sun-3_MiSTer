@@ -61,45 +61,97 @@ module emu
     assign LED_POWER = 2'b00;
 
     // ---- the OSD ---------------------------------------------------------------
-    // status[0] is the reset item and nothing else; the options start at 1, and
-    // the bits keep the places docs/design-plan.md gives them (the Network's
-    // [11:9] is what Main_MiSTer's Sun family support reads).  The disks and
-    // the EEPROM are SC: Main remembers the image last chosen and mounts it
-    // again whenever the core starts, so the PROM finds its settings and the
-    // disk, and auto-boots.  The slots are docs/design-plan.md's.
+    // The computer cores' OSD standard (HP9000-715_MiSTer's
+    // docs/osd-standard.md), as on the Sun-2: the media and Load ROM, then the
+    // network, then the submenus at their fixed page numbers (P1 Machine, P2
+    // Video, P3 Input, P4 Audio, P5 Advanced), then "Apply and reset".  Media,
+    // the network (Main reads it itself), Input and the button act at once;
+    // every other setting is latched into `cfg' while the machine is in reset,
+    // and "Changes pending" (menumask bit 0) shows while one differs from what
+    // is running.  The bits keep the places docs/design-plan.md gives them.
+    //
+    //   status[0]      Apply and reset
+    //   status[2:1]    Aspect ratio        P2, at reset
+    //   status[4:3]    Tape volume         media, at once
+    //   status[6:5]    Scale               P2, at reset
+    //   status[8:7]    Keyboard bell       P4, at reset
+    //   status[11:9]   Network interface   at once; Main_MiSTer reads these bits
+    //   status[12]     Colour board        P1, at reset
+    //   status[14:13]  CPU clock           P1, at reset
+    //   status[15]     Diag switch         P5, at reset
+    //   status[16]     Clock               P5, at reset
+    //   status[17]     Stop-A              P1 button
+    //   status[18]     Swap Alt/Win keys   P3, at once
+    //
+    // v,1: Aspect ratio's third value was 4:3 and is [ARC1] now.
+    //
+    // The disks and the EEPROM are SC: Main remembers the image last chosen
+    // and mounts it again whenever the core starts, so the PROM finds its
+    // settings and the disk, and auto-boots.  Load ROM is F0, boot0.rom's
+    // index: another PROM for this session, and a reset.
     `include "build_id.v"
     localparam CONF_STR = {
         "Sun-3;UART9600;",
-        "SC0,IMGVHD,SCSI disk ID 0 (sd0);",
-        "SC1,IMGVHD,SCSI disk ID 1 (sd2);",
-        "S2,QIC,Tape (st0);",
+        "-;",
+        "SC0,IMGVHD,Pri. disk (ID 0);",
+        "SC1,IMGVHD,Disk (ID 1);",
+        "S2,QIC,Tape (ID 4);",
         "O[4:3],Tape volume,1,2,3;",
-        "SC3,NVR,EEPROM;",
+        "F0,ROM,Load ROM;",
         "-;",
-        "O[2:1],Aspect ratio,Original,Full Screen,4:3;",
-        "O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;",
-        "O[12],Colour board,On,Off;",
-        "O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;",
+        "O[11:9],Network interface,eth0,None,eth1,macvlan,tap0;",
         "-;",
-        "O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;",
-        "O[16],Clock,MiSTer's time,28 years back;",
-        "O[11:9],Network,eth0,Off,eth1,macvlan,tap0;",
-        "O[15],Diag switch,Normal,Diag;",
+        "P1,Machine;",
+        "P2,Video;",
+        "P3,Input;",
+        "P4,Audio;",
+        "P5,Advanced;",
         "-;",
-        "R0,Reset;",
+        "h0-,Changes pending;",
+        "R[0],Apply and reset;",
+
+        "P1O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;",
+        "P1O[12],Colour board,On,Off;",
+        "P1-;",
+        "P1T[17],Stop-A (abort);",
+
+        "P2O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+        "P2O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;",
+
+        "P3O[18],Swap Alt/Win keys,No,Yes;",
+
+        "P4O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;",
+
+        "P5O[15],Diag switch,Normal,Diag;",
+        "P5O[16],Clock,MiSTer's time,28 years back;",
+        "P5-;",
+        "P5SC3,NVR,EEPROM image;",
+
+        "v,1;",
         "V,v",`BUILD_DATE
     };
 
     wire [127:0] status;
     wire [1:0]   buttons;
 
+    // The settings the machine runs with, taken while it is in reset (Apply
+    // and reset, the board's button, a core start, a ROM load); the reset
+    // logic below supplies the condition.  The colour board, the CPU clock and
+    // the diag switch are sampled in reset by their own logic as well.
+    wire        machine_reset_req;
+    reg  [16:0] cfg = 17'd0;
+    always @(posedge clk_mem) if (machine_reset_req) cfg <= status[16:0];
+    wire cfg_pending = {status[16:12], status[8:7], status[6:5], status[2:1]}
+                    != {cfg[16:12],    cfg[8:7],    cfg[6:5],    cfg[2:1]};
+
     // The raster is 1160x904 (the 1152x900 screen and a small border, which
     // fb_scanout needs for its prefetch) of square pixels.  V-Integer is the
     // default, so it is listed first and its status value is 0: video_freak's
-    // own numbering is 0 normal, 1 V-integer.
-    wire [1:0] ar    = status[2:1];
-    wire [2:0] scale = (status[6:5] == 2'd0) ? 3'd1 :
-                       (status[6:5] == 2'd1) ? 3'd0 : {1'b0, status[6:5]};
+    // own numbering is 0 normal, 1 V-integer.  [ARC1] and [ARC2] are Main's
+    // custom ratios, which video_freak takes as ARX 1 and 2 with ARY 0.
+    wire [1:0] ar    = cfg[2:1];
+    wire [2:0] scale = (cfg[6:5] == 2'd0) ? 3'd1 :
+                       (cfg[6:5] == 2'd1) ? 3'd0 : {1'b0, cfg[6:5]};
 
     // ---- clocks ------------------------------------------------------------------
     wire clk_mem, clk_pix, clk_mii, cpu_clk, clk_ser;
@@ -158,7 +210,7 @@ module emu
 
         .buttons        (buttons),
         .status         (status),
-        .status_menumask(16'd0),
+        .status_menumask({15'd0, cfg_pending}),
 
         .ps2_key        (ps2_key),
         .ps2_mouse      (ps2_mouse),
@@ -277,7 +329,7 @@ module emu
     // The machine: the OSD's reset, the framework's, an unlocked PLL, no PROM
     // yet, or an EEPROM image still loading; and while the CPU's clock is
     // being changed, which happens only in one of those.
-    wire machine_reset_req = status[0] | buttons[1] | RESET | ~locked | ~rom_loaded | ~ee_ready;
+    assign machine_reset_req = status[0] | buttons[1] | RESET | ~locked | ~rom_loaded | ~ee_ready;
     wire cpuclk_hold;
     wire machine_reset_raw = machine_reset_req | cpuclk_hold;
 
@@ -357,11 +409,29 @@ module emu
 
     wire kbm_rxda, kbm_txda, kbm_rxdb, beeper;
 
+    // Swap Alt/Win keys (P3, at once): left Alt <-> left GUI, right Alt <->
+    // right GUI, so the key beside the space bar is the Sun's Meta.  ps2_key
+    // [8] is E0, [7:0] the set-2 code; the toggle in [10] passes untouched.
+    // The bridge's L-key chord (Right Alt with F1..F10) moves to Right Win.
+    function automatic [8:0] alt_win(input [8:0] k);
+        case (k)
+            9'h011:  alt_win = 9'h11F;
+            9'h11F:  alt_win = 9'h011;
+            9'h111:  alt_win = 9'h127;
+            9'h127:  alt_win = 9'h111;
+            default: alt_win = k;
+        endcase
+    endfunction
+    wire [10:0] kbd_key = status[18] ? {ps2_key[10:9], alt_win(ps2_key[8:0])} : ps2_key;
+
+    // Stop-A (P1): the OSD's pulse, on clk_mem as the bridge is; it acts on
+    // the edge.
     sun3_mister_kbd_mouse #(.CLK_HZ(100_000_000)) kbd_mouse (
         .clk          (clk_mem),
         .rst          (reset_kbm),
-        .ps2_key      (ps2_key),
+        .ps2_key      (kbd_key),
         .ps2_mouse    (ps2_mouse),
+        .stop_a       (status[17]),
         .kbd_ser_tx   (kbm_rxda),
         .kbd_ser_rx   (kbm_txda),
         .mouse_ser_tx (kbm_rxdb),
@@ -375,7 +445,7 @@ module emu
     sun3_mister_bell bell (
         .clk    (CLK_AUDIO),
         .beeper (beeper),
-        .volume (status[8:7]),
+        .volume (cfg[8:7]),
         .sample (bell_sample)
     );
 
@@ -396,7 +466,7 @@ module emu
     sun3_mister_tod tod (
         .clk    (clk_mem),
         .rtc    (rtc),
-        .back28 (status[16]),
+        .back28 (cfg[16]),
         .ld     (tod_tgl),
         .tod    (tod_time)
     );
@@ -889,8 +959,8 @@ module emu
         .VIDEO_ARX   (VIDEO_ARX),
         .VIDEO_ARY   (VIDEO_ARY),
         .VGA_DE_IN   (de_o),
-        .ARX         ((ar == 2'd0) ? 12'd1160 : (ar == 2'd2) ? 12'd4 : 12'd0),
-        .ARY         ((ar == 2'd0) ? 12'd904  : (ar == 2'd2) ? 12'd3 : 12'd0),
+        .ARX         ((ar == 2'd0) ? 12'd1160 : {10'd0, ar - 2'd1}),   // 0 fill, 1/2 ARC1/ARC2
+        .ARY         ((ar == 2'd0) ? 12'd904  : 12'd0),
         .CROP_SIZE   (12'd0),
         .CROP_OFF    (5'd0),
         .SCALE       (scale)
