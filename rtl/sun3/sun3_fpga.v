@@ -292,6 +292,7 @@ module sun3_fpga(/* clock, reset */
 `endif
    wire 			 MATCH_MEM;
    wire 			 MATCH_FB;
+   wire 			 MATCH_VIDSENSE;
    // The cg4 (SUN3_CG4): its registers (sun3_cg4.sv) and its three planes
    // (memory, through the bridge).
    wire 			 MATCH_CG4DAC, MATCH_CG4P4, MATCH_CG4MEM;
@@ -380,7 +381,7 @@ module sun3_fpga(/* clock, reset */
 	if (~SUN3_AS_n & C_S12r) C_S14r <= 1'b1;
 	if (~SUN3_AS_n & C_S14r) C_S16r <= 1'b1;
 	if (~SUN3_AS_n & C_S16r) C_S18r <= 1'b1;
-	if (~SUN3_AS_n & C_S18r & !MATCH_MEM & !MATCH_FB & !MATCH_COPRO // CHECKME: sun3, too soon?
+	if (~SUN3_AS_n & C_S18r & !MATCH_MEM & !MATCH_FB & !MATCH_VIDSENSE & !MATCH_COPRO // CHECKME: sun3, too soon?
 	    & !MATCH_CG4MEM & !MATCH_CG4DAC & !MATCH_CG4P4
 `ifdef SUN3_ETH_WISH7990
 	    & !MATCH_AMDLE
@@ -724,11 +725,20 @@ module sun3_fpga(/* clock, reset */
    assign MATCH_FBX      = (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices[18:11] == 8'hFF) & (ma_pmap2devices[10:8] == 3'h0) & C_S6; // architectural: 2 MiB
 `ifdef SUN3_FB
    assign MATCH_FB       = (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices[18:11] == 8'hFF) & (ma_pmap2devices[10:5] == 6'h00) & C_S6; // BW: 256 KiB
+   // The on-board video's resolution, at obmem 0xFF1C0000 (one page): bit 7
+   // set is 1152x900, clear 1600x1280 (the board's hi-res jumper, J800, by
+   // inference).  Rev 3.0.1 reads it to set the bw2's width and height and
+   // leaves them unset, at zero, when it times out: a white screen with
+   // nothing drawn on a 3/60 without a P4 board.  Rev 1.9 reads it too and
+   // keeps 1152x900 either way.  Reads give 0x80 in every byte; writes are
+   // ignored.
+   assign MATCH_VIDSENSE = (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices == 19'h7F8E0) & C_S6;
 `else
    // No video memory: the PROM's bw2 probe times out.  Not what a real 3/60
    // looks like -- they all have it -- and the monitor is not entirely happy
    // without it (see SUN3_FB in sun3_config.vh).
    assign MATCH_FB       = 1'b0;
+   assign MATCH_VIDSENSE = 1'b0;
 `endif
 
 `ifdef SUN3_CG4
@@ -1069,6 +1079,7 @@ module sun3_fpga(/* clock, reset */
 		       MATCH_PROM      ? prom_out :
 		       MATCH_MEM       ? wishbone_out :
 		       MATCH_FB        ? wishbone_out :
+		       MATCH_VIDSENSE  ? EXPAND_8BITS(8'h80) :
 		       MATCH_CG4MEM    ? wishbone_out :
 		       (MATCH_CG4DAC | MATCH_CG4P4) ? cg4_out :
 		       MATCH_KBDMS     ? EXPAND_8BITS(kbdms_out) :
@@ -1103,7 +1114,7 @@ module sun3_fpga(/* clock, reset */
 		     (             C_S4 & (MATCH_FLTLOG)) | // reads, and writes ignored
 		     ( SUN3_RW_n & C_S4 & (MATCH_SMAP)) |  // entering S4, quick devices (CTX is 1 clock but went valid after being written, not affected by SUN3_A)
 		     ( SUN3_RW_n & C_S4 & (MATCH_PMAP)) |  // entering S4, physical map needed an extra cycle
-		     ( SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG | MATCH_PROM)) | // entering S6, devices going through the MMU
+		     ( SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG | MATCH_PROM | MATCH_VIDSENSE)) | // entering S6, devices going through the MMU
 		     ( SUN3_RW_n & C_S4 & (MATCH_UARTBYP)) | // entering S4, FAST serial (4*1/4 clock)		  
 		     ( SUN3_RW_n & C_S6 & (MATCH_SERIAL)) | // entering S8, FAST serial (4*1/4 clock)
 		     ( SUN3_RW_n & C_S12 & (MATCH_KBDMS)) |  // entering S8, SLOW serial (1/4 clock)
@@ -1115,7 +1126,7 @@ module sun3_fpga(/* clock, reset */
 		     (~SUN3_RW_n & C_S4 & (MATCH_CTX |                MATCH_SYSEN |              MATCH_DIAG |                   MATCH_MEMERR_CTRL)) | // entering S4, quick devices (WO or WR)
 		     (~SUN3_RW_n & C_S4 & (MATCH_SMAP)) |  // entering S4, quick devices (CTX is 1 clock but went valid after being written, not affected by SUN3_A)
 		     (~SUN3_RW_n & C_S4 & (MATCH_PMAP)) |  // entering S4, physical map needed an extra cycle
-		     (~SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG)) | // entering S6, devices going through the MMU
+		     (~SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG | MATCH_VIDSENSE)) | // entering S6, devices going through the MMU
 		     (~SUN3_RW_n & C_S4 & (MATCH_UARTBYP)) | // entering S4, FAST serial (4*1/4 clock)		  
 		     (~SUN3_RW_n & C_S6 & (MATCH_SERIAL)) | // entering S8, FAST serial (4*1/4 clock)
 		     (~SUN3_RW_n & C_S12 & (MATCH_KBDMS)) | // entering S8, SLOW serial (1/4 clock)

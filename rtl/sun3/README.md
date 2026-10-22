@@ -43,6 +43,12 @@ both ways.
     at Wishbone word `{6'h3F, PA[25:2]}`, the top of the space;
   * `sun3_cg4_scanout.sv` (new) draws them, through the colour map, into
     the same raster as `fb_scanout.sv`.
+* **`sun3_fpga.v`: the on-board video's resolution register** at obmem
+  0xFF1C0000 (`MATCH_VIDSENSE`), which upstream left to time out. It reads
+  0x80 in every byte (bit 7 set: 1152x900) and ignores writes. Rev 3.0.1
+  sets the bw2's width and height only from it, and without it drew its
+  console into a zero-width screen: a white screen on a 3/60 without a P4
+  board. Rev 1.9 reads it too and keeps 1152x900 either way.
 * **`sun3_si.sv`**: the tape, st0, an Emulex MT-02 at target 4
   (`SUN3_TAPE`, `sun3_mt02.sv` from Sun-2_MiSTer), with its own block seam.
   A second disk at target 1 (`SUN3_SD1`, another `scsi_targ`, SunOS's sd2) on
