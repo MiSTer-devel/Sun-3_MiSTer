@@ -212,12 +212,18 @@ The indexed registers queue vertices for DRAWSTATUS:
   modulo 4. MISC's index (5:4) reads that index for the next vertex
   (xnews reads the vertex before it back: *The TEC*).
 * Writing a different primitive's register starts a new queue. The
-  exception is a point followed by triangle or quadrilateral vertices: the
-  point is the polygon's first vertex.
+  exception is a point followed by line, triangle or quadrilateral
+  vertices: the point is their first vertex.
   * `cg6_polygon_2` draws a 2-4 point polygon as one point and 1-3 quad
     vertices (**verified**);
   * sunGX.c draws a triangle as a point and two tri vertices, and a
-    quadrilateral as a point and three quad vertices.
+    quadrilateral as a point and three quad vertices;
+  * OpenWindows 2.0's xnews strokes an outline as a TEC point, then TEC
+    line vertices, reading DRAWSTATUS before each but the first
+    (`_sh_lg_hol_2U` 0x5644a): its first line is from the point
+    (**verified** by running it: with a new queue at the line, the first
+    edge of 41 outlines in 50 is missing). libpixrect never writes a line
+    vertex after a point, so its tests do not change.
 * **DRAWSTATUS read** draws from the last vertices queued:
 
   | primitive | draws |
@@ -454,7 +460,9 @@ reads the vertex before MISC's index, 0x609b4). DRAWSTATUS then draws it:
 xnews reads DRAWSTATUS after each line vertex and at each 0x43 element of
 a fill. xnews draws, through the TEC:
 * **lines**, fixed and float, absolute and relative (`_sh_lg_vec_2U`, the
-  thin strokes, and `_sh_lg_hol_2U`, outlines);
+  thin strokes, and `_sh_lg_hol_2U`, outlines: a TEC point, then TEC line
+  vertices, each drawn from the one before, the point the first, and an
+  FBC line back to it at 0x43);
 * **fills** as fans of quadrilaterals: a TEC point, then up to three TEC
   quadrilateral vertices, then DRAWSTATUS; the next quadrilateral begins
   with an FBC point (not the TEC's) at the vertex before MISC's index, the
@@ -512,9 +520,11 @@ matrix, its frame buffer's TEC/FBC pointer and type cache, a path):
 * `_sh_cg6_Path_Transform` (the vertex registers, then COMMAND1 for relative
   elements, as a GX's pipelined canvas has it) against
   `_sh_fb_Path_Transform` (`_upd_pipe_xf_b2d`, `_xf_f2d`), on random paths;
-* `_sh_lg_vec_2U` and `_sh_lg_area_2US`, drawing with autoload, while a
-  second model is given the same FBC cycles with each autoloaded vertex
-  replaced by the exact one, rounded down; the two frame buffers are
+* `_sh_lg_vec_2U`, `_sh_lg_area_2US` and `_sh_lg_hol_2U`, drawing with
+  autoload: lines, fans of quadrilaterals and outlines. A second model
+  draws the same from the exact vertices rounded down (for lines, given the
+  same FBC cycles with each autoloaded vertex replaced; for fills and
+  outlines, drawn from the shape itself), and the two frame buffers are
   compared.
 
 Each result is compared with the exact one (doubles from the stored
@@ -526,32 +536,33 @@ differ.
 
 | compared | results | exact | the same pixel |
 |---|---|---|---|
-| point, TEC vs software, float matrices and points | 2,622 | **100%** | 100% |
-| path, TEC vs software, float | 57,710 | **100%** | 100% |
-| point, TEC vs software, fixed | 2,224 | 5.5% (worst 19,100/65536: the software's) | 98.92% |
-| path, TEC vs software, fixed | 8,444 | 14.4% (worst 259/65536) | 99.99% |
-| point, TEC vs exact, integer points | 2,212 | 99.91% | 99.91% |
-| path, TEC vs exact, fixed | 65,604 | 7.1% (39% within 1/65536, worst 261/65536) | 99.98% |
-| path, TEC vs exact, float | 57,710 | 5.4% (90% within an ulp) | 99.96% |
-| drawing: autoloaded vertices vs the exact one rounded down | 75,128 | all but 2 | 2 tests of 10,001 differ, 76 pixels |
+| point, TEC vs software, float matrices and points | 2,230 | **100%** | 100% |
+| path, TEC vs software, float | 46,372 | **100%** | 100% |
+| point, TEC vs software, fixed | 1,740 | 5.6% (worst 22,800/65536: the software's) | 99.08% |
+| path, TEC vs software, fixed | 6,744 | 14.4% (worst 298/65536) | 99.99% |
+| point, TEC vs exact, integer points | 1,718 | 99.94% | 99.94% |
+| path, TEC vs exact, fixed | 52,512 | 6.9% (38% within 1/65536, worst 299/65536) | 99.98% |
+| path, TEC vs exact, float | 46,372 | 5.7% (91% within an ulp) | 99.96% |
+| drawing: autoloaded vertices vs the exact one rounded down | 82,900 | all but 3 | 2 tests of 12,008 differ, 1,166 pixels |
 
-(10 million 68020 instructions, 1.07 million board accesses; 91,884 TEC
-vertices, 75,128 of them autoloaded, and 51,375 commands.)
+(9 million 68020 instructions, 1.06 million board accesses; 96,184 TEC
+vertices, 82,900 of them autoloaded, and 41,323 commands.)
 * **The float paths agree with xnews's software bit for bit**: the TEC
   computes what `_sh_trans_mul_abs_f2d` and `_upd_pipe_xf_f2d` do, in the
   same order. The software's float results are no nearer the exact ones
-  than the TEC's (90.2% within an ulp, worst 27,100 ulps where a sum
+  than the TEC's (90.3% within an ulp, worst 65,400 ulps where a sum
   cancels).
 * **In fixed** the software multiplies 16.16 by 16.16 exactly and the TEC
   has 24 bits: a few hundred 65536ths out at screen coordinates, another
-  pixel in 2 results in 10,000 (paths). The software's point transform is
+  pixel in 1 result in 10,000 (paths). The software's point transform is
   the worse of the two at its worst (its vectors), another pixel than the
   exact one in 1%.
-* An integer point lands on another pixel in 9 in 10,000: a value within
-  float's precision of an integer. The two drawn vertices that differ are
-  such values too (x.99997 in 16.16 is x+1 as a single).
-* 29,824 path elements the software makes float, xnews's TEC path leaves
-  fixed: its own choice, not the TEC's. 2,026 results beyond 16.16's range
+* An integer point lands on another pixel in 6 in 10,000: a value within
+  float's precision of an integer. The three drawn vertices that differ
+  are such values too (x.99997 in 16.16 is x+1 as a single; a relative
+  line's sum, kept in 24 bits).
+* 23,887 path elements the software makes float, xnews's TEC path leaves
+  fixed: its own choice, not the TEC's. 1,593 results beyond 16.16's range
   are not counted (the TEC saturates, the software wraps).
 * The drawing tests sometimes put a translation in the identity, as
   `_sh_lg_area_2GS` does (0xeea7c), so that relative vertices are seen to
@@ -1444,9 +1455,13 @@ With *Colour board type* GX, SunOS 4.1.1_U1 installed:
   copy. The autoloaded vertex goes into the queue as a CPU's would (a new
   queue but for a point before triangle or quadrilateral vertices), with
   the raster offset added. **MISC's index** (5:4) reads `nv mod 4`.
-* A 2D vertex (3 x 2, with autoload) takes VCLK CPU clocks from its x's
+* A 2D vertex (3 x 2, with autoload) takes 70 CPU clocks from its x's
   write to the answer of the DRAWSTATUS read after it (`tb_cg6`'s directed
-  test): 1.SPEED us at 33 MHz.
+  test): 2.1 us at 33 MHz, 4.2 at 16.7. xnews's own loop between two
+  vertices is of that order, so a line or fill vertex is perhaps half as
+  fast again as with a TEC that took no time. If the board shows that it
+  matters: the multiply of a term can run while the add before it does
+  (a second normaliser, 150-200 ALMs), about 35 clocks.
 
 ### Where it differs from the model
 

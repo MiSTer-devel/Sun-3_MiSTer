@@ -369,11 +369,13 @@ static void queue_prim(struct cg6 *g, int prim)
 	if (g->prim != prim) {
 		/*
 		 * A new kind of primitive starts afresh, but for a point
-		 * followed by triangle or quadrilateral vertices: the point is
-		 * the polygon's first vertex (cg6_polygon_2 draws a polygon of
-		 * 2 to 4 vertices as one point and 1 to 3 quad vertices).
+		 * followed by line, triangle or quadrilateral vertices: the
+		 * point is their first vertex.  cg6_polygon_2 draws a polygon of
+		 * 2 to 4 vertices as one point and 1 to 3 quad vertices; xnews's
+		 * outlines (_sh_lg_hol_2U) are a point, then line vertices, each
+		 * line drawn before the next vertex: the first from the point.
 		 */
-		if (!(g->prim == PRIM_POINT && (prim == PRIM_TRI || prim == PRIM_QUAD)))
+		if (!(g->prim == PRIM_POINT && (prim == PRIM_LINE || prim == PRIM_TRI || prim == PRIM_QUAD)))
 			g->nv = 0;
 		g->prim = prim;
 		g->pend = 0;

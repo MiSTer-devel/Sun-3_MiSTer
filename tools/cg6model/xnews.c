@@ -33,7 +33,9 @@
  *           registers, absolute and relative, autoloaded into the FBC;
  *   area    _sh_lg_area_2US: polygons as fans of quadrilaterals, a TEC point
  *           and TEC quad vertices autoloaded, the fan's restart read back
- *           from the FBC's MISC index and x/y registers.
+ *           from the FBC's MISC index and x/y registers;
+ *   hol     _sh_lg_hol_2U: outlines, a TEC point then TEC line vertices,
+ *           closed by an FBC line back to the first.
  *
  * and compares the results with an exact reference (doubles), and with
  * xnews's software where it has one.  For the drawing tests a second model
@@ -65,7 +67,7 @@
 static uint8_t *ram;
 static struct cg6 G, R;		/* the board; the reference */
 static FILE *trace;
-static int verbose, check, kinds = 15;	/* -k: 1 point, 2 path, 4 vec, 8 area */
+static int verbose, check, kinds = 31;	/* -k: 1 point, 2 path, 4 vec, 8 area, 16 hol */
 static unsigned long icount, nboard;
 static volatile int returned;
 
@@ -920,6 +922,59 @@ static void test_area(void)
 	draw_check("area_2US");
 }
 
+/* an outline as xnews strokes a polygon's edges: a TEC point at the first
+   vertex, TEC line vertices, each line drawn on the next one's turn, then
+   0x43: back to the first from the FBC (_sh_lg_hol_2U).  The reference
+   draws the closed polyline itself. */
+static void test_hol(void)
+{
+	int ox, oy, clip[4], k = 2 + rn(rn(3) ? 5 : 14), flt = rn(3) == 0, rel = rn(4) == 0;
+	uint32_t E = alloc(EL * (k + 4));
+	double px[32], py[32], tx, ty;
+	int32_t qx[32], qy[32];
+	int t = T_LINE | (flt ? T_FLT : 0);
+
+	draw_setup(&ox, &oy, clip);
+	wr32(GS + GS_CPX, 0);
+	wr32(GS + GS_CPY, 0);
+	for (int i = 0; i < k; i++) {
+		px[i] = coord(flt, -100, 1250);
+		py[i] = coord(flt, -100, 1000);
+		if (rel) {
+			px[i] = floor(px[i] * 256) / 256;
+			py[i] = floor(py[i] * 256) / 256;
+		}
+		if (i && rel) {		/* in 256ths, so that the TEC's sums are exact */
+			double dx = floor((px[i] - px[i - 1]) * 256) / 256, dy = floor((py[i] - py[i - 1]) * 256) / 256;
+			px[i] = px[i - 1] + dx;
+			py[i] = py[i - 1] + dy;
+			put_el(E, i, t | T_REL, dx, dy);
+		} else
+			put_el(E, i, i ? t : flt ? T_FLT : 0, px[i], py[i]);
+	}
+	wr16(E + EL * k + 2, 0x43);
+	wr16(E + EL * (k + 1) + 2, T_END);
+	tx = u2f(G.tec_data[0x24]);
+	ty = u2f(G.tec_data[0x27]);
+	for (int i = 0; i < k; i++) {
+		qx[i] = (int32_t)floor(px[i] + tx);
+		qy[i] = (int32_t)floor(py[i] + ty);
+	}
+	cg6_write(&R, CG6_FBC + 0x0c0, 4, ox);
+	cg6_write(&R, CG6_FBC + 0x0c4, 4, oy);
+	cg6_write(&R, CG6_FBC + 0x844, 4, qy[0]);
+	cg6_write(&R, CG6_FBC + 0x840, 4, qx[0]);
+	for (int i = 1; i <= k; i++) {
+		cg6_write(&R, CG6_FBC + 0x844, 4, qy[i % k]);
+		cg6_write(&R, CG6_FBC + 0x840, 4, qx[i % k]);
+		cg6_read(&R, CG6_FBC + FBC_DRAWSTATUS, 4);
+	}
+	mirror = 2;
+	call(sym("_sh_lg_hol_2U"), 3, GS, E, 0);
+	mirror = 0;
+	draw_check("hol_2U");
+}
+
 /* ---- -T: the TEC's arithmetic against the host's (IEEE single) ---- */
 static int tec_selftest(void)
 {
@@ -996,13 +1051,14 @@ int main(int argc, char **argv)
 	KV = alloc(0x100);
 	init_cg6();
 	for (long i = 0; i < n; i++) {
-		int k = rn(8) >> 1;
+		int k = rn(5);
 		if (!(kinds >> k & 1)) { i--; continue; }
 		switch (k) {
 		case 0: test_point(); break;
 		case 1: test_path(); break;
 		case 2: test_vec(); break;
-		default: test_area(); break;
+		case 3: test_area(); break;
+		default: test_hol(); break;
 		}
 		heap = HEAP_BASE + 0x1000;	/* GS, KV, FBS, CANVAS stay */
 	}

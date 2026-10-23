@@ -259,7 +259,7 @@ module sun3_cg6 #(
     // raster offset for an absolute one, the last vertex for a relative one)
     wire [2:0]  vgrp   = off[8:6];
     wire        vis    = sel_fbc & ~rw_n & off[11] & (off[10:9] == 2'b00) & (vgrp <= P_RECT);
-    wire        newq   = (prim != vgrp) & ~(prim == P_POINT & (vgrp == P_TRI | vgrp == P_QUAD));
+    wire        newq   = (prim != vgrp) & ~(prim == P_POINT & (vgrp == P_LINE | vgrp == P_TRI | vgrp == P_QUAD));
     wire [6:0]  nv_v   = newq ? 7'd0 : nv;
     wire [1:0]  pend_v = (prim != vgrp) ? 2'b00 : pend;
     wire        vrel   = off[4];
@@ -275,7 +275,7 @@ module sun3_cg6 #(
     wire [31:0] cx_n   = vy ? pend_x : vsum;
     wire [31:0] cy_n   = vy ? vsum : pend_y;
     // an autoloaded vertex's place in the queue
-    wire        anewq  = (prim != tec_agrp) & ~(prim == P_POINT & (tec_agrp == P_TRI | tec_agrp == P_QUAD));
+    wire        anewq  = (prim != tec_agrp) & ~(prim == P_POINT & (tec_agrp == P_LINE | tec_agrp == P_TRI | tec_agrp == P_QUAD));
     wire [6:0]  anv    = anewq ? 7'd0 : nv;
 
     // DRAWSTATUS: the queue's primitive and the vertices it draws, the last

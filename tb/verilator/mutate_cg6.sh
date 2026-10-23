@@ -120,7 +120,8 @@ run "a line keeps its first vertex"       $R -e "s/                             
 run "a line not kept at all"              $R -e "s/if (prim == P_LINE \&\& nv >= 7'd2) begin/if (1'b0) begin/"
 # ---- stage 2: polygons
 run "a polygon of every vertex queued"    $R -e "s/wire \[2:0\]  kmax   = (prim == P_TRI) ? 3'd3/wire [2:0]  kmax   = (prim == P_TRI) ? 3'd4/"
-run "a point not a polygon's first"       $R -e "s/wire        newq   = (prim != vgrp) \& ~(prim == P_POINT \& (vgrp == P_TRI | vgrp == P_QUAD));/wire        newq   = (prim != vgrp);/"
+run "a point not a polygon's first"       $R -e "s/wire        newq   = (prim != vgrp) \& ~(prim == P_POINT \& (vgrp == P_LINE | vgrp == P_TRI | vgrp == P_QUAD));/wire        newq   = (prim != vgrp) \& ~(prim == P_POINT \& vgrp == P_LINE);/"
+run "a point not a line's first"          $R -e "s/wire        newq   = (prim != vgrp) \& ~(prim == P_POINT \& (vgrp == P_LINE | vgrp == P_TRI | vgrp == P_QUAD));/wire        newq   = (prim != vgrp) \& ~(prim == P_POINT \& (vgrp == P_TRI | vgrp == P_QUAD));/"
 run "a polygon's span to the next edge"   $E -e "s/                            sp_x1 <= k1 - 22'sd1;/                            sp_x1 <= k1;/"
 run "a polygon's second span dropped"     $E -e "s/if (pna == 3'd4 \&\& k3 > k2) begin/if (1'b0) begin/"
 run "a polygon's sort a stage short"      $E -e "s/if (k1 > k2) begin k1 <= k2; k2 <= k1; end/begin end/"
@@ -183,7 +184,7 @@ run "TEC: a command's A its first only"   $X -e "s/S_AL:    ra = (3'(k + 3'd1) <
 run "TEC: a command's n ignored"          $X -e "s/nj     <= {1'b0, wdata\[29:28\]} + 3'd1;/nj     <= 3'd2;/"
 run "TEC: a command's m as n"             $X -e "s/nk     <= {1'b0, wdata\[31:30\]} + 3'd1;/nk     <= {1'b0, wdata[29:28]} + 3'd1;/"
 run "TEC: autoload without the raster offset" $R -e "s/qx\[anv\[1:0\]\] <= tec_ax + offx;/qx[anv[1:0]] <= tec_ax;/" -e "s/xr\[anv\[1:0\]\] <= tec_ax + offx;/xr[anv[1:0]] <= tec_ax;/"
-run "TEC: autoload a new queue after a point" $R -e "s/wire        anewq  = (prim != tec_agrp) \& ~(prim == P_POINT \& (tec_agrp == P_TRI | tec_agrp == P_QUAD));/wire        anewq  = (prim != tec_agrp);/"
+run "TEC: autoload a new queue after a point" $R -e "s/wire        anewq  = (prim != tec_agrp) \& ~(prim == P_POINT \& (tec_agrp == P_LINE | tec_agrp == P_TRI | tec_agrp == P_QUAD));/wire        anewq  = (prim != tec_agrp);/"
 run "TEC: FBC cycles not held for it"     $R -e "s/wire        tstall = (sel_fbc | sel_tec) \& tec_busy;/wire        tstall = sel_tec \& tec_busy;/"
 run "TEC: MISC's index not the queue's"   $R -e "s/12'h004: fbc_q = {10'h0, misc\[21:7\], 1'b0, nv\[1:0\], misc\[3:0\]};/12'h004: fbc_q = {10'h0, misc};/"
 run "TEC: a read answered before the TEC" $R -e "s/if (!tec_busy) begin                \/\/ the TEC's answer/if (1'b1) begin/"

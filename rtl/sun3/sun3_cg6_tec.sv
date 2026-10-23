@@ -191,7 +191,7 @@ module sun3_cg6_tec (
     wire [5:0]  pk_lz = lzc36(pk_m);
     always @(posedge clk) begin                     // the first half, every clock
         n_m <= pk_m << pk_lz;
-        n_e <= 11'(pk_e) + 11'sd1 - 11'(signed'({5'b0, pk_lz}));
+        n_e <= $signed({pk_e[9], pk_e}) + 11'sd1 - $signed({5'b0, pk_lz});
         n_z <= (pk_m == 36'h0);
     end
     wire [23:0] r_sig  = n_m[35:12];
@@ -328,7 +328,7 @@ module sun3_cg6_tec (
                 mu_s <= vin[k[1:0]][31] ^ dq[31];
                 mu_z <= (vin[k[1:0]][30:23] == 8'd0) || (dq[30:23] == 8'd0);
                 mu_i <= (vin[k[1:0]][30:23] == 8'hFF) || (dq[30:23] == 8'hFF);
-                mu_e <= 10'(signed'({2'b0, vin[k[1:0]][30:23]})) + 10'(signed'({2'b0, dq[30:23]})) - 10'sd127;
+                mu_e <= $signed({2'b0, vin[k[1:0]][30:23]}) + $signed({2'b0, dq[30:23]}) - 10'sd127;
                 st   <= S_MUL2;
             end
             S_MUL2: st <= S_MUL3;                   // mup = mua x mub
@@ -357,7 +357,7 @@ module sun3_cg6_tec (
             end
             S_ADD2: begin
                 pk_s  <= ad_s;
-                pk_e  <= 10'(signed'({2'b0, ad_e}));
+                pk_e  <= $signed({2'b0, ad_e});
                 pk_m  <= {ad_sum, 8'h00};
                 pk_bv <= ad_bv || (ad_sum == 28'h0);
                 pk_by <= ad_bv ? ad_by : 32'h0;
