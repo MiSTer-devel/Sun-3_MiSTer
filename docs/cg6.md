@@ -28,7 +28,18 @@ board says so.
   * The sun4c kernel's `cgsix.o` (cgsix.c 1.38 93/06/02).
   * OpenWindows 3's `xnews`, which is unstripped (`cg6Ras.o` and others).
 
-  SunOS 4.1.1 for sun3 is not on this machine (`build/dist/` is absent), so
+* **SunOS 4.1.1 for sun3, found since** (2026-10-23): the distribution tape
+  on the board, `games/Sun-3/sunos-4.1.1-sun3.qic`, unpacked to
+  `build/dist/sunos-4.1.1-sun3/usr/` (git-ignored). Its
+  `incl/sundev/cg6reg.h` gives `CG6_P4BASE 0xFF000000` for the 68020 and the
+  offsets above (CMAP +0x200000, FHC +0x300000, THC +0x301000, ROM
+  +0x380000, FBC +0x700000, TEC +0x701000, colour +0x800000), confirming the
+  map. It also has the 68020 `lib/libpixrect.a`, the sun3 kernel's
+  `sys/sun3/OBJ/cgsix.o` and `cg6_colormap.o`, the `pixrect/cg6*.h`
+  headers, sundiag's `cg6test`, and OpenWindows 2.0 (`openwin/bin/xnews`).
+  The checks below were made before this was found.
+
+  Before that, SunOS 4.1.1 for sun3 was not on this machine, so
   the 68020 libpixrect and the sun3 `cgsix.o` were not available. The
   4.1.3 library's cg6 members carry SCCS dates of 1988-90. The newest is
   cg6.c 1.11 90/07/27, and 4.1.1 was released in late 1990, so they are very
@@ -432,8 +443,10 @@ The harness checks all of it.
   stipples, and the pattern. The model has all of these. They are checked
   only through the rules libpixrect shares, not by running Xsun.
 * OpenWindows 3's xnews needs the TEC's transforms as well. OpenWindows 2.0's
-  xnews for sun3, which runs on the cg4 today, could not be examined. Whether
-  it has a GX driver, and whether that uses the TEC, is open.
+  xnews for sun3 (on the 4.1.1 tape, below) has a GX driver too
+  (`_sh_init_cg6`, `_sh_cg6_Area_Rect`, `_sh_Ops_Trans_cg6`, ...) and the
+  same TEC transform loads (`_sh_lego_load_trans_2d`, `_3d`). Whether it
+  calls them on the 3/60, or only for some operations, is still open.
 
 **Can be left out**:
 * the TEC's arithmetic (all but xnews);
