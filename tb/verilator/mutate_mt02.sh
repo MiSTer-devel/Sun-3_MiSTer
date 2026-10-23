@@ -34,6 +34,7 @@ run "no residue at a file mark"     -e "s/s_info    <= {8'd0, blk_left};/s_info 
 run "volume change ignored"         -e 's/if (need_load || volume_i != t_vol) begin/if (need_load) begin/'
 run "write not protected"           -e 's/else          check_cond(SK_PROTECT, EM_PROTECTED);/else ;/'
 run "10-byte CDB cut short"         -e "s/if (idx + 10'd1 == {6'd0, cdb_len}) begin/if (idx == 10'd5) begin/"
+run "INQUIRY says the tape is fixed"  -e "s/(idx == 10'd1 \&\& lun == 3'd0) ? 8'h80 : 8'h00/8'h00/"
 run "INQUIRY longer than five bytes" -e "s/(alloc_len < 10'd5) ? alloc_len : 10'd5/(alloc_len < 10'd36) ? alloc_len : 10'd36/"
 run "no tape motion before STATUS"   -e "s/if (blk_left == cdb_count) motion <=/if (1'b0) motion <=/g"
 run "tape motion after data too"     -e "s/if (blk_left == cdb_count) motion <=/if (1'b1) motion <=/g"
