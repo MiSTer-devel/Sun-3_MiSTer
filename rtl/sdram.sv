@@ -1,5 +1,11 @@
-// Taken unmodified from MacQuadra800_danifunker rtl/sdram.sv at aff6dfd, where it is
+// Taken from MacQuadra800_danifunker rtl/sdram.sv at aff6dfd, where it is
 // hardware-tested at 99 MHz with BL8 bursts.  Sorgelig's MiSTer controller, GPL-3.0+.
+// One local change (Sun-3_MiSTer, the GX's engine, docs/cg6.md "Stage 2"): a
+// burst write, `wrb': eight single-word WRITE commands on consecutive clocks
+// to an aligned group of eight words in one open row, each word with its own
+// byte mask, from `bdin'/`bbs', which the caller holds until `ready'.  The
+// chip is still in single-write mode (NO_WRITE_BURST), so nothing else
+// changes: with wrb low the controller is as it was.
 //
 // sdram.v
 //
@@ -52,6 +58,9 @@ module sdram
 	output reg [15:0] dout,        // data output to cpu
 	input      [15:0] din,         // data input from cpu
 	input             wr,          // request write
+	input             wrb,         // request a burst write: 8 words at addr (8-aligned)
+	input     [127:0] bdin,        // ... word j at [16*j +: 16]
+	input      [15:0] bbs,         // ... its byte selects at [2*j +: 2]
 	input       [1:0] bs,          // bit1 - write high byte, bit0 - write low byte, Ignored while reading.
 	input             rd,          // request read
 	output reg        ready,
@@ -133,6 +142,7 @@ localparam STATE_FPRE_RAS  = 23;
 localparam STATE_CPPRE_RAS = 24;
 localparam STATE_FPRE_4    = 25;
 localparam STATE_CPPRE_4   = 26;
+localparam STATE_WB        = 27;
 
 
 // These live at module scope rather than inside the always block below.  As
@@ -146,6 +156,8 @@ localparam STATE_CPPRE_4   = 26;
 reg [CAS_LATENCY:0] data_ready_delay = 0;
 reg  [3:0] read_tail = 0;
 reg        saved_wr;
+reg        saved_wrb;
+reg  [2:0] wb_j;
 reg [12:0] cas_addr;
 reg  [1:0] saved_bank;
 reg [12:0] saved_row;
@@ -293,7 +305,7 @@ always @(posedge clk) begin
 						state   <= STATE_RFSH;
 					end
 				end
-				else if (sel & (rd | wr)) begin
+				else if (sel & (rd | wr | wrb)) begin
 					// A10 is deliberately zero: CPU rows stay open.  Row conflicts,
 					// refresh and the copy port close them explicitly below.
 					{cas_addr[12:9],saved_bank,saved_row,cas_addr[8:0]} <=
@@ -301,7 +313,8 @@ always @(posedge clk) begin
 					chip       <= addr[26];
 					saved_chip <= addr[26];
 					saved_data <= din;
-					saved_wr   <= wr;
+					saved_wr   <= wr | wrb;
+					saved_wrb  <= wrb;
 					ready      <= 0;
 					if (req_page_hit) begin
 						SDRAM_BA <= req_bank;
@@ -450,7 +463,16 @@ always @(posedge clk) begin
 				state         <= saved_wr ? STATE_IDLE_1 : STATE_RDWAIT;
 				SDRAM_BA      <= saved_bank;
 				SDRAM_A       <= cas_addr;
-				if(saved_wr) begin
+				if(saved_wrb) begin
+					// the burst's word 0; words 1..7 in STATE_WB
+					command    <= CMD_WRITE;
+					SDRAM_A    <= {~bbs[1:0], 1'b0, cas_addr[9:3], 3'd0};
+					dq_out     <= bdin[15:0];
+					dq_oe      <= 1;
+					wb_j       <= 3'd1;
+					state      <= STATE_WB;
+				end
+				else if(saved_wr) begin
 					command    <= CMD_WRITE;
 					dq_out     <= saved_data;
 					dq_oe      <= 1;
@@ -471,6 +493,19 @@ always @(posedge clk) begin
 				if (!data_ready_delay[0] && ready && read_tail != 0) begin
 					read_tail <= read_tail - 1'b1;
 					if (read_tail == 1) state <= STATE_IDLE_1;
+				end
+			end
+
+			STATE_WB: begin
+				command    <= CMD_WRITE;
+				SDRAM_BA   <= saved_bank;
+				SDRAM_A    <= {~bbs[2*wb_j +: 2], 1'b0, cas_addr[9:3], wb_j};
+				dq_out     <= bdin[16*wb_j +: 16];
+				dq_oe      <= 1;
+				wb_j       <= wb_j + 1'd1;
+				if (wb_j == 3'd7) begin
+					ready <= 1;
+					state <= STATE_IDLE_1;
 				end
 			end
 

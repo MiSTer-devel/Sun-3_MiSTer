@@ -25,12 +25,13 @@
 //  port: a third client that takes turns with the CPU unless it says it is
 //  urgent.
 //
-//  The GX's engine port (ge_*: a burst read, a word written with byte
-//  selects, at an SDRAM word) is the fourth client: every mix of byte selects
-//  through it, its bursts and the CPU's reads of what it wrote, requests back
-//  to back (the next one asked on the edge the last is answered, as
-//  sun3_cg6_engine.sv asks), turns with a streaming CPU, and the scan-out
-//  ahead of it.
+//  The GX's engine port (ge_*: a burst read, a burst written with a select a
+//  byte) is the fourth client: every mix of byte selects through it, in every
+//  word of a burst, whole bursts of random selects, its bursts and the CPU's
+//  reads of what it wrote, requests back to back (the next one asked on the
+//  edge the last is answered, as sun3_cg6_engine.sv asks), a burst written in
+//  eight consecutive clocks of the chip's, turns with a streaming CPU, and the
+//  scan-out ahead of it.
 //
 //  The shadow counts halfwords in address order: halfword 2w is Wishbone word
 //  w's bits 31:16, 2w+1 its bits 15:0.  A line's halfword j is therefore at
@@ -79,8 +80,8 @@ wire [127:0] cs_rdata;
 
 reg  [25:0] ge_word = 0;
 reg         ge_req = 0, ge_we = 0;
-reg  [31:0] ge_wdata = 0;
-reg  [3:0]  ge_sel = 0;
+reg  [127:0] ge_wdata = 0;
+reg  [15:0]  ge_sel = 0;
 wire        ge_done;
 wire [127:0] ge_rdata;
 
@@ -430,7 +431,7 @@ endtask
 
 // ---- the engine-like client: a queue of operations, the next asked on the
 // edge the last is answered -----------------------------------------------------------
-typedef struct packed { bit we; bit [25:0] word; bit [31:0] data; bit [3:0] sel; } geop_t;
+typedef struct packed { bit we; bit [25:0] word; bit [127:0] data; bit [15:0] sel; } geop_t;
 geop_t      geq [$];
 bit [127:0] ge_got [$];
 integer     ge_dones = 0, ge_in_stream = 0, ge_in_cs = 0, wb_in_ge = 0;
@@ -452,10 +453,14 @@ always @(posedge clk) begin
     end
 end
 
+// a 32-bit word written at an even SDRAM word, as a burst with that word's
+// selects alone (a read: the burst at word)
 task automatic ge_op(input bit w, input [25:0] word, input [31:0] d, input [3:0] sl);
     geop_t o;
+    int k;
     begin
-        o.we = w; o.word = word; o.data = d; o.sel = sl;
+        k = int'(word[2:1]);                    // the line's word k: SDRAM words 2k, 2k+1
+        o.we = w; o.word = word; o.data = 128'(d) << (32 * k); o.sel = 16'(sl) << (4 * k);
         geq.push_back(o);
         if (w)                                  // the shadow: halves at word, word + 1
             for (int half = 0; half < 2; half++) begin
@@ -471,6 +476,29 @@ task automatic ge_op(input bit w, input [25:0] word, input [31:0] d, input [3:0]
                     cgk[h] = (cgk.exists(h) ? cgk[h] : 2'b00) | sl[sh*2 +: 2];
                 end
             end
+    end
+endtask
+
+// a whole burst written: line word k at [32k+31:32k], byte b's select sl[b]
+task automatic ge_burst(input [25:0] word, input [127:0] d, input [15:0] sl);
+    geop_t o;
+    begin
+        o.we = 1; o.word = {word[25:3], 3'b000}; o.data = d; o.sel = sl;
+        geq.push_back(o);
+        for (int j = 0; j < 8; j++) begin       // SDRAM word j is line bits [16*(j^1) +: 16]
+            int h;
+            bit [15:0] v;
+            bit [1:0] bs;
+            h  = int'(o.word) + j;
+            bs = sl[2*(j^1) +: 2];
+            v  = cgm.exists(h) ? cgm[h] : 16'h0;
+            if (bs[1]) v[15:8] = d[16*(j^1) + 8 +: 8];
+            if (bs[0]) v[7:0]  = d[16*(j^1) +: 8];
+            if (bs != 0) begin
+                cgm[h] = v;
+                cgk[h] = (cgk.exists(h) ? cgk[h] : 2'b00) | bs;
+            end
+        end
     end
 endtask
 
@@ -690,6 +718,31 @@ initial begin
     end
     ge_wait();
     ge_check(CG_COLOR_WORD + 26'h2000, 16, "engine, back to back");
+    // whole bursts, random selects (and all, and none), read back
+    for (int i = 0; i < 48; i++)
+        ge_burst(CG_COLOR_WORD + 26'h3000 + 26'(8 * (i % 24)), {rnd(), rnd(), rnd(), rnd()},
+                 (i % 12 == 0) ? 16'hFFFF : (i % 12 == 1) ? 16'h0000 : 16'(rnd()));
+    ge_wait();
+    for (int b = 0; b < 24; b++) ge_op(0, CG_COLOR_WORD + 26'h3000 + 26'(8*b), 0, 4'h0);
+    ge_wait();
+    ge_check(CG_COLOR_WORD + 26'h3000, 24, "engine bursts written with random selects");
+    for (int m = 0; m < 24; m++)
+        wread_check(cgw(24'h800000 + 24'h6000 + 24'(16*m + 4*(m % 4))), "the CPU reads an engine burst's word");
+    // the burst is eight WRITEs on consecutive clocks: 64 of them, back to back
+    // in one row, take well under 64 x 16 clocks
+    begin
+        longint t0, t1;
+        t0 = $time;
+        for (int i = 0; i < 64; i++)
+            ge_burst(CG_COLOR_WORD + 26'h3000 + 26'(8 * (i % 32)), {rnd(), rnd(), rnd(), rnd()}, 16'hFFFF);
+        ge_wait();
+        t1 = $time;
+        $display("tb_mister_sdram: engine bursts, 64 written in %0d clocks", (t1 - t0) / (2 * TH));
+        check((t1 - t0) / (2 * TH) < 64 * 16, $sformatf("an engine burst is written in under 16 clocks: %0d for 64", (t1 - t0) / (2 * TH)));
+    end
+    for (int b = 0; b < 32; b++) ge_op(0, CG_COLOR_WORD + 26'h3000 + 26'(8*b), 0, 4'h0);
+    ge_wait();
+    ge_check(CG_COLOR_WORD + 26'h3000, 32, "engine bursts, back to back, read back");
     // turns with a CPU that streams: both get on
     for (int i = 0; i < 200; i++) ge_op(0, CG_COLOR_WORD + 26'h2000 + 26'(8 * (i % 16)), 0, 4'h0);
     stream(30'h0000100, 400);
