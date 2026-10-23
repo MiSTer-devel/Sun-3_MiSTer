@@ -2,8 +2,8 @@
 # simulation only.  The same changes as sun3_60_v1.9_fastboot.txt, each
 # found at its place in 3.0.1 by disassembling the two side by side; see
 # that file for why each one is safe.  Applied on top of
-# sun3_60_v3.0.1_noparity.txt.  3.0.1's SCSI and tape drivers are new, and
-# their ten-second waits are not shortened here.
+# sun3_60_v3.0.1_noparity.txt.  3.0.1's SCSI and tape drivers are new; the
+# one long wait they always take, si_reset's, is at the end of this file.
 #
 # Line format: <address> <expected> <new>   (hex, 16-bit words, PROM at 0x0fef0000)
 
@@ -38,3 +38,21 @@
 
 # Keyboard detection: addil #1000,%d7 -> #10
 0fef4068 03e8 000a
+
+# SCSI bus reset recovery: 3.0.1's si_reset (0x0fef915e) asserts RST in the
+# 5380's ICR (`moveb #0x80,%a1@(1)'), clears ICR, TCR and MR, and then waits
+# five seconds for the targets to come back.  3.0.1 has no DELAY count here
+# (1.9's movel #160000000 at 0x0fefa468): it waits on the monitor's
+# millisecond clock instead, `movel 0xe0c2,%d7; addil #5000,%d7' and a
+# loop until 0xe0c2 passes it (0x0fef9188-0x0fef9196; 0xe0c2 gains 10 at
+# each 100 Hz tick, 0x0fef03ea).  Every disk and tape boot runs it once:
+# 5 s simulated, about 25 minutes of tb_emu.  The disk and tape targets here
+# are ready at once: 5000 -> 10 ms (measured 9.5 ms in tb_emu).
+#
+# The other waits on that clock in the sd/st drivers are taken only when a
+# target is not ready, and tb_emu's never take them, so they are left
+# alone: stopen's retry after a failed TEST UNIT READY (#2200 at
+# 0x0fef91f8, up to four times), #2000 at 0x0fef8816 and at 0x0fef9508,
+# and the disk spin-up wait (#60000 at 0x0fef70bc, "Waiting for disk to
+# spin up").
+0fef9190 1388 000a
