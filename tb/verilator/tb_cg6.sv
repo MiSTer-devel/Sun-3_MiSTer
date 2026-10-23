@@ -668,6 +668,28 @@ initial begin
         check(nb == 0, $sformatf("a relative vertex: %0d pixels wrong", nb));
     end
 
+    // ---- a font row longer than the word: 32 pixels of colour1, 4 of colour8
+    wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h66);
+    wr32(24'h7000D0, 0); wr32(24'h7000D4, 1);
+    wr32(24'h700004, 32'h00040000);                     // colour1
+    wr32(24'h700080, 100); wr32(24'h700084, 200);
+    wr32(24'h700090, 140); wr32(24'h700094, 200);       // x1 - x0 + 1 = 41
+    wr32(24'h70001C, 32'hFFFFFFFF);
+    wr32(24'h700004, 32'h00020000);                     // colour8
+    wr32(24'h700080, 100); wr32(24'h700090, 140);
+    wr32(24'h70001C, 32'hFFFFFFFF);
+    wait_idle();
+    while (!mem_idle) @(posedge mclk);
+    begin
+        int nb = 0;
+        for (int x = 96; x < 150; x++) begin
+            nb += ((fb_peek(200 * FBW + x) == 8'h66) != (x >= 100 && x < 132));
+            nb += ((fb_peek(201 * FBW + x) == 8'h66) != (x >= 100 && x < 104));
+        end
+        check(nb == 0, $sformatf("a font row wider than its word: 32 pixels, or 4: %0d wrong", nb));
+    end
+    wr32(24'h7000D4, 0);
+
     // ---- the CPU's posted writes land before the engine draws: a copy set up
     // first, 64 longwords written to its source, and the copy started at once
     wr32(24'h700108, 32'hA980CCCC);
