@@ -1204,9 +1204,8 @@ static void g_state(void)
 	static const uint16_t ops[] = { 0xff00, 0xcccc, 0x5555, 0x6c60, 0xaaaa, 0x0000, 0x3c3c, 0xfc30 };
 	uint32_t rop = rn(2) ? ops[rn(8)] : (rnd() & 0xffff);
 
-	/* plane and pixel fields 0..3 (0 keeps the old one); the pattern's 0..2:
-	   the pattern itself (3) is a later stage's */
-	rop |= (uint32_t)rn(4) << 30 | (uint32_t)rn(4) << 28 | (uint32_t)rn(3) << 26 |
+	/* plane, pixel and pattern fields 0..3 (0 keeps the old one) */
+	rop |= (uint32_t)rn(4) << 30 | (uint32_t)rn(4) << 28 | (uint32_t)rn(4) << 26 |
 	       (uint32_t)rn(4) << 24 | (uint32_t)rn(4) << 22 | (rnd() & 0x30000);
 	gw(FBC_RASTEROP, rop);
 	gw(FBC_FCOLOR, rn(4) ? (uint32_t)rn(256) : rnd());
@@ -1222,6 +1221,12 @@ static void g_state(void)
 	}
 	gw(FBC_OFFX, rn(4) ? 0 : rn(41) - 20);
 	gw(FBC_OFFY, rn(4) ? 0 : rn(41) - 20);
+	if (rn(3) == 0) {	/* a new pattern, or a new alignment */
+		if (rn(2))
+			for (int i = 0; i < 8; i++)
+				gw(FBC_PATTERN + 4 * i, rn(4) ? rnd() : 0xaaaa5555u);
+		gw(FBC_PATTALIGN, rn(2) ? (uint32_t)rn(16) << 16 | rn(16) : rnd());
+	}
 }
 
 /* a vertex of primitive group p (0 point .. 4 rect), y and x in either order,
@@ -1261,6 +1266,94 @@ static void g_rect(void)
 			g_vertex(4, g_coord(CG6_W, 0), g_coord(CG6_H, 0));
 		g_vertex(4, x0, y0);
 		g_vertex(4, x1, y1);
+	}
+	g_go(FBC_DRAWSTATUS);
+	if (rn(4))
+		g_wait();
+}
+
+/*
+ * Lines and polygons: their vertices are kept within 16 bits, which the RTL
+ * saturates its coordinates to (docs/cg6.md, "Stage 2"): a line or polygon
+ * with a vertex further out is drawn there with that vertex moved in.
+ */
+static int32_t g_lcoord(int lim)
+{
+	switch (rn(16)) {
+	case 0: case 1: return rn(lim + 400) - 200;
+	case 2: return rn(3 * lim) - lim;
+	case 3: return rn(2) ? 32767 - rn(30000) : -32768 + rn(30000);
+	default: return rn(lim);
+	}
+}
+
+/* x0 and y0 on the screen: a first vertex that is relative is relative to them */
+static void g_near(void)
+{
+	gw(FBC_X0, rn(CG6_W));
+	gw(FBC_Y0, rn(CG6_H));
+}
+
+/* a line, or a polyline: each further vertex draws on from the last */
+static void g_line(void)
+{
+	int n = rn(4) ? 1 : 1 + rn(6);
+	int32_t x = g_lcoord(CG6_W), y = g_lcoord(CG6_H);
+
+	g_state();
+	g_near();
+	if (rn(6) == 0)		/* a vertex of another kind first: a new queue */
+		g_vertex(rn(5), g_coord(CG6_W, 0), g_coord(CG6_H, 0));
+	g_vertex(1, x, y);
+	for (int i = 0; i < n; i++) {
+		if (rn(3)) {	/* short, of every slope */
+			x += rn(rn(4) ? 80 : 700) - (rn(4) ? 40 : 350);
+			y += rn(rn(4) ? 80 : 600) - (rn(4) ? 40 : 300);
+			if (x > 32767) x = 32767;
+			if (y > 32767) y = 32767;
+			if (x < -32768) x = -32768;
+			if (y < -32768) y = -32768;
+		} else {
+			x = g_lcoord(CG6_W);
+			y = g_lcoord(CG6_H);
+		}
+		if (rn(4) == 0) {	/* horizontal, vertical, diagonal */
+			switch (rn(3)) {
+			case 0: y = G.y[G.nv ? (G.nv - 1) & 3 : 0]; break;
+			case 1: x = G.x[G.nv ? (G.nv - 1) & 3 : 0]; break;
+			default: break;
+			}
+		}
+		g_vertex(1, x, y);
+		g_go(FBC_DRAWSTATUS);
+		if (rn(3) == 0)
+			g_wait();
+	}
+	if (rn(4))
+		g_wait();
+}
+
+/* a triangle or quadrilateral: 2..4 vertices (sometimes more, of which the
+   last count), sometimes a point first, as cg6_polygon_2 and sunGX.c begin */
+static void g_poly(void)
+{
+	int quad = rn(2), k = 2 + rn(quad ? 3 : 2), point = rn(3) == 0;
+	int32_t cx = g_lcoord(CG6_W), cy = g_lcoord(CG6_H);
+	int spread = rn(4) ? 60 + rn(200) : 1200;
+
+	if (rn(8) == 0)
+		k += 1 + rn(4);	/* more than the primitive takes */
+	g_state();
+	g_near();
+	for (int i = 0; i < k; i++) {
+		int32_t x = cx + rn(2 * spread) - spread, y = cy + rn(spread) - spread / 2;
+		if (rn(8) == 0) y = cy;		/* horizontal edges */
+		if (rn(10) == 0) { x = g_lcoord(CG6_W); y = g_lcoord(CG6_H); }
+		if (x > 32767) x = 32767;
+		if (x < -32768) x = -32768;
+		if (y > 32767) y = 32767;
+		if (y < -32768) y = -32768;
+		g_vertex(i == 0 && point ? 0 : quad ? 3 : 2, x, y);
 	}
 	g_go(FBC_DRAWSTATUS);
 	if (rn(4))
@@ -1342,6 +1435,61 @@ static void g_cpu(void)
 		cg6_read(&G, CG6_FB + (rn(CG6_W * CG6_H) & ~3u), 4);
 }
 
+/*
+ * The registers that are only stored: z and colour, the indexed registers,
+ * the THC's timing and cursor, the TEC (its data registers in two banks by
+ * VDC's type, as cg6_cntxsave reads them).  An RTL keeps them in a RAM that
+ * a reset does not clear, so each is read only after this run has written
+ * it.
+ */
+static uint8_t g_written[3][2][0x1000 / 4];	/* block, the TEC bank, word */
+
+static void g_store(void)
+{
+	int n = 1 + rn(10);
+
+	for (int i = 0; i < n; i++) {
+		uint32_t base, o;
+		int b, bank = 0;
+
+		switch (rn(5)) {
+		case 0:		/* FBC z and colour */
+			b = 0; base = CG6_FBC; o = 0x80 + 0x10 * rn(4) + (rn(2) ? 8 : 12); break;
+		case 1:		/* FBC indexed: z, w, colour -- none of a vertex's x and y */
+			b = 0; base = CG6_FBC; o = 0x800 + 0x40 * rn(5);
+			o += rn(2) ? (rn(2) ? 0x08 : 0x0c) + 0x10 * rn(2) : 0x30 + 4 * rn(4);
+			break;
+		case 2:		/* THC timing and cursor */
+			b = 1; base = CG6_THC;
+			o = rn(3) == 0 ? 0x800 + 4 * rn(6) : rn(4) == 0 ? 0x8fc : 0x900 + 4 * rn(64);
+			break;
+		default:	/* TEC */
+			b = 2; base = CG6_TEC;
+			switch (rn(4)) {
+			case 0: o = 4 * rn(8); break;
+			case 1: o = 0x800 + 4 * rn(0x180); break;
+			default: o = 0x100 + 4 * rn(64); break;
+			}
+			if (rn(3) == 0) {	/* VDC: which bank the data registers are */
+				cg6_write(&G, CG6_TEC + 8, 4, (rn(2) ? 0x8000u : 0xa000u) | (rnd() & 0x1fff));
+				g_written[2][0][2] = 1;
+			}
+			bank = o >= 0x100 && o < 0x200 && (G.tec[2] >> 13 & 7) == 5;
+			break;
+		}
+		if (!g_written[b][bank][o >> 2] || rn(3)) {
+			uint32_t v = rnd();
+			if (b == 2 && o == 8)		/* VDC itself: a bank */
+				v = (rn(2) ? 0x8000u : 0xa000u) | (v & 0x1fff);
+			cg6_write(&G, base + o, 4, v);
+			g_written[b][bank][o >> 2] = 1;
+		}
+		cg6_read(&G, base + o, 4);
+		if (b == 1 && o == 0x8fc)
+			cg6_write(&G, base + o, 4, 0xffe0ffe0);	/* the cursor off the screen again */
+	}
+}
+
 /* registers written and read back, the 2-bit fields that keep their value */
 static void g_regs(void)
 {
@@ -1360,6 +1508,10 @@ static void g_regs(void)
 	}
 	gr(FBC_FONT);
 	cg6_read(&G, CG6_FHC, 4);
+	for (int i = 0; i < 8; i++)
+		if (rn(4) == 0)
+			gr(FBC_PATTERN + 4 * i);
+	g_store();
 	g_state();		/* nothing left in a state the next test cannot undo */
 	gw(FBC_MISC, 2u << 17);
 }
@@ -1373,18 +1525,21 @@ static void gen_run(long n)
 	memset(G.fb + CG6_W * CG6_H, 0, CG6_FBSIZE - CG6_W * CG6_H);
 	gen_open("gen");
 	for (long i = 0; i < n; i++) {
-		switch (rn(8)) {
+		switch (rn(12)) {
 		case 0: case 1: g_rect(); break;
 		case 2: case 3: g_font(); break;
 		case 4: case 5: g_blit(); break;
 		case 6: g_cpu(); break;
+		case 7: case 8: g_line(); break;
+		case 9: case 10: g_poly(); break;
 		default: g_regs(); break;
 		}
 	}
 	g_wait();
 	gen_close();
-	printf("-G: %ld tests; engine: %lu points %lu rects %lu blits %lu font, %lu pixels\n", n,
-	       G.ndraw[PRIM_POINT], G.ndraw[PRIM_RECT], G.nblit, G.nfont, G.npix);
+	printf("-G: %ld tests; engine: %lu points %lu lines %lu tris %lu quads %lu rects %lu blits %lu font, %lu pixels\n", n,
+	       G.ndraw[PRIM_POINT], G.ndraw[PRIM_LINE], G.ndraw[PRIM_TRI], G.ndraw[PRIM_QUAD],
+	       G.ndraw[PRIM_RECT], G.nblit, G.nfont, G.npix);
 }
 
 static void test_prom(void)

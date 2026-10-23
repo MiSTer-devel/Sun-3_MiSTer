@@ -69,6 +69,9 @@ sun3_cg4_scanout dut (
     .clk_pixel(pclk), .pix_rst(prst), .cx(cx), .cy(cy),
     .video_on(video_on), .read_mask(read_mask), .command(command),
     .ovl1(ovl1), .ovl2(ovl2), .ovl3(ovl3),
+    // the GX's cursor, as the cg4 leaves it: off the screen, its planes all
+    // ones, so that a cursor shown where it should not be is seen
+    .cur_xy(32'hFFE0FFE0), .cur_row(), .cur_a(32'hFFFFFFFF), .cur_b(32'hFFFFFFFF),
     .cm_raddr(cm_raddr), .cm_rdata(cm_rdata),
     .rgb(rgb), .retrace(retrace)
 );

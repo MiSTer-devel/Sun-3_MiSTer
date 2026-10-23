@@ -12,37 +12,45 @@
 // they are, without a copy: quasi-static levels, crossing clocks only after
 // the toggle's two flops.
 //
-// Stage 1 (docs/cg6.md, "Stages") draws what the PROM's console and
-// libpixrect's fills, copies and text need:
+// The commands (docs/cg6.md, "The FBC"):
 //
 //   rect   the rectangle between two vertices, inclusive (and a point, the
 //          rectangle of one)
+//   line   Bresenham between two vertices, both ends drawn, stepped from the
+//          left end, the error term from -(major/2)
+//   poly   a triangle or quadrilateral of 2..4 vertices, scan-converted as
+//          libpixrect's pr_polygon_2 does it in memory: Sun's edge DDA
+//          (cg6model.c's edge_setup, edge_step) for each edge, on each row
+//          the pixels from one edge's x up to, not including, the next's
 //   font   one row of the font register's word: up to 32 pixels of colour1
 //          or 4 of colour8, at y0 from x0 to x1
 //   blit   (x0,y0)-(x1,y1) to (x2,y2), the source read before it is written
 //
 // through the raster-op unit -- RASTEROP's truth table on f, b, s and d, a
 // bit plane at a time, the plane mask, the pixel mask (bit 31 - (x & 31)),
-// and the clip window -- which is all of it but the pattern: RASTEROP's
-// pattern field 3 draws ones here (stage 3).  Lines, triangles and
-// quadrilaterals are a later stage's; sun3_cg6.sv queues their vertices and
-// draws nothing.
+// the clip window, and for the drawing commands the pattern (s is bit
+// 15 - ((x + alignx) & 15) of row (y + aligny) & 15 when RASTEROP's pattern
+// field is 3, 0 when it is 1, else 1).
+//
+// **Spans.**  Every command is runs of pixels on a row.  A rectangle, a
+// blit and the font are a row loop over one span; a line and a polygon have
+// a generator that hands spans, one at a time, to the same row machinery: a
+// line's runs of pixels on a row (one pixel a row when it is steep), a
+// polygon's one or two spans a row.  Each span is clipped as it is taken.
 //
 // **Memory.**  The frame buffer is the colour plane the cg4 has, 1 MiB at
 // SDRAM word COLOR_WORD, a byte a pixel, 1152 a line, in the SDRAM adapter's
 // layout (rtl/sun3_mister_sdram.sv): line k (16 bytes) is the burst at word
 // COLOR_WORD + 8k, its byte b at {b[3:2], ~b[1:0], 3'b000}.  A screen line is
 // 72 bursts, so no burst crosses one.  The engine is the adapter's fourth
-// client (ge_*): a burst read, or a 32-bit word written with byte selects.
-// The adapter's controller writes 16 bits at a time, so a whole burst written
-// is eight writes.
+// client (ge_*): a burst read, or a burst written with a select a byte (the
+// controller's eight WRITEs on consecutive clocks).
 //
 // **The work is done a burst (16 pixels) at a time**: for each burst a span
 // touches, the bytes it writes (the span, the pixel mask, the clip, the
 // frame buffer's 1 MiB), each byte's source s, and -- only when the raster op
 // or the plane mask needs it -- the destination burst read first.  Then the
-// bytes go through the truth table and out, a word at a time, the words with
-// nothing to write skipped.  A blit reads each source line's span into a line
+// bytes go through the truth table and out as one burst.  A blit reads each source line's span into a line
 // buffer first (an M10K, 128 bursts) and takes each destination burst's 16
 // bytes out of it through a funnel shifter, so the copy may overlap in either
 // direction along a line; rows run bottom-up when the copy moves down.
@@ -67,8 +75,10 @@ module sun3_cg6_engine #(
     input  wire         mem_idle,
 
     // the command, held still from start_tgl to done_tgl
-    input  wire [1:0]   cmd,            // 0 rect, 1 blit, 2 font
-    input  wire signed [15:0] x0, y0, x1, y1, x2, y2,
+    input  wire [2:0]   cmd,            // 0 rect, 1 blit, 2 font, 3 line, 4 poly
+    input  wire signed [15:0] x0, y0, x1, y1, x2, y2,          // a blit's and the font's
+    input  wire signed [15:0] vx0, vy0, vx1, vy1, vx2, vy2, vx3, vy3,  // a drawing's vertices
+    input  wire [2:0]   vk,             // ... how many, a polygon's
     input  wire signed [15:0] clipminx, clipminy, clipmaxx, clipmaxy,
     input  wire [31:0]  font,
     input  wire         colour8,        // MISC's data field is colour8
@@ -76,18 +86,20 @@ module sun3_cg6_engine #(
     input  wire [31:0]  rasterop,
     input  wire [7:0]   planemask,
     input  wire [31:0]  pixelmask,
+    input  wire [255:0] pattern,        // PATTERN0..7, PATTERN0 at [255:224]
+    input  wire [7:0]   pattalign,      // {x, y}, 4 bits each
 
     // the SDRAM adapter's engine port
     output reg  [25:0]  ge_word  = 26'd0,
     output reg          ge_req   = 1'b0,
     output reg          ge_we    = 1'b0,
-    output reg  [31:0]  ge_wdata = 32'h0,
-    output reg  [3:0]   ge_sel   = 4'h0,
+    output reg  [127:0] ge_wdata = 128'h0,   // a line, as ge_rdata
+    output reg  [15:0]  ge_sel   = 16'h0,    // ... a select for each byte, [b] for [8b+7:8b]
     input  wire         ge_done,
     input  wire [127:0] ge_rdata
 );
 
-    localparam [1:0] C_RECT = 2'd0, C_BLIT = 2'd1, C_FONT = 2'd2;
+    localparam [2:0] C_RECT = 3'd0, C_BLIT = 3'd1, C_FONT = 3'd2, C_LINE = 3'd3, C_POLY = 3'd4;
 
     // ---- the clock crossing ------------------------------------------------------
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
@@ -99,14 +111,19 @@ module sun3_cg6_engine #(
     wire mrst    = rst_s[1];
     wire pending = st_s[1] ^ done_tgl;      // a command not yet answered
 
+    wire gen = (cmd == C_LINE) || (cmd == C_POLY);  // spans from a generator
+
     // ---- what a command draws with (levels, still while it runs) ----------------
     // The plane and pixel masks by RASTEROP's fields: 1 none, 3 the register,
-    // 0 and 2 all.  s for drawing: the pattern field, 1 zeros, otherwise ones.
+    // 0 and 2 all.  s for drawing: the pattern field, 1 zeros, 3 the pattern,
+    // otherwise ones.
     wire [7:0]  pmask = (rasterop[31:30] == 2'd1) ? 8'h00 :
                         (rasterop[31:30] == 2'd3) ? planemask : 8'hFF;
     wire [31:0] xmask = (rasterop[29:28] == 2'd1) ? 32'h0 :
                         (rasterop[29:28] == 2'd3) ? pixelmask : 32'hFFFFFFFF;
     wire        s_draw = (rasterop[27:26] != 2'd1);
+    wire        s_patt = (rasterop[27:26] == 2'd3);
+    wire        s_var  = (cmd == C_BLIT) || (cmd == C_FONT) || s_patt;  // s is not one value
 
     // Each plane's nibble of the truth table, chosen by its f and b bits
     // (index f*8 + b*4 + s*2 + d); a plane the mask leaves alone keeps d.
@@ -116,7 +133,7 @@ module sun3_cg6_engine #(
         need_d = 1'b0;
         for (int i = 0; i < 8; i++) begin
             nib[i] = pmask[i] ? rasterop[{1'b0, fcolor[i], bcolor[i], 2'b00} +: 4] : 4'b1010;
-            if (cmd == C_RECT)
+            if (!s_var)
                 need_d = need_d | (nib[i][{s_draw, 1'b1}] != nib[i][{s_draw, 1'b0}]);
             else
                 need_d = need_d | (nib[i][1] != nib[i][0]) | (nib[i][3] != nib[i][2]);
@@ -127,12 +144,15 @@ module sun3_cg6_engine #(
     // The clip window, and the frame buffer: x 0..1151, rows 0..910 (the
     // 1 MiB ends 256 pixels into row 910).
     typedef logic signed [17:0] s18;
+    typedef logic signed [21:0] s22;
     // bit i of the result is bit 15-i of k ({<<{k}}, which Quartus 17 lacks)
     function automatic [15:0] rev16(input [15:0] k);
         for (int i = 0; i < 16; i++) rev16[i] = k[15 - i];
     endfunction
     function automatic s18 smax(input s18 a, input s18 b); return (a > b) ? a : b; endfunction
     function automatic s18 smin(input s18 a, input s18 b); return (a < b) ? a : b; endfunction
+    function automatic s22 lmax(input s22 a, input s22 b); return (a > b) ? a : b; endfunction
+    function automatic s22 lmin(input s22 a, input s22 b); return (a < b) ? a : b; endfunction
 
     wire signed [17:0] cx0 = smax(s18'(clipminx), 18'sd0);
     wire signed [17:0] cx1 = smin(s18'(clipmaxx), 18'sd1151);
@@ -162,23 +182,29 @@ module sun3_cg6_engine #(
                 e_yb = smin(s18'(y0), cy1);
             end
             default: begin
-                e_ok = (x1 >= x0) && (y1 >= y0);
-                e_xa = smax(s18'(x0), cx0);
-                e_xb = smin(s18'(x1), cx1);
-                e_ya = smax(s18'(y0), cy0);
-                e_yb = smin(s18'(y1), cy1);
+                e_ok = (vx1 >= vx0) && (vy1 >= vy0);
+                e_xa = smax(s18'(vx0), cx0);
+                e_xb = smin(s18'(vx1), cx1);
+                e_ya = smax(s18'(vy0), cy0);
+                e_yb = smin(s18'(vy1), cy1);
             end
         endcase
     end
 
 
     // ---- the state ------------------------------------------------------------------
-    localparam [4:0] E_IDLE = 5'd0,  E_DRAIN = 5'd1,  E_SETUP = 5'd2,  E_ROW  = 5'd3,
-                     E_ROW2 = 5'd4,  E_ROW3  = 5'd5,  E_SRC   = 5'd6,  E_LINE = 5'd7,
-                     E_BUF0 = 5'd8,  E_BUF1  = 5'd9,  E_FUN1  = 5'd10, E_FUN2 = 5'd11,
-                     E_FUN3 = 5'd12, E_DRD   = 5'd13, E_CALC  = 5'd14, E_WR   = 5'd15,
-                     E_NEXT = 5'd16, E_ROW4 = 5'd17;
-    reg  [4:0]  st = E_IDLE;
+    localparam [5:0] E_IDLE = 6'd0,  E_DRAIN = 6'd1,  E_SETUP = 6'd2,  E_ROW  = 6'd3,
+                     E_ROW2 = 6'd4,  E_ROW3  = 6'd5,  E_SRC   = 6'd6,  E_LINE = 6'd7,
+                     E_BUF0 = 6'd8,  E_BUF1  = 6'd9,  E_FUN1  = 6'd10, E_FUN2 = 6'd11,
+                     E_FUN3 = 6'd12, E_DRD   = 6'd13, E_CALC  = 6'd14, E_WR   = 6'd15,
+                     E_NEXT = 6'd16, E_ROW4  = 6'd17,
+                     // the generators' (a line's, a polygon's) and a span taken from one
+                     E_SPAN = 6'd18, E_GRET  = 6'd19, E_LSET  = 6'd20, E_LGEN = 6'd21,
+                     E_PSET = 6'd22, E_PE0   = 6'd23, E_PDIV  = 6'd24, E_PE1  = 6'd25,
+                     E_PE2  = 6'd26, E_PE3   = 6'd27, E_PROW0 = 6'd28, E_PROW = 6'd29,
+                     E_PS1  = 6'd30, E_PS2   = 6'd31, E_PS3   = 6'd32, E_PNEXT = 6'd33,
+                     E_PST1 = 6'd34, E_PST2  = 6'd35;
+    reg  [5:0]  st = E_IDLE;
     reg         last = 1'b0;            // E_NEXT: the command is finished
 
     reg  [10:0] xa = 11'd0, xb = 11'd0;     // the span on every row (0..1151)
@@ -189,6 +215,7 @@ module sun3_cg6_engine #(
     reg  [15:0] lrow = 16'd0;               // the row's first burst: cy * 72
     reg  [25:0] lw = 26'd0;                 // the burst's SDRAM word (8-aligned)
     reg  signed [17:0] fsh = 18'sd0;        // the font: 16 * ln - x0
+    reg  [15:0] prot = 16'h0;               // the pattern's row, turned by its x alignment
 
     // a blit's source, per row
     reg  signed [17:0] sy = 18'sd0;         // the source row
@@ -204,7 +231,11 @@ module sun3_cg6_engine #(
     reg  [127:0] sb = 128'h0;               // their sources, a byte each (byte b at [8b])
     reg  [127:0] dline = 128'h0;            // the destination burst, as the SDRAM has it
     reg  [127:0] res = 128'h0;              // the result, as the SDRAM has it
-    reg  [3:0]  wleft = 4'h0;               // words of `res' still to write
+    reg         wsent = 1'b0;               // the burst is asked for
+
+    // a span from a generator: its row and ends, unclipped; the generator is done
+    reg  signed [21:0] sp_y = 22'sd0, sp_x0 = 22'sd0, sp_x1 = 22'sd0;
+    reg         gdone = 1'b0;
 
     // ---- byte order --------------------------------------------------------------
     // A burst as the SDRAM adapter has it to a byte array (byte b at [8b]) and
@@ -254,6 +285,17 @@ module sun3_cg6_engine #(
             s_font[8 * b +: 8] = colour8 ? font[8 * (3 - 32'(k)) +: 8] : {8{fwin[15 - b]}};
         end
 
+    // The pattern: the row for line cy, turned left by the x alignment, so
+    // that byte b of every burst (x = 16L + b) takes bit 15 - b.
+    wire [3:0]   prw  = 4'(cy[3:0] + pattalign[3:0]);
+    wire [31:0]  pwd  = pattern[255 - 32 * prw[3:1] -: 32];
+    wire [15:0]  prow = prw[0] ? pwd[15:0] : pwd[31:16];
+    wire [31:0]  prr  = {prow, prow} << pattalign[7:4];
+    reg  [127:0] s_pat;
+    always @(*)
+        for (int b = 0; b < 16; b++)
+            s_pat[8 * b +: 8] = {8{s_patt ? prot[15 - b] : s_draw}};
+
     // A blit's: two bursts of the line buffer, 32 bytes, and the 16 from byte
     // soff[3:0] of them through the funnel, in two steps (words, then bytes);
     // a byte whose source is outside the frame buffer is 0.
@@ -284,10 +326,90 @@ module sun3_cg6_engine #(
     wire [10:0]        xbr_n = (cy == 10'd910 && xb > 11'd255) ? 11'd255 : xb;
     wire signed [22:0] qa_n = (23'({12'd0, xa}) + soff) >>> 4;
 
-    // the lowest word still to write
-    wire [1:0]         wsel = wleft[0] ? 2'd0 : wleft[1] ? 2'd1 : wleft[2] ? 2'd2 : 2'd3;
+    // the burst's byte selects, as the SDRAM has it (byte b at {b[3:2], ~b[1:0]})
+    reg  [15:0]  en_l;
+    always @(*)
+        for (int b = 0; b < 16; b++)
+            en_l[{b[3:2], ~b[1:0]}] = en[b];
 
     assign lb_we = (st == E_SRC) && ge_req && ge_done;
+
+    // ---- a span taken from a generator, clipped -------------------------------------
+    wire signed [21:0] spa = lmax(sp_x0, s22'(cx0));
+    wire signed [21:0] spb = lmin(sp_x1, s22'(cx1));
+    wire               sp_vis = (sp_y >= s22'(cy0)) && (sp_y <= s22'(cy1)) && (spa <= spb);
+
+    // ---- the line generator -------------------------------------------------------------
+    // Drawn from its left end; x-major (|dx| >= |dy|) a run of pixels a row,
+    // otherwise a pixel a row.
+    wire               l_sw  = (vx1 < vx0);
+    wire signed [17:0] l_xa  = l_sw ? s18'(vx1) : s18'(vx0);
+    wire signed [17:0] l_ya  = l_sw ? s18'(vy1) : s18'(vy0);
+    wire signed [17:0] l_dx  = (l_sw ? s18'(vx0) : s18'(vx1)) - l_xa;      // >= 0
+    wire signed [17:0] l_dy  = (l_sw ? s18'(vy0) : s18'(vy1)) - l_ya;
+    wire signed [17:0] l_ady = (l_dy < 0) ? -l_dy : l_dy;
+    wire               l_maj = (l_dx >= l_ady);
+
+    reg  signed [21:0] lx = 22'sd0, ly = 22'sd0, le = 22'sd0, lrun = 22'sd0;
+    reg  signed [17:0] ldx = 18'sd0, lady = 18'sd0, lrem = 18'sd0;
+    reg                lneg = 1'b0, lmaj = 1'b0;
+    wire signed [21:0] le2   = le + s22'(lmaj ? lady : ldx);
+    wire               lstep = (le2 > 0) && (lrem != 0);    // the minor axis steps
+    wire               lend_ = (lrem == 0);                 // the last pixel
+
+    // ---- the polygon generator -------------------------------------------------------------
+    // Edges set up one at a time (a divider for |dx| / dy), then rows: each
+    // edge's x walked as Sun's code walks it.  Per edge, after set-up:
+    //   step    t = err + kt; x += xs;  then  err = t + (c ? ka : kb), x += c ? xi : 0
+    // where c, by the edge's kind (shallow or steep, going right or left),
+    // is t <= 0 (shallow right), t > 0 (shallow left, steep right), or
+    // t + ka <= 0 (steep left).
+    reg  [2:0]  pi = 3'd0;                  // the vertex an edge starts at
+    reg  [2:0]  pne = 3'd0;                 // edges made
+    reg  signed [21:0] pymin = 22'sd0, pymax = 22'sd0, py = 22'sd0;
+    reg  signed [21:0] e_y0 [0:3];
+    reg  signed [21:0] e_y1 [0:3];
+    reg  signed [21:0] e_x  [0:3];
+    reg  signed [21:0] e_er [0:3];
+    reg  signed [21:0] e_kt [0:3];
+    reg  signed [21:0] e_ka [0:3];
+    reg  signed [21:0] e_kb [0:3];
+    reg  signed [21:0] e_xs [0:3];
+    reg  [1:0]  e_kd [0:3];                 // 0 shallow right, 1 shallow left, 2 steep right, 3 steep left
+    reg  signed [21:0] e_t  [0:3];
+    reg  [3:0]  e_go = 4'h0;                // stepping on this row
+    initial for (int i = 0; i < 4; i++) begin
+        e_y0[i] = 0; e_y1[i] = 0; e_x[i] = 0; e_er[i] = 0; e_kt[i] = 0;
+        e_ka[i] = 0; e_kb[i] = 0; e_xs[i] = 0; e_kd[i] = 0; e_t[i] = 0;
+    end
+    // one edge's set-up
+    reg  signed [21:0] p_xa = 22'sd0, p_ya = 22'sd0, p_yb = 22'sd0, p_dx = 22'sd0, p_dy = 22'sd0;
+    reg  signed [21:0] p_e = 22'sd0, p_xadj = 22'sd0;
+    reg  [17:0] dv_q = 18'd0, dv_r = 18'd0, dv_n = 18'd0;   // |dx| / dy: quotient, remainder, dividend
+    reg  [4:0]  dv_i = 5'd0;
+    // the vertices, by number
+    wire signed [15:0] pvx [0:3];
+    wire signed [15:0] pvy [0:3];
+    assign pvx[0] = vx0; assign pvx[1] = vx1; assign pvx[2] = vx2; assign pvx[3] = vx3;
+    assign pvy[0] = vy0; assign pvy[1] = vy1; assign pvy[2] = vy2; assign pvy[3] = vy3;
+    wire [2:0]  pj    = (pi + 3'd1 == vk) ? 3'd0 : pi + 3'd1;
+    wire signed [21:0] pa_x = s22'(pvx[pi[1:0]]), pa_y = s22'(pvy[pi[1:0]]);
+    wire signed [21:0] pb_x = s22'(pvx[pj[1:0]]), pb_y = s22'(pvy[pj[1:0]]);
+    wire [17:0] dv_rs = {dv_r[16:0], dv_n[17]};             // the divider's next partial remainder
+    wire        dv_ge = (dv_rs >= 18'(p_dy));
+    // the edge's numbers once divided
+    wire signed [21:0] p_adx = (p_dx < 0) ? -p_dx : p_dx;
+    wire signed [21:0] p_q   = s22'({1'b0, dv_q});
+    wire signed [21:0] p_qdy = p_adx - s22'({1'b0, dv_r});  // q * dy
+    wire signed [21:0] p_dys = (p_dx < 0) ? -p_qdy : p_qdy; // step * dy
+    wire signed [21:0] p_qh  = (p_qdy - (dv_q[0] ? p_dy : 22'sd0)) >>> 1;   // (q >> 1) * dy
+    wire               p_neg = (p_dx < 0);
+    wire               p_stp = (p_dy >= p_adx);             // steep
+    // a row: which edges are on it, their x, sorted (the ones off it last)
+    localparam signed [21:0] XMAX = 22'sh1FFFFF;
+    reg  signed [21:0] k0 = 0, k1 = 0, k2 = 0, k3 = 0;
+    reg  [2:0]  pna = 3'd0;                 // edges on the row
+    reg  [1:0]  psp = 2'd0;                 // 0 the first span next, 1 the second, 2 stepping
 
     always @(posedge mclk) begin
         // the port: a request is held until it is answered
@@ -308,7 +430,12 @@ module sun3_cg6_engine #(
                 xa <= 11'(e_xa);
                 xb <= 11'(e_xb);
                 up <= (cmd == C_BLIT) && (y2 > y0);
-                if (!e_ok || e_xa > e_xb || e_ya > e_yb) begin
+                gdone <= 1'b0;
+                if (cmd == C_LINE)
+                    st <= E_LSET;
+                else if (cmd == C_POLY)
+                    st <= E_PSET;
+                else if (!e_ok || e_xa > e_xb || e_ya > e_yb) begin
                     last <= 1'b1;
                     st   <= E_NEXT;
                 end else begin
@@ -325,6 +452,7 @@ module sun3_cg6_engine #(
                 lend <= xbr_n[10:4];
                 lrow <= {cy, 6'd0} + {3'd0, cy, 3'd0};
                 fsh  <= s18'({xa[10:4], 4'b0000}) - s18'(x0);
+                prot <= prr[31:16];
                 sy   <= sy_n;
                 va   <= clamp13(23'(s18'(x2)) - 23'(s18'(x0)));        // x + x0 - x2 >= 0
                 st   <= E_ROW2;
@@ -372,7 +500,7 @@ module sun3_cg6_engine #(
             E_LINE: begin                   // a burst: what it writes, and its source
                 en    <= range16(ln, 13'(xa), 13'(xbr)) &
                          rev16(ln[0] ? xmask[15:0] : xmask[31:16]);
-                sb    <= (cmd == C_FONT) ? s_font : {128{s_draw}};
+                sb    <= (cmd == C_FONT) ? s_font : s_pat;
                 lw    <= lword;
                 lb_ra <= bidx;
                 st    <= E_BUF0;
@@ -420,25 +548,22 @@ module sun3_cg6_engine #(
 
             E_CALC: begin
                 res   <= swz(r_ba);
-                wleft <= {|en[15:12], |en[11:8], |en[7:4], |en[3:0]};
+                wsent <= 1'b0;
                 st    <= E_WR;
             end
 
-            E_WR:                           // the words with something to write
-                if (!ge_req) begin
-                    if (wleft == 4'h0)
-                        st <= E_NEXT;
-                    else begin
-                        ge_req   <= 1'b1;
-                        ge_we    <= 1'b1;
-                        ge_word  <= {lw[25:3], wsel, 1'b0};
-                        ge_wdata <= res[32 * wsel +: 32];
-                        ge_sel   <= {en[4 * wsel], en[4 * wsel + 1], en[4 * wsel + 2], en[4 * wsel + 3]};
-                        wleft[wsel] <= 1'b0;
-                    end
-                end
+            E_WR:                           // the burst, its bytes selected
+                if (!ge_req && !wsent) begin
+                    ge_req   <= 1'b1;
+                    ge_we    <= 1'b1;
+                    ge_word  <= lw;
+                    ge_wdata <= res;
+                    ge_sel   <= en_l;
+                    wsent    <= 1'b1;
+                end else if (ge_req && ge_done)
+                    st <= E_NEXT;
 
-            E_NEXT:                         // the next burst, row, or the end
+            E_NEXT:                         // the next burst, row, span, or the end
                 if (last) begin
                     done_tgl <= ~done_tgl;
                     last     <= 1'b0;
@@ -448,12 +573,250 @@ module sun3_cg6_engine #(
                     bidx <= bidx + 7'd1;
                     fsh  <= fsh + 18'sd16;
                     st   <= E_LINE;
-                end else if (cy == yend)
+                end else if (gen)
+                    st <= E_GRET;
+                else if (cy == yend)
                     last <= 1'b1;
                 else begin
                     cy <= up ? cy - 10'd1 : cy + 10'd1;
                     st <= E_ROW;
                 end
+
+            // ---- a span from a generator: clipped, then drawn as a row
+            E_SPAN:
+                if (sp_vis) begin
+                    cy <= 10'(sp_y);
+                    xa <= 11'(spa);
+                    xb <= 11'(spb);
+                    st <= E_ROW;
+                end else
+                    st <= E_GRET;
+
+            E_GRET:                         // back to the generator, or the end
+                if (gdone) begin
+                    last <= 1'b1;
+                    st   <= E_NEXT;
+                end else
+                    st <= (cmd == C_LINE) ? E_LGEN : E_PNEXT;
+
+            // ---- a line
+            E_LSET: begin
+                lx   <= s22'(l_xa);
+                ly   <= s22'(l_ya);
+                lrun <= s22'(l_xa);
+                ldx  <= l_dx;
+                lady <= l_ady;
+                lneg <= (l_dy < 0);
+                lmaj <= l_maj;
+                le   <= -s22'((l_maj ? l_dx : l_ady) >>> 1);
+                lrem <= l_maj ? l_dx : l_ady;
+                st   <= E_LGEN;
+            end
+
+            E_LGEN: begin                   // a pixel a clock; a span when the row changes
+                lrem <= lrem - 18'sd1;
+                gdone <= lend_;
+                if (lmaj) begin
+                    lx <= lx + 22'sd1;
+                    le <= lstep ? le2 - s22'(ldx) : le2;
+                    if (lstep) ly <= lneg ? ly - 22'sd1 : ly + 22'sd1;
+                    if (lstep || lend_) begin
+                        sp_y  <= ly;
+                        sp_x0 <= lrun;
+                        sp_x1 <= lx;
+                        lrun  <= lx + 22'sd1;
+                        st    <= E_SPAN;
+                    end
+                end else begin
+                    ly <= lneg ? ly - 22'sd1 : ly + 22'sd1;
+                    le <= lstep ? le2 - s22'(lady) : le2;
+                    if (lstep) lx <= lx + 22'sd1;
+                    sp_y  <= ly;
+                    sp_x0 <= lx;
+                    sp_x1 <= lx;
+                    st    <= E_SPAN;
+                end
+            end
+
+            // ---- a polygon: its edges
+            E_PSET: begin
+                pi    <= 3'd0;
+                pne   <= 3'd0;
+                pymin <= 22'sh1FFFFF;
+                pymax <= -22'sh200000;
+                st    <= E_PE0;
+            end
+
+            E_PE0:                          // the edge from vertex pi to the next
+                if (pi == vk)
+                    st <= E_PROW0;
+                else if (pa_y == pb_y)
+                    pi <= pi + 3'd1;            // horizontal: no edge
+                else begin
+                    p_xa <= (pa_y > pb_y) ? pb_x : pa_x;
+                    p_ya <= (pa_y > pb_y) ? pb_y : pa_y;
+                    p_yb <= (pa_y > pb_y) ? pa_y : pb_y;
+                    p_dx <= (pa_y > pb_y) ? pa_x - pb_x : pb_x - pa_x;
+                    p_dy <= (pa_y > pb_y) ? pa_y - pb_y : pb_y - pa_y;
+                    dv_n <= 18'((pa_y > pb_y) ? ((pa_x - pb_x < 0) ? pb_x - pa_x : pa_x - pb_x)
+                                              : ((pb_x - pa_x < 0) ? pa_x - pb_x : pb_x - pa_x));
+                    dv_q <= 18'd0;
+                    dv_r <= 18'd0;
+                    dv_i <= 5'd18;
+                    st   <= E_PDIV;
+                end
+
+            E_PDIV: begin                   // |dx| / dy, a bit a clock
+                dv_n <= {dv_n[16:0], 1'b0};
+                dv_r <= dv_ge ? dv_rs - 18'(p_dy) : dv_rs;
+                dv_q <= {dv_q[16:0], dv_ge};
+                dv_i <= dv_i - 5'd1;
+                if (dv_i == 5'd1) st <= E_PE1;
+            end
+
+            E_PE1: begin
+                p_e    <= p_qh - (p_adx >>> 1);
+                st     <= E_PE2;
+            end
+
+            E_PE2: begin                    // the half step in, rounded Sun's way
+                p_xadj <= (p_e <= 0) ? (p_neg ? -22'sd1 : 22'sd1) : 22'sd0;
+                p_e    <= (p_e <= 0) ? p_e + p_dy : p_e;
+                st     <= E_PE3;
+            end
+
+            E_PE3: begin                    // the edge, made
+                e_y0[pne[1:0]] <= p_ya;
+                e_y1[pne[1:0]] <= p_yb;
+                if (p_stp) begin
+                    e_x[pne[1:0]]  <= p_xa;
+                    e_er[pne[1:0]] <= -(p_dy >>> 1);
+                    e_kt[pne[1:0]] <= p_dx;
+                    e_ka[pne[1:0]] <= p_neg ? p_dy : -p_dy;
+                    e_kb[pne[1:0]] <= 22'sd0;
+                    e_xs[pne[1:0]] <= 22'sd0;
+                    e_kd[pne[1:0]] <= p_neg ? 2'd3 : 2'd2;
+                end else if (!p_neg) begin
+                    e_x[pne[1:0]]  <= p_xa + p_xadj + (p_q >>> 1);
+                    e_er[pne[1:0]] <= p_e - p_dx;
+                    e_kt[pne[1:0]] <= p_dys;
+                    e_ka[pne[1:0]] <= p_dy - p_dx;
+                    e_kb[pne[1:0]] <= -p_dx;
+                    e_xs[pne[1:0]] <= p_q;
+                    e_kd[pne[1:0]] <= 2'd0;
+                end else begin
+                    e_x[pne[1:0]]  <= p_xa + p_xadj + ((22'sd1 - p_q) >>> 1) + 22'sd1;
+                    e_er[pne[1:0]] <= p_dys - p_e + s22'({21'd0, p_dy[0]});
+                    e_kt[pne[1:0]] <= p_adx;
+                    e_ka[pne[1:0]] <= p_dys - p_dy;
+                    e_kb[pne[1:0]] <= p_dys;
+                    e_xs[pne[1:0]] <= -p_q;
+                    e_kd[pne[1:0]] <= 2'd1;
+                end
+                pymin <= lmin(pymin, p_ya);
+                pymax <= lmax(pymax, p_yb);
+                pne   <= pne + 3'd1;
+                pi    <= pi + 3'd1;
+                st    <= E_PE0;
+            end
+
+            // ---- a polygon: its rows
+            E_PROW0: begin
+                py  <= pymin;
+                psp <= 2'd0;
+                if (pne == 3'd0 || pymin >= pymax) begin
+                    last <= 1'b1;
+                    st   <= E_NEXT;
+                end else
+                    st <= E_PROW;
+            end
+
+            E_PROW: begin                   // the edges on this row, and their x
+                logic [2:0] n;
+                n = 3'd0;
+                for (int i = 0; i < 4; i++) begin
+                    logic on;
+                    on = (3'(i) < pne) && (py >= e_y0[i]) && (py < e_y1[i]);
+                    n = n + {2'd0, on};
+                    e_go[i] <= (3'(i) < pne) && (py >= e_y0[i]) && (py + 22'sd1 < e_y1[i]);
+                    case (i)
+                        0: k0 <= on ? e_x[0] : XMAX;
+                        1: k1 <= on ? e_x[1] : XMAX;
+                        2: k2 <= on ? e_x[2] : XMAX;
+                        default: k3 <= on ? e_x[3] : XMAX;
+                    endcase
+                end
+                pna <= n;
+                st  <= E_PS1;
+            end
+
+            E_PS1: begin                    // sorted: (0,1) (2,3), (0,2) (1,3), (1,2)
+                if (k0 > k1) begin k0 <= k1; k1 <= k0; end
+                if (k2 > k3) begin k2 <= k3; k3 <= k2; end
+                st <= E_PS2;
+            end
+            E_PS2: begin
+                if (k0 > k2) begin k0 <= k2; k2 <= k0; end
+                if (k1 > k3) begin k1 <= k3; k3 <= k1; end
+                st <= E_PS3;
+            end
+            E_PS3: begin
+                if (k1 > k2) begin k1 <= k2; k2 <= k1; end
+                st <= E_PNEXT;
+            end
+
+            E_PNEXT:                        // the row's spans, then the edges step
+                case (psp)
+                    2'd0: begin
+                        psp <= 2'd1;
+                        if (pna >= 3'd2 && k1 > k0) begin
+                            sp_y  <= py;
+                            sp_x0 <= k0;
+                            sp_x1 <= k1 - 22'sd1;
+                            st    <= E_SPAN;
+                        end
+                    end
+                    2'd1: begin
+                        psp <= 2'd2;
+                        if (pna == 3'd4 && k3 > k2) begin
+                            sp_y  <= py;
+                            sp_x0 <= k2;
+                            sp_x1 <= k3 - 22'sd1;
+                            st    <= E_SPAN;
+                        end
+                    end
+                    default:
+                        st <= E_PST1;
+                endcase
+
+            E_PST1: begin                   // each edge on to the next row: t, and x by its step
+                for (int i = 0; i < 4; i++) begin
+                    e_t[i] <= e_er[i] + e_kt[i];
+                    if (e_go[i]) e_x[i] <= e_x[i] + e_xs[i];
+                end
+                st <= E_PST2;
+            end
+
+            E_PST2: begin                   // ... and the correction
+                for (int i = 0; i < 4; i++)
+                    if (e_go[i]) begin
+                        logic c;
+                        case (e_kd[i])
+                            2'd0:    c = (e_t[i] <= 0);
+                            2'd3:    c = (e_t[i] + e_ka[i] <= 0);
+                            default: c = (e_t[i] > 0);
+                        endcase
+                        e_er[i] <= e_t[i] + (c ? e_ka[i] : e_kb[i]);
+                        if (c) e_x[i] <= e_x[i] + ((e_kd[i][0]) ? -22'sd1 : 22'sd1);
+                    end
+                py  <= py + 22'sd1;
+                psp <= 2'd0;
+                if (py + 22'sd1 >= pymax) begin
+                    last <= 1'b1;
+                    st   <= E_NEXT;
+                end else
+                    st <= E_PROW;
+            end
 
             default: st <= E_IDLE;
         endcase

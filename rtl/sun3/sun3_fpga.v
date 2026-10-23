@@ -166,10 +166,16 @@ module sun3_fpga(/* clock, reset */
 		 output [25:0] 	ge_word,
 		 output 	ge_req,
 		 output 	ge_we,
-		 output [31:0] 	ge_wdata,
-		 output [3:0] 	ge_sel,
+		 output [127:0] ge_wdata,
+		 output [15:0] 	ge_sel,
 		 input 		ge_done,
 		 input [127:0] 	ge_rdata,
+		 /* its cursor, for the scan-out: a row of its planes read on
+		    cg4_cm_clk, and its place (off the screen unless the GX is in) */
+		 input [4:0] 	cg6_cur_row,
+		 output [31:0] 	cg6_cur_a,
+		 output [31:0] 	cg6_cur_b,
+		 output [31:0] 	cg6_cur_xy,
 `endif
 `ifdef SUN3_TOD_LOAD
 		 /* setting the TOD chip from outside (icm7170.v), in CLK */
@@ -329,6 +335,7 @@ module sun3_fpga(/* clock, reset */
    wire 			 MATCH_CG6REG, MATCH_CG6DAC, MATCH_CG6MEM;
    wire [31:0] 			 cg6_out;
    wire 			 cg6_ack, cg6_irq, cg6_von;
+   wire [31:0] 			 cg6_cur_xy_q;
    wire 			 wb_idle;
    
    wire [31:0] 			 ethernetdma_addr_out;
@@ -1367,6 +1374,11 @@ module sun3_fpga(/* clock, reset */
        .irq       (cg6_irq),
        .retrace   (cg4_retrace),
        .video_on  (cg6_von),
+       .pclk      (cg4_cm_clk),
+       .cur_row   (cg6_cur_row),
+       .cur_a     (cg6_cur_a),
+       .cur_b     (cg6_cur_b),
+       .cur_xy    (cg6_cur_xy_q),
        .mclk      (wb_clk_i),
        .mem_idle  (wb_idle),
        .ge_word   (ge_word),
@@ -1378,6 +1390,7 @@ module sun3_fpga(/* clock, reset */
        .ge_rdata  (ge_rdata));
    // the screen is on when the board's own control says so
    assign cg4_video_on = cg6_fitted ? cg6_von : cg4_von;
+   assign cg6_cur_xy   = cg6_fitted ? cg6_cur_xy_q : 32'hFFE0FFE0;
 `else
    assign cg6_out = 32'h0;
    assign cg6_ack = 1'b0;

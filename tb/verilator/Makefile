@@ -125,7 +125,7 @@ tb_cg4:
 # P4 register, driven as SunOS's cgfour driver drives them.
 tb_vint:
 	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
-	    $@.sv $(RTL)/sun3/sun3_vint.v $(RTL)/sun3/sun3_irq_priority.v $(RTL)/sun3/sun3_cg4.sv
+	    $@.sv $(RTL)/sun3/sun3_vint.v $(RTL)/sun3/sun3_irq_priority.v $(RTL)/sun3/sun3_cg4.sv $(CG6_SRC)
 	./obj_$@/$@
 
 # The GX (sun3_cg6.sv, its engine, the Bt458 on D31:24, the SDRAM adapter's
@@ -140,7 +140,7 @@ CG6OBJ    := $(abspath obj_tb_cg6)
 CG6_N     ?= 400
 CG6_LP_N  ?= 150
 CG6_SEED  ?= 1
-CG6_KINDS := fill,copy,mem8,mem1,mem1rv,readback,putget,batchrop,stencil,polypoint
+CG6_KINDS ?=
 CG6_SRC   := $(RTL)/sun3/sun3_cg6.sv $(RTL)/sun3/sun3_cg6_engine.sv
 CG6_LP    := $(wildcard $(CG6LIB))
 tb_cg6_traces:
@@ -148,7 +148,7 @@ tb_cg6_traces:
 	$(MAKE) -C $(CG6M) B=$(CG6OBJ) $(CG6OBJ)/harness
 	$(CG6OBJ)/harness -G $(CG6OBJ)/t -n $(CG6_N) -s $(CG6_SEED)
 	$(if $(CG6_LP),$(MAKE) -C $(CG6M) B=$(CG6OBJ) LIBPIXRECT=$(abspath $(CG6LIB)) $(CG6OBJ)/lp.bin,@echo "tb_cg6: no $(CG6LIB), so no libpixrect trace")
-	$(if $(CG6_LP),$(CG6OBJ)/harness $(CG6OBJ)/lp.bin $(CG6OBJ)/lp.sym -n $(CG6_LP_N) -s $(CG6_SEED) -K $(CG6_KINDS) -t $(CG6OBJ)/t_lp.txt -I $(CG6OBJ)/t_lp.ini -F $(CG6OBJ)/t_lp.fin)
+	$(if $(CG6_LP),$(CG6OBJ)/harness $(CG6OBJ)/lp.bin $(CG6OBJ)/lp.sym -n $(CG6_LP_N) -s $(CG6_SEED) $(if $(CG6_KINDS),-K $(CG6_KINDS)) -t $(CG6OBJ)/t_lp.txt -I $(CG6OBJ)/t_lp.ini -F $(CG6OBJ)/t_lp.fin)
 tb_cg6: tb_cg6_traces
 	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
 	    $@.sv $(CG6_SRC) $(RTL)/sun3/sun3_cg4.sv $(RTL)/sun3/sun3_cg4_scanout.sv $(RTL)/sun3/video_timing.sv \

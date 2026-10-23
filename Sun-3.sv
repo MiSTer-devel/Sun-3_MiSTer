@@ -676,8 +676,8 @@ module emu
 
     wire [25:0]  ge_word;
     wire         ge_req, ge_we, ge_done;
-    wire [31:0]  ge_wdata;
-    wire [3:0]   ge_sel;
+    wire [127:0] ge_wdata;
+    wire [15:0]  ge_sel;
     wire [127:0] ge_rdata;
 
     // Only the screen being shown is fetched: the colour board's when one is
@@ -792,6 +792,8 @@ module emu
     wire        cg4_retrace, cg4_video_on;
     wire [7:0]  cg4_read_mask, cg4_command, cg4_cm_raddr;
     wire [23:0] cg4_ovl1, cg4_ovl2, cg4_ovl3, cg4_cm_rdata;
+    wire [4:0]  cg6_cur_row;                // the GX's cursor, into the scan-out
+    wire [31:0] cg6_cur_a, cg6_cur_b, cg6_cur_xy;
 
     sun3_top machine (
         .CLK           (cpu_clk),
@@ -846,6 +848,10 @@ module emu
         .ge_sel        (ge_sel),
         .ge_done       (ge_done),
         .ge_rdata      (ge_rdata),
+        .cg6_cur_row   (cg6_cur_row),
+        .cg6_cur_a     (cg6_cur_a),
+        .cg6_cur_b     (cg6_cur_b),
+        .cg6_cur_xy    (cg6_cur_xy),
 
         .blk_start     (blk_start),
         .blk_we        (blk_we),
@@ -1009,6 +1015,10 @@ module emu
         .ovl1      (cg4_ovl1),
         .ovl2      (cg4_ovl2),
         .ovl3      (cg4_ovl3),
+        .cur_xy    (cg6_cur_xy),
+        .cur_row   (cg6_cur_row),
+        .cur_a     (cg6_cur_a),
+        .cur_b     (cg6_cur_b),
         .cm_raddr  (cg4_cm_raddr),
         .cm_rdata  (cg4_cm_rdata),
         .rgb       (cg4_rgb),

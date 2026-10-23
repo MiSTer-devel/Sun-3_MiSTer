@@ -58,6 +58,8 @@ wire [127:0] cs_rdata;
 wire [7:0]   cm_raddr, read_mask, command;
 wire [23:0]  cm_rdata, ovl1, ovl2, ovl3, rgb;
 wire         retrace, video_on;
+wire [31:0]  cur_xy, cur_a, cur_b;
+wire [4:0]   cur_row;
 
 sun3_cg4_scanout scanout (
     .mclk(mclk), .mrst(srst), .enable(1'b1), .colour_only(1'b1),
@@ -65,6 +67,7 @@ sun3_cg4_scanout scanout (
     .clk_pixel(pclk), .pix_rst(prst), .cx(cx), .cy(cy),
     .video_on(video_on), .read_mask(read_mask), .command(command),
     .ovl1(ovl1), .ovl2(ovl2), .ovl3(ovl3),
+    .cur_xy(cur_xy), .cur_row(cur_row), .cur_a(cur_a), .cur_b(cur_b),
     .cm_raddr(cm_raddr), .cm_rdata(cm_rdata),
     .rgb(rgb), .retrace(retrace)
 );
@@ -79,8 +82,8 @@ wire        ack, dac_ack, irq;
 
 wire [25:0]  ge_word;
 wire         ge_req, ge_we, ge_done;
-wire [31:0]  ge_wdata;
-wire [3:0]   ge_sel;
+wire [127:0] ge_wdata;
+wire [15:0]  ge_sel;
 wire [127:0] ge_rdata;
 reg          mem_idle;
 
@@ -89,6 +92,7 @@ sun3_cg6 #(.COLOR_WORD(COLOR_WORD)) dut (
     .sel_fhc(sel_fhc), .sel_thc(sel_thc), .sel_fbc(sel_fbc), .sel_tec(sel_tec), .sel_nul(sel_nul),
     .rw_n(rw_n), .adr(adr), .wdata(wdata), .rdata(rdata), .ack(ack), .irq(irq),
     .retrace(retrace), .video_on(video_on),
+    .pclk(pclk), .cur_row(cur_row), .cur_a(cur_a), .cur_b(cur_b), .cur_xy(cur_xy),
     .mclk(mclk), .mem_idle(mem_idle),
     .ge_word(ge_word), .ge_req(ge_req), .ge_we(ge_we), .ge_wdata(ge_wdata), .ge_sel(ge_sel),
     .ge_done(ge_done), .ge_rdata(ge_rdata)
@@ -182,13 +186,21 @@ always @(posedge mclk) begin
 end
 
 // ---- results -----------------------------------------------------------------
+// +failfast (mutate_cg6.sh): the first failure ends the run
 integer passes = 0, fails = 0;
+bit failfast = 0;
+initial failfast = $test$plusargs("failfast");
 task check(input bit ok, input string what);
     begin
         if (ok) passes = passes + 1;
         else begin
             fails = fails + 1;
             $display("FAIL  %s", what);
+            if (failfast) begin
+                $display("tb_cg6: %0d checks, %0d failed", passes + fails, fails);
+                $display("FAIL");
+                $finish;
+            end
         end
     end
 endtask
@@ -265,13 +277,20 @@ task automatic wait_idle;
     do rd32(24'h700010, q); while (q[28]);
 endtask
 
-// The registers stage 1 keeps, whose reads are compared with the model's.
+// The registers that are kept, whose reads are compared with the model's:
+// all but the THC's misc (its vsync is the raster's) and what neither keeps.
 function automatic bit kept(input [23:0] off);
     bit [11:0] o;
     o = off[11:0];
     if (off[23:12] == 12'h300) return o == 12'h000;
+    if (off[23:12] == 12'h301)                                      // the THC: timing, cursor
+        return (o >= 12'h800 && o <= 12'h814) || o == 12'h8FC || (o >= 12'h900 && o < 12'hA00);
+    if (off[23:12] == 12'h701)                                      // the TEC
+        return o < 12'h200 || (o >= 12'h800 && o < 12'hE00);
     if (off[23:12] != 12'h700) return 0;
-    if (o >= 12'h080 && o < 12'h0C0) return o[3:2] < 2'd2;          // x and y, not z and colour
+    if (o >= 12'h080 && o < 12'h0C0) return 1;                      // x, y, z, colour
+    if (o >= 12'h120 && o < 12'h140) return 1;                      // the pattern
+    if (o >= 12'h800 && o < 12'h940) return 1;                      // the indexed registers
     case (o)
         12'h000, 12'h004, 12'h008, 12'h01C, 12'h0C0, 12'h0C4, 12'h0D0, 12'h0D4,
         12'h0E0, 12'h0E4, 12'h0F0, 12'h0F4, 12'h100, 12'h104, 12'h108, 12'h10C,
@@ -462,9 +481,25 @@ int  frame_bad = 0, frame_px = 0;
 bit  frame_chk = 0;
 reg  [23:0] exp_d [0:3];
 reg  [3:0]  chk_d = 0, de_d = 0;
+// the cursor as the bench wrote it (sh_cur*), shown in overlay colours
+// {B, A} gated by the command register's overlay enables
+bit [31:0] sh_cura [0:31], sh_curb [0:31];
+bit [31:0] sh_curxy = 32'h0;
+initial for (int i = 0; i < 32; i++) begin sh_cura[i] = 0; sh_curb[i] = 0; end
 function automatic [23:0] expect_px(input [11:0] x, input [10:0] y);
+    int fx, fy, dx, dy;
+    bit [1:0] o;
     if (!(x >= 4 && x < 1156 && y >= 2 && y < 902) || !video_on) return 24'h0;
-    return sh_cmap[fb_peek((int'(y) - 2) * FBW + int'(x) - 4) & read_mask];
+    fx = int'(x) - 4; fy = int'(y) - 2;
+    dx = fx - int'($signed(sh_curxy[31:16]));
+    dy = fy - int'($signed(sh_curxy[15:0]));
+    if (dx >= 0 && dx < 32 && dy >= 0 && dy < 32) begin
+        o = {sh_curb[dy][31 - dx] & command[1], sh_cura[dy][31 - dx] & command[0]};
+        if (o == 2'd1) return ovl1;
+        if (o == 2'd2) return ovl2;
+        if (o == 2'd3) return ovl3;
+    end
+    return sh_cmap[fb_peek(fy * FBW + fx) & read_mask];
 endfunction
 always @(posedge pclk) begin
     exp_d[0] <= frame_chk ? expect_px(cx, cy) : 24'h0;
@@ -681,6 +716,32 @@ initial begin
     wr32(24'h700904, 500); wr32(24'h700900, 900);
     rd32(24'h700014, q);
     wait_idle();
+    // the cursor, as the kernel's cg6_setcurshape loads it: A the mask, B the
+    // image and the mask; at (290, 480), across the rectangle's corner, with
+    // the overlay colours the retrace interrupt loads (1 and 3) and 2 too
+    for (int r = 0; r < 32; r++) begin
+        bit [31:0] m, im;
+        m  = (r > 29) ? 32'h0 : 32'h7FFFFFFE ^ (32'h1 << r);
+        im = {r[3:0], 4'hA, r[4:0], 3'b101, 8'h5C, 8'(r * 37)};
+        sh_cura[r] = m; sh_curb[r] = im & m;
+        if (r == 5) sh_curb[r] = 32'hF0F0F0F0;          // B alone: overlay colour 2
+        wr32(24'h301900 + 24'(4 * r), sh_cura[r]);
+        wr32(24'h301980 + 24'(4 * r), sh_curb[r]);
+    end
+    wr32(24'h200000, 32'h01000000);
+    wr32(24'h20000C, 32'h11000000); wr32(24'h20000C, 32'h22000000); wr32(24'h20000C, 32'h33000000);
+    wr32(24'h20000C, 32'h44000000); wr32(24'h20000C, 32'h55000000); wr32(24'h20000C, 32'h66000000);
+    wr32(24'h20000C, 32'h77000000); wr32(24'h20000C, 32'h88000000); wr32(24'h20000C, 32'h99000000);
+    wr32(24'h200000, 32'h06060606); wr32(24'h200008, 32'h43434343);     // overlays on
+    sh_curxy = {16'd290, 16'd480};
+    wr32(24'h3018FC, sh_curxy);
+    rd32(24'h3018FC, q);
+    check(q == sh_curxy, $sformatf("the cursor's place reads back: %08x", q));
+    rd32(24'h301904 + 24'(4 * 7), q);
+    check(q == sh_cura[8], $sformatf("cursor plane A's row 8 reads back: %08x", q));
+    rd32(24'h301980 + 24'(4 * 9), q);
+    check(q == sh_curb[9], $sformatf("cursor plane B's row 9 reads back: %08x", q));
+    check(ovl1 == 24'h112233 && ovl3 == 24'h778899 && command == 8'h43, "the overlay colours and enables");
     next_vblank();
     next_vblank();                              // the lines fetched after the fill
     frame_chk = 1;
@@ -688,7 +749,31 @@ initial begin
     frame_chk = 0;
     repeat (8) @(posedge pclk);
     check(frame_px == 1160 * 904 && frame_bad == 0,
-          $sformatf("the scan-out: %0d of %0d pixels wrong", frame_bad, frame_px));
+          $sformatf("the scan-out with the cursor: %0d of %0d pixels wrong", frame_bad, frame_px));
+    // ... and the cursor at the screen's top left, partly off it, and with
+    // only OL0 enabled; then hidden as the kernel hides it
+    sh_curxy = {-16'sd7, -16'sd11};
+    wr32(24'h3018FC, sh_curxy);
+    wr32(24'h200000, 32'h06060606); wr32(24'h200008, 32'h41414141);
+    frame_bad = 0; frame_px = 0;
+    next_vblank();
+    frame_chk = 1;
+    next_vblank();
+    frame_chk = 0;
+    repeat (8) @(posedge pclk);
+    check(frame_px == 1160 * 904 && frame_bad == 0,
+          $sformatf("the cursor partly off the screen, OL0 alone: %0d of %0d pixels wrong", frame_bad, frame_px));
+    sh_curxy = 32'hFFE0FFE0;
+    wr32(24'h3018FC, sh_curxy);
+    wr32(24'h200000, 32'h06060606); wr32(24'h200008, 32'h43434343);
+    frame_bad = 0; frame_px = 0;
+    next_vblank();
+    frame_chk = 1;
+    next_vblank();
+    frame_chk = 0;
+    repeat (8) @(posedge pclk);
+    check(frame_px == 1160 * 904 && frame_bad == 0,
+          $sformatf("the cursor hidden at (-32, -32): %0d of %0d pixels wrong", frame_bad, frame_px));
 
     check(chip.errors == 0, $sformatf("the SDRAM chip model: %0d protocol errors", chip.errors));
     $display("tb_cg6: %0d CPU clocks in register cycles that waited for the engine", cycles_held);

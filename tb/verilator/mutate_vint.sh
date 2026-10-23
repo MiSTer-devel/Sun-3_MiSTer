@@ -17,7 +17,7 @@ run() {
   rm -rf $W/obj
   verilator --binary --timing -I$RTL/sun3 -Wno-fatal -Wno-WIDTH -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC -Wno-UNSIGNED -Wno-CMPCONST \
     -Wno-DECLFILENAME -Wno-UNUSED -Wno-PINCONNECTEMPTY --top-module tb_vint \
-    --Mdir $W/obj -o tb tb_vint.sv $W/vint.v $RTL/sun3/sun3_irq_priority.v $RTL/sun3/sun3_cg4.sv >$W/build.log 2>&1 \
+    --Mdir $W/obj -o tb tb_vint.sv $W/vint.v $RTL/sun3/sun3_irq_priority.v $RTL/sun3/sun3_cg4.sv $RTL/sun3/sun3_cg6.sv $RTL/sun3/sun3_cg6_engine.sv >$W/build.log 2>&1 \
     || { echo "$name: BUILD FAILED"; return; }
   out=$($W/obj/tb 2>&1)
   summary=$(echo "$out" | grep -E "^tb_vint: [0-9]+ checks|timeout")
