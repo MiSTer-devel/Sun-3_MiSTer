@@ -113,6 +113,19 @@ module sun3_fpga(/* clock, reset */
 		 input [8:0] 	blk1_buf_addr,
 		 input [7:0] 	blk1_buf_wdata,
 `endif
+`ifdef SUN3_CDROM
+		 /* the CD-ROM's block seam (sr0, target 6, sun3_cdrom.sv) */
+		 output 	cblk_start,
+		 output [31:0] 	cblk_lba,
+		 input 		cblk_done,
+		 input 		cblk_err,
+		 input 		cblk_ready,
+		 input [31:0] 	cblk_count,
+		 input 		cblk_buf_we,
+		 input [8:0] 	cblk_buf_addr,
+		 input [7:0] 	cblk_buf_wdata,
+		 input 		cd_changed,
+`endif
 		 /* video irq */
 		 input 		V_INT,
 		 /* leds, debug */
@@ -1546,6 +1559,18 @@ module sun3_fpga(/* clock, reset */
        .blk1_buf_we    (blk1_buf_we),
        .blk1_buf_addr  (blk1_buf_addr),
        .blk1_buf_wdata (blk1_buf_wdata),
+`endif
+`ifdef SUN3_CDROM
+       .cblk_start     (cblk_start),
+       .cblk_lba       (cblk_lba),
+       .cblk_done      (cblk_done),
+       .cblk_err       (cblk_err),
+       .cblk_ready     (cblk_ready),
+       .cblk_count     (cblk_count),
+       .cblk_buf_we    (cblk_buf_we),
+       .cblk_buf_addr  (cblk_buf_addr),
+       .cblk_buf_wdata (cblk_buf_wdata),
+       .cd_changed     (cd_changed),
 `endif
        .dma_active    ()
    );

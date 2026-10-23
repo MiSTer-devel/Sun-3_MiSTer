@@ -11,8 +11,9 @@
 //  Built so far (docs/design-plan.md): Phases 1 to 5 -- the PROM, its
 //  console with MiSTer's keyboard and mouse as a Sun Type 3 and a Sun-3
 //  mouse, the keyboard's bell, the TOD chip set from MiSTer's clock, two SCSI
-//  disks and the tape, the EEPROM kept in a file, the cg4 (docs/cg4.md) and
-//  the LANCE on Main_MiSTer's network mailbox; and Phase 6's CPU clock.
+//  disks, the tape and a CD-ROM, the EEPROM kept in a file, the cg4
+//  (docs/cg4.md) and the LANCE on Main_MiSTer's network mailbox; and Phase
+//  6's CPU clock.
 //
 //  Clocks (rtl/pll.v, rtl/pll_serial.v)
 //    clk_mem   100.000 MHz  SDRAM, the memory side of the Wishbone bridge, hps_io,
@@ -85,10 +86,12 @@ module emu
     //
     // v,1: Aspect ratio's third value was 4:3 and is [ARC1] now.
     //
-    // The disks and the EEPROM are SC: Main remembers the image last chosen
-    // and mounts it again whenever the core starts, so the PROM finds its
-    // settings and the disk, and auto-boots.  Load ROM is F0, boot0.rom's
-    // index: another PROM for this session, and a reset.
+    // The disks, the CD-ROM and the EEPROM are SC: Main remembers the image
+    // last chosen and mounts it again whenever the core starts, so the PROM
+    // finds its settings and the disk, and auto-boots.  The CD-ROM is a flat
+    // image of 2048-byte sectors (.iso), which Main serves through the generic
+    // block path.  Load ROM is F0, boot0.rom's index: another PROM for this
+    // session, and a reset.
     `include "build_id.v"
     localparam CONF_STR = {
         "Sun-3;UART9600;",
@@ -97,6 +100,7 @@ module emu
         "SC1,IMGVHD,Disk (ID 1);",
         "S2,QIC,Tape (ID 4);",
         "O[4:3],Tape volume,1,2,3;",
+        "SC4,ISO,CD-ROM (ID 6);",
         "F0,ROM,Load ROM;",
         "-;",
         "O[11:9],Network interface,eth0,None,eth1,macvlan,tap0;",
@@ -186,14 +190,15 @@ module emu
     wire [24:0] ps2_mouse;
     wire [64:0] rtc;
 
-    // The virtual drives: VD 0 and 1 the disks, VD 2 the tape, VD 3 the EEPROM.
-    wire [31:0] sd_lba[4];
-    wire [3:0]  sd_rd, sd_wr, sd_ack;
+    // The virtual drives: VD 0 and 1 the disks, VD 2 the tape, VD 3 the
+    // EEPROM, VD 4 the CD-ROM.
+    wire [31:0] sd_lba[5];
+    wire [4:0]  sd_rd, sd_wr, sd_ack;
     wire [13:0] sd_buff_addr;
     wire [7:0]  sd_buff_dout;
-    wire [7:0]  sd_buff_din[4];
+    wire [7:0]  sd_buff_din[5];
     wire        sd_buff_wr;
-    wire [3:0]  img_mounted;
+    wire [4:0]  img_mounted;
     wire        img_readonly;
     wire [63:0] img_size;
 
@@ -203,7 +208,7 @@ module emu
     wire [26:0] ioctl_addr;
     wire [7:0]  ioctl_dout;
 
-    hps_io #(.CONF_STR(CONF_STR), .VDNUM(4)) hps_io (
+    hps_io #(.CONF_STR(CONF_STR), .VDNUM(5)) hps_io (
         .clk_sys        (clk_mem),
         .HPS_BUS        (HPS_BUS),
         .EXT_BUS        (),
@@ -606,6 +611,43 @@ module emu
         if (tvol_s2 == tvol_s1) tape_volume <= tvol_s2;
     end
 
+    // ---- the CD-ROM --------------------------------------------------------------------------
+    // sr0, SCSI target 6, on VD 4, read only (rtl/sun3/sun3_cdrom.sv): an
+    // .iso, read in 512-byte blocks until the machine asks for 2048.
+    wire        cblk_start, cblk_done, cblk_err, cblk_ready, cblk_buf_we, cblk_busy, cd_changed;
+    wire [31:0] cblk_lba, cblk_count;
+    wire [7:0]  cblk_buf_wdata;
+    wire [8:0]  cblk_buf_addr;
+
+    sun3_mister_block cdrom (
+        .clk           (cpu_clk),
+        .blk_start     (cblk_start),
+        .blk_we        (1'b0),
+        .blk_lba       (cblk_lba),
+        .blk_buf_rdata (8'h00),
+        .blk_done      (cblk_done),
+        .blk_err       (cblk_err),
+        .blk_ready     (cblk_ready),
+        .blk_count     (cblk_count),
+        .blk_buf_we    (cblk_buf_we),
+        .blk_buf_addr  (cblk_buf_addr),
+        .blk_buf_wdata (cblk_buf_wdata),
+        .busy          (cblk_busy),
+        .changed       (cd_changed),
+
+        .clk_hps       (clk_mem),
+        .sd_lba        (sd_lba[4]),
+        .sd_rd         (sd_rd[4]),
+        .sd_wr         (sd_wr[4]),
+        .sd_ack        (sd_ack[4]),
+        .sd_buff_addr  (sd_buff_addr[8:0]),
+        .sd_buff_dout  (sd_buff_dout),
+        .sd_buff_din   (sd_buff_din[4]),
+        .sd_buff_wr    (sd_buff_wr),
+        .img_mounted   (img_mounted[4]),
+        .img_size      (img_size)
+    );
+
     // ---- memory -------------------------------------------------------------------------
     wire         wb_cyc, wb_stb, wb_we, wb_ack;
     wire [29:0]  wb_adr;
@@ -805,6 +847,17 @@ module emu
         .blk1_buf_addr  (blk1_buf_addr),
         .blk1_buf_wdata (blk1_buf_wdata),
 
+        .cblk_start     (cblk_start),
+        .cblk_lba       (cblk_lba),
+        .cblk_done      (cblk_done),
+        .cblk_err       (cblk_err),
+        .cblk_ready     (cblk_ready),
+        .cblk_count     (cblk_count),
+        .cblk_buf_we    (cblk_buf_we),
+        .cblk_buf_addr  (cblk_buf_addr),
+        .cblk_buf_wdata (cblk_buf_wdata),
+        .cd_changed     (cd_changed),
+
         .V_INT         (v_int),
 
         .leds          (diag_leds),
@@ -968,8 +1021,8 @@ module emu
 
     // ---- LEDs ---------------------------------------------------------------------------
     // User: the machine is in reset (no PROM yet, or the OSD's reset).
-    // Disk: a disk or the tape is moving a block, ORed with the HPS's own activity.
+    // Disk: a disk, the tape or the CD is moving a block, ORed with the HPS's own activity.
     assign LED_USER = reset_cpu;
-    assign LED_DISK = {1'b0, blk_busy | blk1_busy | tblk_busy};
+    assign LED_DISK = {1'b0, blk_busy | blk1_busy | tblk_busy | cblk_busy};
 
 endmodule

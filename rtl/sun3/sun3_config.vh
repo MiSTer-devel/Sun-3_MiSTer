@@ -58,6 +58,9 @@
 //                        (sun3_mt02.sv), with its own block seam
 //   SUN3_SD1             a second disk at SCSI target 1 (Wish5380's
 //                        scsi_targ; SunOS's sd2), with its own block seam
+//   SUN3_CDROM           sr0, a CD-ROM drive at SCSI target 6
+//                        (sun3_cdrom.sv), read only, 512-byte blocks until
+//                        MODE SELECT asks for 2048, with its own block seam
 //   SUN3_CG4             a P4 cg4 colour board, fitted while the cg4_present
 //                        input says so (sun3_cg4.sv, docs/cg4.md)
 //

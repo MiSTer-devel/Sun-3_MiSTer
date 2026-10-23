@@ -86,8 +86,9 @@ set_global_assignment -name SEED 2
 #     Main_MiSTer sends it on ioctl index 0 at start-up
 #   the ID PROM may be overwritten from boot1.rom (ioctl index 64)
 #   the on-board SCSI: sd0 and sd1 (SUN3_SD1) on MiSTer disk images, st0 an
-#     Emulex MT-02 QIC tape on a .qic image (SUN3_TAPE); the bw2 on HDMI, the
-#     console: the EEPROM names the screen and keyboard (SUN3_FB_CONSOLE)
+#     Emulex MT-02 QIC tape on a .qic image (SUN3_TAPE), sr0 a CD-ROM at
+#     target 6 on an .iso (SUN3_CDROM); the bw2 on HDMI, the console: the
+#     EEPROM names the screen and keyboard (SUN3_FB_CONSOLE)
 #   the TOD chip set from MiSTer's clock (SUN3_TOD_LOAD)
 #   the EEPROM kept in an image file on the OSD's EEPROM slot (SUN3_EEPROM_SAVE)
 #   no bus trace (8 block RAMs; a bench aid on the Wukong and the DECA)
@@ -105,6 +106,7 @@ set_global_assignment -name VERILOG_MACRO "SUN3_ETH_WISH7990=1"
 set_global_assignment -name VERILOG_MACRO "SUN3_SCSI=1"
 set_global_assignment -name VERILOG_MACRO "SUN3_TAPE=1"
 set_global_assignment -name VERILOG_MACRO "SUN3_SD1=1"
+set_global_assignment -name VERILOG_MACRO "SUN3_CDROM=1"
 set_global_assignment -name VERILOG_MACRO "SUN3_CG4=1"
 set_global_assignment -name VERILOG_MACRO "SUN3_FB_CONSOLE=1"
 set_global_assignment -name VERILOG_MACRO "SUN3_TOD_LOAD=1"

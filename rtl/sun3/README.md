@@ -64,6 +64,20 @@ both ways.
   what limited large disk transfers. The counters end as they did, which
   `tb/verilator/tb_si.sv` checks against the old engine, kept there as
   `sun3_si_ref.sv`.
+  A CD-ROM, sr0 at target 6 (`SUN3_CDROM`, the new `sun3_cdrom.sv`), with
+  its own block seam, read only. The fabric has four ports, so the CD's
+  drive is ORed with the second disk's on the fourth: the bus is a wired-OR
+  either way.
+* **`sun3_cdrom.sv`** (new): the CD-ROM drive. Its bus side, handshake and
+  two-bank read-ahead are Wish5380's `scsi_targ`, read only; the rest is a
+  SONY CDU-8012 as SunOS 4.1's sr driver and the PROM's disk driver use it:
+  512-byte blocks after a reset (Sun's CD drives; SunOS's `srdef.h` is built
+  `FIVETWELVE`, and the PROM boots a CD with its disk driver, `b sd(0,30,N)`
+  on Rev 3.0.1), 2048 after a MODE SELECT asks for them, INQUIRY type 5 and
+  removable, READ CAPACITY, MODE SENSE pages 01 and 0E, READ TOC (one data
+  track), READ SUB-CHANNEL, NOT READY / 3A with no disc, and UNIT ATTENTION
+  / 28 once when a disc goes in while the machine runs.
+  `tb/verilator/tb_cdrom.sv` and `mutate_cdrom.sh` test it.
 * **`sun3_mt02.sv`** (from Sun-2_MiSTer `816c187`): a READ that meets a file
   mark or blank tape before its first block answers STATUS after 5 ms of
   "tape motion". The PROM's si driver sets the 5380's DMA mode only after
@@ -92,7 +106,9 @@ both ways.
     Sun-3_FPGA had its bytes swapped. Neither the 1.9 nor the 3.0.1 PROM
     reads it;
   * in simulation, `+eeprom_boot=st` makes the boot device the tape, so
-    `tb_emu` auto-boots from it without typing at the PROM.
+    `tb_emu` auto-boots from it without typing at the PROM;
+    `+eeprom_boot_unit=` and `+eeprom_boot_part=` (hex) set its unit and
+    partition, e.g. `sd`, `30`, `1` for the CD-ROM under Rev 3.0.1.
 * **`sun3_attr.vh`**: `SUN3_QUARTUS` asks for `M10K`, the Cyclone V's block,
   not the MAX 10's `M9K`. `SUN3_RAM_BLOCK_NORW` adds `no_rw_check`, for a RAM
   written from two clocks.

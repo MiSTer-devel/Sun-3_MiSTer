@@ -93,6 +93,19 @@ module sun3_top(/* clock, reset */
 	   input wire [8:0]  blk1_buf_addr,
 	   input wire [7:0]  blk1_buf_wdata,
 `endif
+`ifdef SUN3_CDROM
+	   /* the CD-ROM's block seam (sr0, target 6, sun3_cdrom.sv) */
+	   output wire 	     cblk_start,
+	   output wire [31:0] cblk_lba,
+	   input wire 	     cblk_done,
+	   input wire 	     cblk_err,
+	   input wire 	     cblk_ready,
+	   input wire [31:0] cblk_count,
+	   input wire 	     cblk_buf_we,
+	   input wire [8:0]  cblk_buf_addr,
+	   input wire [7:0]  cblk_buf_wdata,
+	   input wire 	     cd_changed,
+`endif
 	   /* video irq */
 	   input wire 	     V_INT,
 	   /* leds, debug */
@@ -308,6 +321,18 @@ module sun3_top(/* clock, reset */
 		  .blk1_buf_we(blk1_buf_we),
 		  .blk1_buf_addr(blk1_buf_addr),
 		  .blk1_buf_wdata(blk1_buf_wdata),
+`endif
+`ifdef SUN3_CDROM
+		  .cblk_start(cblk_start),
+		  .cblk_lba(cblk_lba),
+		  .cblk_done(cblk_done),
+		  .cblk_err(cblk_err),
+		  .cblk_ready(cblk_ready),
+		  .cblk_count(cblk_count),
+		  .cblk_buf_we(cblk_buf_we),
+		  .cblk_buf_addr(cblk_buf_addr),
+		  .cblk_buf_wdata(cblk_buf_wdata),
+		  .cd_changed(cd_changed),
 `endif
 		  .V_INT(V_INT),
 
