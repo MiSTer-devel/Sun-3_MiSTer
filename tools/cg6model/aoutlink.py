@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Link SunOS SPARC a.out objects into one flat image for the cg6model harness.
+Link SunOS SPARC or 68020 a.out objects into one flat image for the cg6model
+harness.
 
 The harness runs Sun's own libpixrect object code in a SPARC interpreter
 (sparc.c), so that the board model is driven by exactly the register writes
@@ -9,14 +10,15 @@ a set of root symbols needs out of an ar archive, lays text, data, bss and
 commons out from a base address, relocates them, and turns every symbol
 still undefined into a stub the harness serves in C (malloc, bzero, .mul,
 pr_makefromfd, ...).  The Sun-2 core's tools/cg2model/aoutlink.py is the
-68010 original of this.
+68010 original of this; a 68k object (machine 1 or 2) is linked as it does.
 
   aoutlink.py -o OUT --base 0x10000 --lib libpixrect.a --root _cg6_rop ...
       [--stub _gp1_sync ...]
 
 writes OUT.bin (the image, loaded at --base) and OUT.sym, one line per
 global: `ADDR NAME' for definitions and `ADDR NAME stub' for stubs.  A stub
-is `unimp 0; nop'; the harness's unimp hook knows its address.
+is `unimp 0; nop' on SPARC, `illegal; rts' on a 68k; the harness's unimp or
+illegal-instruction hook knows its address.
 
 The format.  A SunOS 4 SPARC object is a.out: a 32-byte header (dynamic
 and toolversion byte, machine 3, magic 0407, then text, data, bss, syms,
@@ -29,6 +31,12 @@ itself holds nothing: the value is the symbol (or, not extern, the segment
 data at a_text and bss at a_text + a_data) plus the addend.  For the
 PC-relative types the addend is already less the field's offset in its
 segment, so the displacement is value - (the segment's new base).
+
+A 68k object's header has machine 1 (68010) or 2 (68020), and its
+relocations are 8 bytes: the address, then 24 bits of symbol number, pcrel,
+a 2-bit length (0 byte, 1 word, 2 long) and extern, high bit first.  The
+field holds the addend: an address in the object's frame for a segment
+relocation, an offset for an extern one.
 """
 import argparse, struct, sys
 
@@ -55,15 +63,17 @@ class Obj:
     def __init__(self, name, d):
         self.name = name
         mid, magic = d[1], struct.unpack('>H', d[2:4])[0]
-        if mid != 3 or magic != 0o407:
-            raise SystemExit(f'{name}: not a SPARC OMAGIC object')
+        if mid not in (1, 2, 3) or magic != 0o407:
+            raise SystemExit(f'{name}: not a SPARC or 68k OMAGIC object')
+        self.m68k = mid != 3
         text, dat, bss, syms, entry, trsize, drsize = struct.unpack('>7I', d[4:32])
         p = 32
         self.text = bytearray(d[p:p + text]); p += text
         self.data = bytearray(d[p:p + dat]); p += dat
         self.bss = bss
-        self.trel = self._rel(d[p:p + trsize]); p += trsize
-        self.drel = self._rel(d[p:p + drsize]); p += drsize
+        rel = self._rel68k if self.m68k else self._rel
+        self.trel = rel(d[p:p + trsize]); p += trsize
+        self.drel = rel(d[p:p + drsize]); p += drsize
         stroff = p + syms
         self.syms = []
         for i in range(syms // 12):
@@ -85,6 +95,14 @@ class Obj:
             out.append((addr, info >> 8, info >> 7 & 1, info & 31, addend))
         return out
 
+    @staticmethod
+    def _rel68k(b):
+        out = []
+        for i in range(len(b) // 8):
+            addr, w = struct.unpack('>II', b[8 * i:8 * i + 8])
+            out.append((addr, w >> 8, w >> 4 & 1, (w >> 7 & 1, w >> 5 & 3), 0))
+        return out
+
     def frame(self, a):
         """an address in the object's own frame, moved to where it lands"""
         if a < len(self.text):
@@ -92,6 +110,30 @@ class Obj:
         if a < len(self.text) + len(self.data):
             return self.dbase + a - len(self.text)
         return self.bbase + a - len(self.text) - len(self.data)
+
+
+def relocate68k(o, body, raddr, sym, ext, typ, gsym):
+    pcrel, length = typ
+    if pcrel:
+        # Sun's cc emits none for these libraries; refuse rather than
+        # guess at the convention
+        raise SystemExit(f'{o.name}: pc-relative relocation')
+    fmt = {0: '>b', 1: '>h', 2: '>i'}[length]
+    size = 1 << length
+    old = struct.unpack(fmt, body[raddr:raddr + size])[0]
+    if ext:
+        new = old + gsym[o.syms[sym][0]]
+    elif sym == N_TEXT:
+        new = old + o.tbase
+    elif sym == N_DATA:
+        new = old - len(o.text) + o.dbase
+    elif sym == N_BSS:
+        new = old - len(o.text) - len(o.data) + o.bbase
+    elif sym == N_ABS:
+        new = old
+    else:
+        raise SystemExit(f'{o.name}: relocation to segment {sym}')
+    body[raddr:raddr + size] = (new & ((1 << (8 * size)) - 1)).to_bytes(size, 'big')
 
 
 def main():
@@ -111,6 +153,10 @@ def main():
     for path in a.lib:
         lib += [Obj(n, b) for n, b in parse_ar(open(path, 'rb').read())]
     provider = {}
+    kinds = {o.m68k for o in objs + lib}
+    if len(kinds) != 1:
+        raise SystemExit('SPARC and 68k objects mixed')
+    m68k = kinds.pop()
     for o in lib:
         for s in o.defs:
             provider.setdefault(s, o)
@@ -174,6 +220,9 @@ def main():
         for base, body, rels in ((o.tbase, o.text, o.trel), (o.dbase, o.data, o.drel)):
             body = bytearray(body)
             for raddr, sym, ext, typ, addend in rels:
+                if m68k:
+                    relocate68k(o, body, raddr, sym, ext, typ, gsym)
+                    continue
                 if ext:
                     v = gsym[o.syms[sym][0]] + addend
                 elif sym in (N_TEXT, N_DATA, N_BSS):
@@ -209,7 +258,8 @@ def main():
                 body[raddr:raddr + 4] = struct.pack('>I', w & 0xffffffff)
             image[base - a.base:base - a.base + len(body)] = body
     for n, ad in stubs.items():
-        image[ad - a.base:ad - a.base + 8] = b'\0\0\0\0\x01\0\0\0'
+        image[ad - a.base:ad - a.base + 8] = \
+            b'\x4a\xfc\x4e\x75\0\0\0\0' if m68k else b'\0\0\0\0\x01\0\0\0'
 
     open(a.o + '.bin', 'wb').write(image)
     with open(a.o + '.sym', 'w', newline='\n') as f:
