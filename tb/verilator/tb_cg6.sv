@@ -668,6 +668,30 @@ initial begin
         check(nb == 0, $sformatf("a relative vertex: %0d pixels wrong", nb));
     end
 
+    // ---- the TEC's data registers, as cg6_cntxsave and cg6_cntxrestore
+    // use them: 64 with VDC 0x8000, 64 with 0xA000, read back in both; and
+    // with VDC's type 0 (integer) the first bank's
+    begin
+        int nb = 0;
+        wr32(24'h701008, 32'h00008000);
+        for (int i = 0; i < 64; i++) wr32(24'h701100 + 24'(4 * i), 32'h11110000 + i);
+        wr32(24'h701008, 32'h0000A000);
+        for (int i = 0; i < 64; i++) wr32(24'h701100 + 24'(4 * i), 32'h22220000 + i);
+        wr32(24'h701008, 32'h00008000);
+        for (int i = 0; i < 64; i++) begin rd32(24'h701100 + 24'(4 * i), q); nb += (q != 32'h11110000 + i); end
+        wr32(24'h701008, 32'h0000A000);
+        for (int i = 0; i < 64; i++) begin rd32(24'h701100 + 24'(4 * i), q); nb += (q != 32'h22220000 + i); end
+        wr32(24'h701008, 32'h00000000);
+        wr32(24'h701100, 32'h33330000);
+        wr32(24'h701008, 32'h00008000);
+        rd32(24'h701100, q); nb += (q != 32'h33330000);
+        wr32(24'h701008, 32'h0000A000);
+        rd32(24'h701100, q); nb += (q != 32'h22220000);
+        rd32(24'h701008, q); nb += (q != 32'h0000A000);
+        check(nb == 0, $sformatf("the TEC's data registers in two banks by VDC: %0d reads wrong", nb));
+        wr32(24'h701008, 32'h0);
+    end
+
     // ---- a font row longer than the word: 32 pixels of colour1, 4 of colour8
     wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h66);
     wr32(24'h7000D0, 0); wr32(24'h7000D4, 1);

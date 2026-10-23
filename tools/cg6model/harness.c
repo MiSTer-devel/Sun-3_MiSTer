@@ -1542,6 +1542,41 @@ static void g_poly(void)
 		g_wait();
 }
 
+/* quadrilaterals that random ones on the screen seldom are: rows that
+   cross four edges (bow ties, arrowheads), edges at 45 degrees, and
+   slivers whose edges' set-up error is 0; every way round */
+static void g_poly4(void)
+{
+	int32_t cx = 40 + rn(CG6_W - 80), cy = 40 + rn(CG6_H - 80), sx = 3 + rn(rn(3) ? 40 : 300), sy = 3 + rn(rn(3) ? 40 : 300);
+	int32_t vx[4], vy[4];
+	int sw = rn(2), k = rn(4), kind = rn(3);
+
+	if (rn(3) == 0)
+		sy = sx;	/* edges at 45 degrees */
+	if (kind == 2) {	/* a sliver: shallow edges whose dx is an even multiple of dy */
+		sy = 1 + rn(4);
+		sx = sy * 2 * (1 + rn(12)) + (rn(4) == 0);
+		vx[0] = cx; vy[0] = cy; vx[1] = cx + sx; vy[1] = cy + sy;
+		vx[2] = cx + sx + 1 + rn(3); vy[2] = cy + sy; vx[3] = cx + 1 + rn(3); vy[3] = cy;
+	} else if (kind == 1) {	/* a bow tie */
+		vx[0] = cx - sx; vy[0] = cy - sy; vx[1] = cx + sx; vy[1] = cy + sy;
+		vx[2] = cx + sx; vy[2] = cy - sy; vx[3] = cx - sx; vy[3] = cy + sy;
+	} else {		/* an arrowhead */
+		vx[0] = cx - sx; vy[0] = cy - sy; vx[1] = cx + rn(sx) - sx / 2; vy[1] = cy - rn(sy);
+		vx[2] = cx + sx; vy[2] = cy - sy; vx[3] = cx; vy[3] = cy + sy;
+	}
+	g_state();
+	g_near();
+	for (int i = 0; i < 4; i++) {
+		int j = (i + k) & 3;
+		int32_t x = sw ? 2 * cx - vx[j] : vx[j], y = sw ? vy[j] : 2 * cy - vy[j];
+		g_vertex(i == 0 && rn(2) ? 0 : 3, x, y);
+	}
+	g_go(FBC_DRAWSTATUS);
+	if (rn(4))
+		g_wait();
+}
+
 static void g_font(void)
 {
 	int c8 = rn(3) == 0, k = 1 + rn(c8 ? 8 : 24);
@@ -1717,6 +1752,8 @@ static void gen_run(long n)
 		default: g_regs(); break;
 		}
 	}
+	for (long i = 0; i < n / 10; i++)	/* (after the rest: their traces stay as they were) */
+		g_poly4();
 	g_wait();
 	gen_close();
 	printf("-G: %ld tests; engine: %lu points %lu lines %lu tris %lu quads %lu rects %lu blits %lu font, %lu pixels\n", n,
