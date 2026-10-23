@@ -61,7 +61,10 @@ both ways.
     in flight), which the engine waits for before it draws, so that the
     CPU's posted frame-buffer writes land first;
   * `sun3_cg4_scanout.sv` has a `colour_only` input: the colour plane's 72
-    bursts a line alone, and no overlay.
+    bursts a line alone, and no overlay; and the GX's 32x32 cursor, its
+    planes read from `sun3_cg6.sv` on the pixel clock, shown in the Bt458's
+    overlay colours in front of the colour (`sun3_top.v` and `sun3_fpga.v`
+    pass its four signals through; the cg4 leaves it off the screen).
 * **`sun3_fpga.v`: the on-board video's resolution register** at obmem
   0xFF1C0000 (`MATCH_VIDSENSE`), which upstream left to time out. It reads
   0x80 in every byte (bit 7 set: 1152x900) and ignores writes. Rev 3.0.1

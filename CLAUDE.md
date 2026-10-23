@@ -51,8 +51,8 @@ danifunker/Main_MiSTer).
 | | |
 |---|---|
 | `make -C tools` / `all-roms` / `fetch` | the stock 3/60 PROMs from sun3arc into `build/rom/`, SHA-256 checked; the patched `noparity` image (`boot0.rom`) and the simulation's `fast` one; `all-roms` the same for Rev 3.0.1 (stock image dropped in as `build/rom/sun3_60_v3.0.1.bin`) |
-| `make -C tb/verilator` | the glue benches: sdram, block, kbd_mouse, bell, kbm_scc, tod, mt02, cg4, cg4_scanout, eeprom, si (the SCSI DMA against the old byte-per-cycle engine), vint (level 4's source, with the interrupt PAL and the P4 register), enet (the network's DDR3 mailbox, between Wish7990's MII blocks and Main's daemon played by the bench), cpuclk (the OSD's CPU clock: the PLL's counter rewritten in reset, against `pll_stub.sv`'s PLL and `pll_cfg`), cdrom (sr0 at ID 6: 512/2048-byte blocks, no-disc sense, SunOS's and the PROM's sequences), cg6 (the GX: the C model's traces replayed pixel for pixel; `+lockstep=` runs the model beside it) |
-| `bash tb/verilator/mutate_<x>.sh` | mutation checks: sdram, kbm, bell, tod, mt02, cg4, cg4_scanout, eeprom, si, vint, enet, cpuclk, cdrom, cg6, cpu_fpu |
+| `make -C tb/verilator` | the glue benches: sdram, block, kbd_mouse, bell, kbm_scc, tod, mt02, cg4, cg4_scanout, eeprom, si (the SCSI DMA against the old byte-per-cycle engine), vint (level 4's source, with the interrupt PAL and the P4 register), enet (the network's DDR3 mailbox, between Wish7990's MII blocks and Main's daemon played by the bench), cpuclk (the OSD's CPU clock: the PLL's counter rewritten in reset, against `pll_stub.sv`'s PLL and `pll_cfg`), cdrom (sr0 at ID 6: 512/2048-byte blocks, no-disc sense, SunOS's and the PROM's sequences), cg6 (the GX: the C model's traces, its own and SunOS's SPARC and 68020 libpixrect's, replayed pixel for pixel; `+lockstep=` runs the model beside it; `CG6_MUSASHI=` a Musashi checkout for the 68020's) |
+| `bash tb/verilator/mutate_<x>.sh` | mutation checks: sdram, kbm, bell, tod, mt02, cg4, cg4_scanout, eeprom, si, vint, enet, cpuclk, cdrom, cg6 (`JOBS=n` runs n at once), cpu_fpu |
 | `make -C tb/verilator tb_cpu_fpu` | RD68021 + RD68884 against the 1,320-program CPU+FPU corpus a real Mac II passed |
 | `make -C tb/verilator tb_emu [TIMEOUT_MS=] [DISK=] [DISK1=] [EEPROM=] [KEYS=] [SIMARGS=]` | the whole core (`Sun-3.sv` with `files.qip` and the `.qsf`'s macros): PROM loader, SDRAM, scan-out, keyboard. It writes `screen_*.ppm` (24-bit), `console.log` and a log in `run_tb_emu/`. With the `fast` PROM (`ROM=` picks another; `all-roms` also makes 3.0.1's `fast`) the banner comes at ~1 s simulated with the colour board off and ~1.7 s with it on (1.9 clears the colour plane; 3.0.1 does not, ~1 s), and `+eeprom_boot=st` boots the tape to munix by ~2.6 s. Its plusargs (`+tape=`, `+eeprom=` and `+eeprom_save=`, `+status=1000` for colour off, `+status=4000` for 33 MHz, `+trace_tape`, `+trace_cg4`, `+trace_scsi`, `+trace_vd`, `+watch=`, `+vwatch=` (by virtual address), `+mmutrace` (every segment- and page-map write), `+pctrace_from=`, `+memdump=`, `+screen_stats`) are listed in `tb_emu.sv`'s header. `EMU_OBJ=` builds a second copy while one runs |
 | `python3 tools/mktape -o build/tapes/X.qic <dir>` | a tape image from a SunOS sun3 distribution (sun3arc `maketape` layout, or `tapeN/` per-file dumps) |
@@ -94,8 +94,9 @@ are the PROM images, disks and tapes the tools make under `build/`.
   November, never advanced the weekday, and a reset stopped it. Each is fixed,
   and `tb_mister_tod` / `mutate_tod.sh` guard them.
 * **Verilator takes SystemVerilog that Quartus 17 rejects**: a net of a
-  typedef'd type (`wire s18 x = ...`) and the streaming operators
-  (`{<<{...}}`) both passed every bench and failed the build. Run `flock
+  typedef'd type (`wire s18 x = ...`), the streaming operators
+  (`{<<{...}}`) and a unary minus on a typedef cast (`-s22'(x)`; write
+  `0 - s22'(x)`) all passed every bench and failed the build. Run `flock
   /tmp/quartus.lock quartus_map Sun-3 --analysis_and_elaboration` (a few
   minutes) on new RTL before a full build.
 * **Main_MiSTer saves a core's OSD settings only from its System page**

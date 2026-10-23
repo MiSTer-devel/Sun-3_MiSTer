@@ -324,6 +324,16 @@ Its users:
 * **OpenWindows 3's xnews does use it**: `_lego_load_mv`, `_sh_lego_load_trans_2d`
   (a 2x3 matrix into the data registers, MV = 0x112), `_sh_lg_tec_ex_abs`
   and `_rel` (TEC exceptions).
+* **So does OpenWindows 2.0's sun3 xnews**, on every GX, all the time
+  (*Stage 2: SunView*, *OpenWindows 2.0 and the TEC*).
+
+The data registers have **two banks**: VDC's type field (bits 15:13; 4 and 5
+are Solaris's INTRNL0 and INTRNL1) picks the view. The sun3 kernel's
+`cg6_cntxsave` reads all 64 with VDC 0x8000 and again with 0xA000, and
+`cg6_cntxrestore` writes both back (**verified**, cgsix.o 1.49). With
+types 0 to 2 (integer, 16.16 fixed, IEEE single) the board converts on
+access (**verified** from xnews's use). The model and the core keep every
+type but 5 as bank 0, raw.
 
 The model is a register file: it reads back what was written and transforms
 nothing. That is enough for (a) to (c) below. It is not enough for an
@@ -598,6 +608,12 @@ Neither library touches the TEC beyond cg6_make's `bzero` of TEC +4..+7
 (four byte writes), nor writes the triangle (0x880) or any relative
 vertex register.
 
+One failure was found since, at seed 2 (`-n 150`): a batchrop of 19 glyphs
+from x = -10, 16 pixels at x 1144..1146. The board's frame buffer ends
+identical to the SPARC run's, the two traces differing only in don't-care
+values, so it is the 68020 mem_batchrop (or Musashi) that differs, not the
+model. It is not yet classified.
+
 `mutate68k` catches 17 of 17. `trace68k` writes a 300-test trace of every
 kind (303,592 accesses at seed 1, one of them a stopped stencil's 100,000
 font writes), which `-R` replays to 0 differences.
@@ -760,7 +776,8 @@ does.
 
 ### Risks
 
-* **OpenWindows and the TEC.** OW3's xnews transforms paths in the TEC (IEEE
+* **OpenWindows and the TEC.** Settled for OW 2.0 in *Stage 2: SunView*:
+  its sun3 xnews needs the TEC's 2D arithmetic. OW3's xnews transforms paths in the TEC (IEEE
   single-precision 2x3 matrices, float vertex registers). A TEC is an FP
   multiply-add unit with a float-to-integer converter, perhaps 1.5-3k ALMs
   and several DSPs, and its exception semantics are unknown. Before
@@ -904,12 +921,252 @@ reads `Sun Workstation, Model Sun-3/60C/G`, drawn by the engine.
 
 `sy * 1152` is a constant multiply, shifts and adds (perhaps a DSP).
 
-### What stage 2 needs
+### What stage 1 left
 
-* SunOS's `cgsix` driver: the THC's timing and cursor registers stored and
-  read back, the cursor in the scan-out (32x32x2, the overlay colours), the
-  TEC's registers stored, z and the colour vertex registers and the indexed
-  registers' values read back (`cg6_cntxsave`);
-* the retrace interrupt through a colour-map load (`tb_vint` running the
-  THC's sequence);
-* SunOS 4.1.1 on the board: `cgsix0 at obmem 0xff000000 pri 4`.
+SunOS's `cgsix` driver needed the THC's timing and cursor, the cursor in the
+scan-out, the TEC stored, and z, the colour vertex registers and the
+indexed registers read back; SunView needed lines, polygons and the pattern.
+Stage 2 below has them.
+
+## Stage 2: SunView
+
+**Status (2026-10-23, Verilator only; not yet on the board):** what SunView
+and its kernel driver use of the GX, and the engine's writes as SDRAM
+bursts. The board tests to run are at the end.
+
+### What SunView uses, from the sun3 4.1.1 objects
+
+Read from `sys/sun3/OBJ/cgsix.o` (cgsix.c 1.49 90/10/03) and `windt.o`, and
+the 68020 `lib/libpixrect.a` (`tools/sunos/aoutdis.py`):
+
+* **The kernel's attach** writes the Bt458's control registers (command
+  0x43: both overlay inputs on; read mask 0xFF; blink 0), the THC's timing
+  (the PROM's six values) and misc |= 0x8F, the cursor to (2000, 2000), the
+  FHC (0x10BBB for revision 1), and TEC MV, clip and VDC = 0.
+* **The colour map** (`cg6_putcolormap`, the FBIOPUTCMAP ioctl): THC misc
+  &= ~0x1020, |= 0x10 (disabled, pending cleared), the soft copy, misc =
+  misc & ~0x1000 | 0x20 (enabled), `setintrenable(1)`. On level 4,
+  `cgsixpoll` calls `cgsixintr` when its soft flags say an update is
+  waiting -- it does not read the THC's pending bit -- which loads the
+  cursor's two colours (Bt458 overlay entries 1 and 3), then the colour
+  map, then `setintrenable(0)` and misc &= ~0x1020, |= 0x10.
+* **The cursor** (`cg6_setcurshape`): plane A (0x900..) is the mask, plane B
+  (0x980..) the image AND the mask, so A alone shows overlay colour 1 (the
+  cursor's background), A and B overlay colour 3; `cg6_setcurpos` writes
+  (x - hot x) << 16 | (y - hot y), or 0xFFE0FFE0 to hide it. **SunView's
+  desktop uses it**: `windt.o`'s `dtop_load_hw_cursor` calls FBIOSCURSOR
+  whenever FBIOGCURMAX (32x32) allows the cursor's size, and moves it with
+  FBIOSCURPOS. Without the cursor in the scan-out SunView's pointer would
+  be invisible.
+* **The context switch** (`cg6_cntxsave`/`restore`, when processes take the
+  GX from each other, as SunView's tools do): STATUS, clipcheck, MISC, x0..y3
+  (not z or colour), the raster offset .. PATTERN7 (0x0C0..0x13C), TEC MV,
+  clip and VDC, and the 64 data registers in both banks. Restore writes
+  them all back, STATUS last.
+* **libpixrect** (68020, the same cg6 members and SCCS ids as SPARC 4.1.3):
+  points (0x800), lines (0x840), quadrilaterals (0x8C0), rectangles (0x900),
+  the pattern (0x11C, 0x120..), blits and the font register. Never the TEC
+  (but `cg6_reset_uregs`' bzero of TEC +4..+7), triangles or relative
+  vertices. SunView's binaries are dynamically linked to
+  `libpixrect.so.2.11`, the same code.
+
+### What is built
+
+* **The engine** (`sun3_cg6_engine.sv`) draws, besides stage 1's rectangles,
+  font rows and blits:
+  * **lines**: Bresenham from the left end, the error from -(major/2), as
+    runs of pixels a row (a pixel a row when steep), one pixel a clock;
+  * **triangles and quadrilaterals** of 2..4 vertices: Sun's edge DDA
+    (`cg6model.c`'s `edge_setup`, `edge_step`), each edge set up in turn
+    (an 18-step divider for |dx| / dy; q * dy and (q >> 1) * dy from the
+    remainder, so no multiplier), then each row: the active edges' x
+    sorted (a 4-input network over three clocks), one or two spans, and
+    every edge stepped in two clocks;
+  * **the pattern**: RASTEROP's pattern field 3 takes s from PATTERN0..7
+    by PATTALIGN, a row turned by the x alignment once a row.
+
+  Lines and polygons are generators: each hands its spans to the row
+  machinery the rectangle uses, which clips each as it takes it.
+* **The register file** (`sun3_cg6.sv`):
+  * the vertex queue keeps its last four vertices in a ring; DRAWSTATUS
+    copies the ones the primitive draws (a polygon's last k, 2..4) for the
+    engine, so a line's kept end vertex can move to the ring's slot 0 at
+    once;
+  * PATTERN0..7 in registers, read back;
+  * **a register store**, an M10K of 1,024 words, for what is only stored:
+    FBC z and colour, the indexed registers (0x800..0x93C, read back as
+    written), the THC's timing and cursor planes, and the TEC's 0x000..0x1FC
+    and 0x800..0xDFC, the data registers' second bank while VDC's type is 5.
+    A read from it takes a clock more;
+  * the cursor: its place in a register, its planes in the store and again
+    in two 32x32 RAMs read on the pixel clock.
+* **The scan-out** (`sun3_cg4_scanout.sv`): the cursor, in front of the
+  colour. A row of both planes is asked for a line ahead; where a pixel's A
+  or B bit is set it is overlay colour {B, A}, each bit gated by the
+  command register's overlay enable, as the Bt458's OL inputs are. The cg4
+  leaves it off the screen (`sun3_fpga.v`: 0xFFE0FFE0 unless the GX is in).
+* **Burst writes**: the engine writes a whole burst, a select a byte,
+  through the adapter's engine port, and `rtl/sdram.sv` has one new path,
+  `wrb`: eight single-word WRITEs on consecutive clocks to the aligned
+  group in the open row, each with its own DQM. The chip stays in
+  single-write mode, so no other client's cycles change. A full-screen fill
+  beside the colour scan-out takes 28.6 ms (36 Mpixel/s), against stage 1's
+  75 ms.
+* `sun3_top.v`, `sun3_fpga.v` and `Sun-3.sv` carry the cursor's four
+  signals and the engine port's new widths, nothing else.
+
+### Where it differs from the model
+
+* **A line's or polygon's vertices are saturated to 16 bits** as the
+  rectangle's are; the model computes in 32. Only a vertex beyond
+  +-32,767 draws differently, and nothing Sun's code sends is that far out
+  (libpixrect clips first). The `-G` generator keeps them inside.
+* The TEC's arithmetic, pick mode, z, "linear" raster mode, the polygon
+  overlap flag and the clipcheck register's meaning are still not built.
+
+### How it is checked
+
+* **`tb_cg6`**: the traces now hold everything stage 2 draws:
+  * `-G`'s generator has lines and polylines (every slope, horizontal,
+    vertical, diagonal, off the screen), triangles and quadrilaterals (a
+    point first or not, more vertices queued than drawn, horizontal edges),
+    patterns and alignments in every drawing, and the stored registers
+    written and read back (each read only after the run wrote it, since the
+    store is a RAM a reset does not clear);
+  * the SPARC libpixrect's tests of every kind (`-K` dropped: vectors,
+    replrop, polygons and polylines join the fills, copies and text);
+  * **the sun3 4.1.1 68020 libpixrect's** tests of every kind, through
+    `harness68k` (*The 68020 run*), when that library is in `build/dist/`
+    (`CG6_MUSASHI=` a Musashi checkout, else it is fetched);
+  * every pixel compared at the end, and every register read on the way:
+    all but the THC's misc now;
+  * a whole frame with the cursor across a rectangle's corner (overlay
+    colours 1, 2 and 3), one partly off the screen's top left with OL0
+    alone enabled, and one hidden at (-32, -32).
+
+  `-G` also ends with quadrilaterals random ones seldom are: bow ties and
+  arrowheads (rows across four edges), edges at 45 degrees, and slivers
+  whose edges' set-up error is exactly 0.
+  7,851 checks pass: `t_gen` 11,670 accesses (97 lines, 36 triangles, 81
+  quadrilaterals), the SPARC library's 75,207 and the 68020's 106,373.
+* **`mutate_cg6.sh`**: 83 mutants of the register file, the engine and the
+  scan-out's cursor (46 of them new: the pattern, lines, polygons, the
+  store, the TEC's banks, the cursor, the burst's selects), all caught.
+  Three that could not be (a 45-degree line is the same pixels x- or
+  y-major; an edge stepped after its last row, or a horizontal edge kept,
+  is never seen) were replaced. It runs mutants in parallel (`JOBS=n`),
+  and tb_cg6 stops at its first failure under it (`+failfast`).
+* **`tb_vint`** runs the cgsix driver's colour-map loads through the THC's
+  interrupt: 55 updates begun all through the frame, each one level-4
+  entry at a vertical blank's start, none spurious, and with the THC's
+  enable off no level 4 though the retrace still sets pending.
+  `mutate_vint.sh` builds with the GX.
+* **`tb_mister_sdram`** writes whole engine bursts of random selects, reads
+  them back through the engine and the CPU, and times 64 of them back to
+  back: 779 clocks, 12 a burst. `mutate_sdram.sh` mutates the controller's
+  new path as well as the adapter's: 29 mutants, all caught.
+* **`tb_emu`** with the GX (`ROM=build/rom/sun3_60_v3.0.1_fast.bin`,
+  `+status=80000`): the 3.0.1 banner, `Model Sun-3/60C/G`, whole by 1.36 s
+  simulated, then `Auto-boot in progress...`, as in stage 1. A SunOS boot
+  is too slow to simulate; what the kernel does with the board is checked
+  in tb_vint (the colour map through the THC's interrupt) and tb_cg6 (the
+  cursor as `cg6_setcurshape` loads it, and every register
+  `cg6_cntxsave` reads, read back).
+
+### OpenWindows 2.0 and the TEC
+
+OpenWindows 2.0's sun3 `xnews` (on the 4.1.1 tape) was disassembled
+(capstone; scripts kept out of the tree). **It uses the TEC's arithmetic on
+every GX, and nothing switches it off** (**verified**):
+
+* `_sunfb_open` takes FBTYPE 12 to `_sh_init_cg6`, with no CPU, revision,
+  option or environment check. That maps FBC+TEC, sets MV = 0x112 (a 3x2
+  matrix at data register 0x12), VDC = 0x200C then type 1 (16.16 fixed),
+  clipcheck 0, and identity matrices at data registers 0x12 and 0x22.
+* **As a matrix coprocessor**: every PostScript `concat`, point and path
+  transform: matrices into the data registers (`_sh_lego_load_trans_2d`,
+  `_lego_load_mv`, 2x3 or 4x4, MV 0x612 / 0x8712 with divide), a command
+  at +0x10 (0x90322236 and kin: a 1x3 row at 0x32 times the matrix at 0x22
+  or 0x12, the result at 0x36), inputs written at VDC type fixed and the
+  results read back at type float: **the data registers convert between
+  integer, 16.16 and IEEE single on access**.
+* **As the vertex front end** for `_sh_lg_Path_Raster`: X11 polygons, arcs,
+  wide lines, and every NeWS fill and stroke write the fixed (0xA00..) and
+  float (0xC00..) point, line and quad registers with MV's autoload on; the
+  TEC is meant to transform them into the FBC's queue. Even at identity the
+  vertices go through it. It never writes the integer vertex registers,
+  triangles, rectangles or W, never uses the VDC multiply or the clip
+  planes, and its 3D renderers are stubs (an `SH_SMALL` build).
+* **Not through the TEC**: rectangle fills and window clears (FBC 0x900),
+  thin lines (0x840), text and glyphs (the font register), blits. So xterm,
+  olwm's frames and text would look right.
+* **With the core's register-store TEC**, transforms read back stale or zero
+  data registers, and vertices written to 0xA00/0xC00 never reach the FBC:
+  NeWS graphics and X11 polygons, arcs and wide lines are missing or wrong.
+  Clipcheck reads 0, so xnews never falls back to software; an exception on
+  everything would not help either, since only `_mul_transform` has a clean
+  software path.
+
+**What a TEC would cost** (estimates, no fit):
+
+| | does | ALMs | DSP | M10K |
+|---|---|---|---|---|
+| pass-through | fixed and float to integer, a translation, into the FBC queue | 400-700 | 0 | 0 |
+| **2D affine** | one IEEE single multiply-add, converters on data-register access, the command sequencer (1x3 x 3x2, up to 1x4 x 4x4), autoload, clipcheck 31 on overflow | **1,800-2,800** | 1-2 | 0-1 |
+| full | the above and divide, VDC multiply, clip planes and accumulators | 3,500-5,000 | 2-4 | 1-2 |
+
+The pass-through is not enough: every non-identity matrix and every point
+transform would still be wrong. **The 2D affine subset is what this xnews
+needs**, and fits. It is not built here: it is a stage of its own, and its
+details (relative vertices, rounding of float and fixed to integer, what
+raises an exception) need a TEC trace of `openwin` on the board first, and a
+C reference in `tools/cg6model` judged against xnews's own software
+transforms (`_mul_transform` at 0x62dcc, `_sh_fb_Path_Transform` at
+0x5cbe4). Until then OpenWindows 2.0 wants the cg4 in the P4 slot.
+
+### Area (a guess; no fit yet)
+
+| block | ALMs | M10K |
+|---|---|---|
+| vertex ring and DRAWSTATUS copy, pattern registers | 350-450 | |
+| register store, cursor RAMs and read path | 100-150 | 4 + 2 (or MLABs) |
+| line generator | 150-200 | |
+| polygon generator: four edges' state and stepping, divider, sort | 900-1,300 | |
+| pattern source | 80-120 | |
+| burst write: engine, adapter, controller | 150-250 | |
+| scan-out cursor | 60-100 | |
+| **total, over stage 1** | **1,800-2,550** | **about 6** |
+
+Stage 1's fit was 29,962 ALMs (71%); this makes 31.8-32.5k (76-78%).
+
+### On the board
+
+With *Colour board type* GX, SunOS 4.1.1_U1 installed:
+1. The boot: `cgsix0 at obmem 0xff000000 pri 4`, the console as before.
+2. `sunview` from the console login. The gray desktop (a replrop: the
+   pattern), the console and a shelltool, and **the mouse pointer, a
+   hardware cursor**: it must show, in black and white, and move smoothly.
+3. In a shelltool: `cat /etc/termcap` (text and scrolling: the font
+   register and blits), and the time of 2,000 lines of it against the cg4.
+4. The demos in `/usr/demo` (SUNVIEW): `spheresdemo` (polygons and the
+   colour map), `jumpdemo`, `bouncedemo`, `framedemo` (colour maps,
+   blits), `suncube` (lines), and `gfxtool` running `shaded` or `rotobj`.
+   `perfmeter`, `clock` (lines), `iconedit` (patterns, the pixel mask).
+5. Open and close many tools, drag windows over each other, and change the
+   colour map (a colour demo started and stopped): the context switch, and
+   one level-4 interrupt per colour-map load.
+6. `sunview -8bit_color_only`, and the plain colour desktop
+   (`sunview` with `-background`/`-pattern` options from `sunview(1)`).
+7. `/usr/diag/sundiag/cg6test` if it runs from the console.
+8. OpenWindows 2.0 (`openwin`) only to see that xterm/olwm draw, and that
+   NeWS graphics do not (above).
+
+### What stage 3 and 4 need
+
+* **Stage 3** (pixrect speed and the board's verdict): the tests above;
+  the font FIFO (libpixrect's text is a FONT write a row); `mono SunView,
+  2,000 lines of termcap` against the cg4; perhaps a destination-read
+  burst buffer for line pixels (a line is a read-modify-write a pixel).
+* **Stage 4** (X11): MIT Xsun's `sunGX.c` (relative vertices and triangles
+  are built and in the `-G` traces, never yet driven by real code); then
+  the TEC's 2D affine subset for OpenWindows, from a board trace.

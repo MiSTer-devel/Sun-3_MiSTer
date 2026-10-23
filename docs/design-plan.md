@@ -795,8 +795,11 @@ whole core would reset and come up again).
 
   **Status (2026-10-23, Verilator only):** stage 1 built (`SUN3_CG6`,
   `rtl/sun3/sun3_cg6.sv` and `sun3_cg6_engine.sv`, OSD *Colour board
-  type* `P1O[19]`): Rev 3.0.1's console on the GX, `Sun-3/60C/G`. docs/cg6.md,
-  "Stage 1: in the core".
+  type* `P1O[19]`): Rev 3.0.1's console on the GX, `Sun-3/60C/G`, and
+  SunOS 4.1.1's `cgsix0` on the board. docs/cg6.md, "Stage 1: in the core".
+  Stage 2 (Verilator only): lines, polygons, the pattern, the hardware
+  cursor, the stored registers and burst writes, for SunView; docs/cg6.md,
+  "Stage 2: SunView".
 * A **CD-ROM target** (sr0, ID 6). SunOS 4.1.1 for sun3 did ship on CD.
   **Status (2026-10-22):** built (`SUN3_CDROM`, `rtl/sun3/sun3_cdrom.sv`,
   OSD `SC4`, VD 4), a flat `.iso` through Main's generic block path, not

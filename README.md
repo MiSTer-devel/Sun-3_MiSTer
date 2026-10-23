@@ -218,9 +218,12 @@ only the on-board mono bw2 (`Model Sun-3/60M`). Change it, then reset. The
 colour board costs the CPU no measurable speed.
 
 *Colour board type* **GX** puts Sun's accelerated colour board (the cg6) in
-the slot instead (docs/cg6.md). So far it carries the Rev 3.0.1 PROM's
-console, drawn by its own engine; SunOS's `cgsix` driver on it is the next
-stage and untested, and Rev 1.9 has no console on it.
+the slot instead (docs/cg6.md). It carries the Rev 3.0.1 PROM's console,
+drawn by its own engine, and SunOS 4.1.1's `cgsix0` boots on it. Its engine
+also draws lines, polygons and patterns and it has the hardware cursor, for
+SunView, so far tried only in simulation. OpenWindows 2.0's NeWS graphics
+need the board's transform engine, which is not built: run OpenWindows on
+the cg4. Rev 1.9 has no console on the GX.
 
 ## The CPU clock
 
