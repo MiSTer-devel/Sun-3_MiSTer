@@ -132,9 +132,16 @@ Sun-2). Netbooting is not part of bring-up. A CD-ROM target is deferred:
    * Rev 1.9 always probes the on-board bw2;
    * Rev 3.0.1 probes the P4 first. It showed a white or black screen there, with no keyboard and no P4 board.
 
-   A 3/60C was often a "without mono" board (501-1322/1345) plus the cg4. The
-   PROM disassembly in Phase 4 decides two things: whether "Colour board On"
-   also removes the on-board bw2, and which PROM revision is the default.
+   Settled for 3.0.1 (2026-10-22, by disassembly, tb_emu and the board):
+   its bw2 path reads the on-board video's resolution at obmem 0xFF1C0000
+   (bit 7 set: 1152x900) and sets the console's width and height only from
+   it. Upstream let that read time out, so with no P4 board the console was
+   zero wide: the white screen. The core answers it now (`MATCH_VIDSENSE`,
+   0x80), and 3.0.1 runs with the colour board on and off. Rev 1.9 stays
+   the default `boot0.rom`; 3.0.1 is a *Load ROM* away.
+
+   A 3/60C was often a "without mono" board (501-1322/1345) plus the cg4.
+   Whether "Colour board On" should also remove the on-board bw2 is open.
 2. **Type-3 or Type-4 keyboard** under Rev 1.9 (Phase 2).
 3. ~~**The EEPROM's save file**~~: settled, a mounted image slot
    (`SC3,NVR`), as SunSparcStation keeps its NVRAM.

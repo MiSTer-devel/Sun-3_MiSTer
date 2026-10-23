@@ -8,8 +8,8 @@
 #
 #   make -C tools                 build/rom/sun3_60_v1.9_noparity.bin, the boot0.rom
 #   make -C tools fetch           the stock PROMs from sun3arc.org into build/rom/
-#   make -C tools all-roms        also 3.0.1's noparity image, and 1.9's `fast'
-#                                 image for the simulation (tb/verilator tb_emu)
+#   make -C tools all-roms        also 3.0.1's noparity image, and both `fast'
+#                                 images for the simulation (tb/verilator tb_emu)
 #
 # A stock image may also be dropped into build/rom/ by hand (sun3_60_v<ver>.bin,
 # 65536 bytes); it is checked against the published SHA-256 either way.
@@ -19,6 +19,7 @@
 #   build/rom/sun3_60_v1.9_fast.bin        noparity plus Sun-3_FPGA's fastboot
 #                                          list: simulation only (waits and
 #                                          memory fills shortened)
+#   build/rom/sun3_60_v3.0.1_fast.bin      the same for Rev 3.0.1
 
 TOP     = ..
 ROMDIR  = $(TOP)/build/rom
@@ -35,7 +36,7 @@ CFLAGS ?= -O2 -Wall
 all: $(ROMDIR)/sun3_60_v1.9_noparity.bin
 
 all-roms: $(ROMDIR)/sun3_60_v1.9_noparity.bin $(ROMDIR)/sun3_60_v3.0.1_noparity.bin \
-          $(ROMDIR)/sun3_60_v1.9_fast.bin
+          $(ROMDIR)/sun3_60_v1.9_fast.bin $(ROMDIR)/sun3_60_v3.0.1_fast.bin
 
 fetch: $(ROMDIR)/sun3_60_v1.9.bin $(ROMDIR)/sun3_60_v2.8.3.bin $(ROMDIR)/sun3_60_v3.0.1.bin
 
@@ -68,6 +69,10 @@ $(ROMDIR)/sun3_60_v1.9_fast.bin: $(ROMDIR)/sun3_60_v1.9.bin rompatch sun3_60_v1.
 $(ROMDIR)/sun3_60_v3.0.1_noparity.bin: $(ROMDIR)/sun3_60_v3.0.1.bin rompatch sun3_60_v3.0.1_noparity.txt
 	@echo "$(SHA_3.0.1)  $<" | sha256sum -c --quiet
 	./rompatch $< $@ sun3_60_v3.0.1_noparity.txt
+
+$(ROMDIR)/sun3_60_v3.0.1_fast.bin: $(ROMDIR)/sun3_60_v3.0.1.bin rompatch sun3_60_v3.0.1_noparity.txt sun3_60_v3.0.1_fastboot.txt
+	@echo "$(SHA_3.0.1)  $<" | sha256sum -c --quiet
+	./rompatch $< $@ sun3_60_v3.0.1_noparity.txt sun3_60_v3.0.1_fastboot.txt
 
 clean:
 	rm -f rompatch rom

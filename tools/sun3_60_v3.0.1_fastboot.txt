@@ -1,0 +1,40 @@
+# Sun 3/60 PROM Rev 3.0.1: shorten the waits and the table tests, for
+# simulation only.  The same changes as sun3_60_v1.9_fastboot.txt, each
+# found at its place in 3.0.1 by disassembling the two side by side; see
+# that file for why each one is safe.  Applied on top of
+# sun3_60_v3.0.1_noparity.txt.  3.0.1's SCSI and tape drivers are new, and
+# their ten-second waits are not shortened here.
+#
+# Line format: <address> <expected> <new>   (hex, 16-bit words, PROM at 0x0fef0000)
+
+# loweritercount: 50000 -> 2
+0fefabaa c350 0002
+# loweritercount2: 65535 -> 2
+0fefbac8 ffff 0002
+
+# Segment Map Wr/Rd Test: movel #2046,%d5 -> #15
+0fefad78 07fe 000f
+# Segment Map Address Test, write pass and check pass: movel #2046,%d5 -> #15
+0fefae20 07fe 000f
+0fefae56 07fe 000f
+# Page Map Test, write pass and check pass: movel #4095,%d4 -> #15
+0fefaf1e 0fff 000f
+0fefaf54 0fff 000f
+
+# Memory Test (diag switch on only): moveq #20 -> #16, 64 KiB per megabyte
+0fefb616 7014 7010
+
+# RAM initialisation: the >= 32 MiB clamp (cmpil/bltw/subil) becomes
+# lsrl #4,%d1, 64 KiB filled per megabyte; the memory size kept for the
+# banner (%d2) is left alone.
+0fefb7fc 0c81 e889
+0fefb7fe 0200 4e71
+0fefb800 0000 4e71
+0fefb802 6d00 4e71
+0fefb804 0008 4e71
+0fefb806 0481 4e71
+0fefb808 0010 4e71
+0fefb80a 0000 4e71
+
+# Keyboard detection: addil #1000,%d7 -> #10
+0fef4068 03e8 000a
