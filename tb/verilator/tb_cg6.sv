@@ -606,6 +606,45 @@ initial begin
     end
     check(fb_peek(0) == 8'h5A && fb_peek(NPIX - 1) == 8'h5A, "the fill's corners");
 
+    // ---- a relative vertex is relative to the last one: (100,100), then
+    // (400,300), then (+5,+3) -- the rectangle (400,300)-(405,303)
+    wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h3C);
+    wr32(24'h700904, 100); wr32(24'h700900, 100);
+    wr32(24'h700904, 300); wr32(24'h700900, 400);
+    wr32(24'h700914, 3);   wr32(24'h700910, 5);
+    rd32(24'h700014, q);
+    wait_idle();
+    while (!mem_idle) @(posedge mclk);
+    begin
+        int nb = 0;
+        for (int y = 298; y < 306; y++)
+            for (int x = 398; x < 408; x++)
+                nb += ((fb_peek(y * FBW + x) == 8'h3C) != (x >= 400 && x <= 405 && y >= 300 && y <= 303));
+        nb += (fb_peek(100 * FBW + 100) == 8'h3C);
+        check(nb == 0, $sformatf("a relative vertex: %0d pixels wrong", nb));
+    end
+
+    // ---- the CPU's posted writes land before the engine draws: a copy set up
+    // first, 64 longwords written to its source, and the copy started at once
+    wr32(24'h700108, 32'hA980CCCC);
+    wr32(24'h700080, 0);   wr32(24'h700084, 10);          // source (0,10)-(255,10)
+    wr32(24'h700090, 255); wr32(24'h700094, 10);
+    wr32(24'h7000A0, 0);   wr32(24'h7000A4, 20);          // to (0,20)
+    for (int i = 0; i < 64; i++) begin
+        bit [31:0] dq;
+        bus(1, 24'h800000 + 24'(10 * FBW + 4 * i), 4, 32'hC0DE0000 | i, dq);
+    end
+    rd32(24'h700018, q);
+    wait_idle();
+    while (!mem_idle) @(posedge mclk);
+    begin
+        int nb = 0;
+        for (int i = 0; i < 64; i++)
+            for (int b = 0; b < 4; b++)
+                nb += (fb_peek(20 * FBW + 4 * i + b) != 8'((32'hC0DE0000 | i) >> (24 - 8 * b)));
+        check(nb == 0, $sformatf("a copy started straight after the CPU's writes copies them: %0d pixels not", nb));
+    end
+
     // ---- the frame buffer's end: 1 MiB, 256 pixels into row 910.  A fill of
     // rows 905..920, the clip window well past them, writes up to there.
     wr32(24'h7000F4, 32'd2000);
@@ -626,6 +665,9 @@ initial begin
         end
         check(nb == 0, $sformatf("a fill to the frame buffer's end: %0d of its pixels not drawn", nb));
         check(past == 0, $sformatf("... and none past it: %0d words written", past));
+        nb = 0;                                 // nor wrapped round to the top
+        for (int p = 0; p < 2 * FBW; p++) nb += (fb_peek(p) != 8'h5A);
+        check(nb == 0, $sformatf("... nor at the top: %0d pixels of rows 0 and 1 changed", nb));
     end
     wr32(24'h7000F4, FBH - 1);
 
