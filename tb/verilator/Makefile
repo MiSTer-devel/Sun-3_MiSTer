@@ -13,7 +13,8 @@ VFLAGS := --binary --timing -Wno-fatal -Wno-WIDTH -Wno-WIDTHEXPAND -Wno-WIDTHTRU
           -I$(RTL)/sun3 +define+SIMULATION=1
 
 TESTS := tb_mister_sdram tb_mister_block tb_mister_kbd_mouse tb_mister_bell tb_kbm_scc tb_mister_tod tb_mt02 \
-         tb_cg4 tb_cg4_scanout tb_mister_eeprom tb_si tb_vint tb_mister_enet tb_mister_cpuclk tb_cdrom
+         tb_cg4 tb_cg4_scanout tb_mister_eeprom tb_si tb_vint tb_mister_enet tb_mister_cpuclk tb_cdrom \
+         tb_cg6
 
 # The whole core is its own makefile; it is a run, not a quick test, so it is
 # not part of `all'.
@@ -127,6 +128,33 @@ tb_vint:
 	    $@.sv $(RTL)/sun3/sun3_vint.v $(RTL)/sun3/sun3_irq_priority.v $(RTL)/sun3/sun3_cg4.sv
 	./obj_$@/$@
 
+# The GX (sun3_cg6.sv, its engine, the Bt458 on D31:24, the SDRAM adapter's
+# engine port and the colour-only scan-out) against tools/cg6model's traces:
+# the PROM 3.0.1 console's sequence and the engine driven directly (harness
+# -G, no library needed), and, when Sun's SPARC libpixrect is in build/dist/
+# (docs/cg6.md, "The C model"), libpixrect's own fills, copies and text.
+# CG6_N tests of the direct kind, CG6_LP_N of libpixrect's, from CG6_SEED.
+CG6M      := ../../tools/cg6model
+CG6LIB    ?= ../../build/dist/sunos-4.1.3-sparc/libpixrect.a
+CG6OBJ    := $(abspath obj_tb_cg6)
+CG6_N     ?= 400
+CG6_LP_N  ?= 150
+CG6_SEED  ?= 1
+CG6_KINDS := fill,copy,mem8,mem1,mem1rv,readback,putget,batchrop,stencil,polypoint
+CG6_SRC   := $(RTL)/sun3/sun3_cg6.sv $(RTL)/sun3/sun3_cg6_engine.sv
+CG6_LP    := $(wildcard $(CG6LIB))
+tb_cg6_traces:
+	mkdir -p $(CG6OBJ)
+	$(MAKE) -C $(CG6M) B=$(CG6OBJ) $(CG6OBJ)/harness
+	$(CG6OBJ)/harness -G $(CG6OBJ)/t -n $(CG6_N) -s $(CG6_SEED)
+	$(if $(CG6_LP),$(MAKE) -C $(CG6M) B=$(CG6OBJ) LIBPIXRECT=$(abspath $(CG6LIB)) $(CG6OBJ)/lp.bin,@echo "tb_cg6: no $(CG6LIB), so no libpixrect trace")
+	$(if $(CG6_LP),$(CG6OBJ)/harness $(CG6OBJ)/lp.bin $(CG6OBJ)/lp.sym -n $(CG6_LP_N) -s $(CG6_SEED) -K $(CG6_KINDS) -t $(CG6OBJ)/t_lp.txt -I $(CG6OBJ)/t_lp.ini -F $(CG6OBJ)/t_lp.fin)
+tb_cg6: tb_cg6_traces
+	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
+	    $@.sv $(CG6_SRC) $(RTL)/sun3/sun3_cg4.sv $(RTL)/sun3/sun3_cg4_scanout.sv $(RTL)/sun3/video_timing.sv \
+	    sdram_model.sv altddio_out_stub.v $(RTL)/sdram.sv $(RTL)/sun3_mister_sdram.sv tb_cg6_model.cpp
+	./obj_$@/$@ +t0=$(CG6OBJ)/t_prom +t1=$(CG6OBJ)/t_gen $(if $(CG6_LP),+t2=$(CG6OBJ)/t_lp) $(SIMARGS)
+
 # The cg4's picture: full frames in Sun-3.sv's raster, every pixel, against a
 # memory that answers quickly and slowly.
 tb_cg4_scanout:
@@ -159,4 +187,4 @@ tb_cpu_fpu:
 clean:
 	rm -rf obj_* run_*
 
-.PHONY: all clean $(TESTS)
+.PHONY: all clean $(TESTS) tb_cg6_traces
