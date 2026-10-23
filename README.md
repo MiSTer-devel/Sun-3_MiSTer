@@ -243,6 +243,28 @@ while SunOS runs waits for the next reset, and the OSD shows *Changes
 pending* until then). To keep it for the next start, use *Save settings* on
 the OSD's System page.
 
+## NetBSD
+
+NetBSD 11.0 for sun3 installs onto a disk image and boots from it. Its
+11.0 boot programs have a bug that panics the kernel on a 3/60 ("radix
+already initialized"), fixed by NetBSD after the release;
+[`tools/netbsd/fixdvma.py`](tools/netbsd/fixdvma.py) makes the same fix in
+the 11.0 files. In outline (the design plan, Phase 7, has the details):
+
+1. From the NetBSD 11.0 ISO, build a boot tape as its `MakeBootTape` does
+   (tapeboot, the RAMDISK kernels, the miniroot), with every file run
+   through `fixdvma.py`, and `tools/mktape` it into a `.qic`.
+2. `python3 tools/mktape --disk netbsd.img --size 1024` for the disk, at
+   *Disk (ID 1)*; the ISO at *CD-ROM (ID 6)*; the tape at *Tape (ID 4)*.
+3. `b st()`, then put the mended miniroot into the disk's swap partition
+   and boot it with `b sd(0,8,1) -s`.
+4. `install`: root disk `sd1`, sets from the CD-ROM (`cd0`, ISO 9660,
+   `sun3/binary/sets`). It takes about two hours at 33 MHz.
+5. `b sd(0,8,0)` boots it (Rev 3.0.1 numbers the disk at ID 1 as 8).
+
+The installed disk boots with no patch. A netbsd-11 build from after
+2026-08-22 would not need `fixdvma.py` at all.
+
 ## Window systems
 
 SunOS 4.1.1 has two, both on its tapes: **SunView 1**, Sun's own (SunOS

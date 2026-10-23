@@ -785,6 +785,20 @@ whole core would reset and come up again).
    mended tape the kernel's BSS is at PA = VA - KERNBASE and boots past
    the panic. `tb_emu`'s `+vwatch=` and `+mmutrace` found it.
 
+   **Done (2026-10-23, on the board, 33 MHz, PROM 3.0.1, cg4):** NetBSD
+   11.0 installed onto a 1 GB disk at ID 1 and boots multi-user from it
+   (`b sd(0,8,0)`). The mended tape's RAMDISK found sd0, sd1 and the
+   CD-ROM; its `st` did not attach the MT-02 ("tape fixed"), so the mended
+   `miniroot.fs` was written into `sd1b` from the MiSTer's side, and booted
+   with `b sd(0,8,1) -s`. Its `install` made `/` on `sd1a`, read
+   `base`, `etc`, `kern-GENERIC`, `rescue`, `misc` and `man` from the
+   CD-ROM (ISO 9660, `sun3/binary/sets`) in about 1h45, and put the
+   miniroot's mended `bootxx`/`ufsboot` on the disk, so the installed disk
+   needs no patch. `uname`: NetBSD 11.0 GENERIC sun3, `hw.model sun3 60`,
+   24 MiB. Since `dc0594b` the MT-02's INQUIRY says removable and NetBSD
+   attaches `st0` (with no cartridge mounted it reports NOT READY, as it
+   should; a read is still to be tried).
+
 ### Phase 8: later
 
 * **GX (cg6)** on P4: an accelerated 8-bit frame buffer whose console needs
@@ -793,10 +807,10 @@ whole core would reset and come up again).
   * a spec and C model checked against SunOS 4.1.1's cg6 pixrect;
   * then a model against X11's `Xsun` cg6 code.
 
-  **Status (2026-10-23, Verilator only):** stage 1 built (`SUN3_CG6`,
+  **Status (2026-10-23, on the board):** stage 1 (`SUN3_CG6`,
   `rtl/sun3/sun3_cg6.sv` and `sun3_cg6_engine.sv`, OSD *Colour board
-  type* `P1O[19]`): Rev 3.0.1's console on the GX, `Sun-3/60C/G`. docs/cg6.md,
-  "Stage 1: in the core".
+  type* `P1O[19]`): Rev 3.0.1's console on the GX, and SunOS's `cgsix0`
+  console. docs/cg6.md, "Stage 1: in the core".
 * A **CD-ROM target** (sr0, ID 6). SunOS 4.1.1 for sun3 did ship on CD.
   **Status (2026-10-22):** built (`SUN3_CDROM`, `rtl/sun3/sun3_cdrom.sv`,
   OSD `SC4`, VD 4), a flat `.iso` through Main's generic block path, not
