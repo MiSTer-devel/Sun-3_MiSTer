@@ -789,9 +789,11 @@ whole core would reset and come up again).
   boot a test CD's partition and run its boot block: Rev 3.0.1 as
   `sd(0,30,1)` (TEST UNIT READY, START UNIT, the label, one READ(6) of 16
   blocks) and Rev 1.9 as `sd(0,18,1)` (the label, then 16 one-block
-  reads), although sun3arc's table says 1.9 cannot boot a CD. To do on the board:
-  `mount -r -t hsfs /dev/sr0 /cdrom` under SunOS, and the 4.1.1 CD's own
-  boot, `b sd(0,30,4)` (sun3arc's install guide).
+  reads), although sun3arc's table says 1.9 cannot boot a CD. **On the
+  board (2026-10-23):** SunOS 4.1.1_U1 mounts a test ISO with `mount -r -t
+  hsfs /dev/sr0 /cdrom`, and `sum` of its files matches the originals. To
+  do: the 4.1.1 CD's own boot, `b sd(0,30,4)` (sun3arc's install guide),
+  when a 4.1.1 CD image is at hand.
 * **1600x1280 hi-res bw2** (the J800 jumper), scaled to 1080p.
 * A **sun3x core** (3/80) would be a separate project. AP68030 is the
   candidate CPU (GPL, 68030 + MMU, 50 MHz, 17k ALMs; not OS-tested yet). Its

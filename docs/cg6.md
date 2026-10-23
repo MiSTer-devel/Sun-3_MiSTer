@@ -713,8 +713,12 @@ does.
 
 ## Stage 1: in the core
 
-**Status (2026-10-23, Verilator only; not yet built in Quartus or run on the
-board):** Rev 3.0.1's console on the GX. The OSD's *Colour board type*
+**Status (2026-10-23, on the board, 192.168.99.143, build of `a3966aa`):**
+Rev 3.0.1's console on the GX, and SunOS 4.1.1_U1's: the kernel attaches
+`cgsix0 at obmem 0xff000000 pri 4`, boots on the GX's console to login,
+and scrolls it (the engine's blit). The fit meets timing (`cpu_clk`
++2.061 ns at 30 ns, `clk_mem` +1.099 ns) at 29,962 ALMs (71%) with the
+CD-ROM. Not tried yet: SunView or anything through `/dev/cgsix0`. The OSD's *Colour board type*
 (`P1O[19]`, shown while *Colour board* is On) is **GX**, and the banner
 reads `Sun Workstation, Model Sun-3/60C/G`, drawn by the engine.
 
