@@ -1431,7 +1431,11 @@ With *Colour board type* GX, SunOS 4.1.1_U1 installed:
   DRAWSTATUS read): on `clk_mem` it would be three times faster but need
   a clock crossing for every data register access and for the autoloaded
   vertex into the queue, and the CPU's clock has the slack (every stage a
-  register at 30 ns). It has:
+  register at 30 ns). Nothing of it crosses a clock: its outputs to the
+  register file (busy, the read's value, the autoloaded vertex and its
+  kind) are registers, and the queue the vertex goes into is copied by the
+  engine on `clk_mem` when it takes a command, as every other vertex is.
+  It has:
   * the 64 data registers, IEEE single, in one M10K, read and written
     converted by VDC's type (bank 1, type 5, stays in the register file's
     store);

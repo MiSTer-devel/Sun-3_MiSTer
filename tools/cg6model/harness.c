@@ -1487,7 +1487,9 @@ static void g_line(void)
 	g_near();
 	if (rn(6) == 0)		/* a vertex of another kind first: a new queue */
 		g_vertex(rn(5), g_coord(CG6_W, 0), g_coord(CG6_H, 0));
-	g_vertex(1, x, y);
+	/* the first vertex a line's, or a point's: a point is the line's first
+	   (xnews's outlines begin so) */
+	g_vertex(rn(4) ? 1 : 0, x, y);
 	for (int i = 0; i < n; i++) {
 		if (rn(3)) {	/* short, of every slope */
 			x += rn(rn(4) ? 80 : 700) - (rn(4) ? 40 : 350);

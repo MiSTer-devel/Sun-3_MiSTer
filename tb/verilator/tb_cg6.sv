@@ -702,6 +702,35 @@ initial begin
         $display("tb_cg6: a 2D vertex through the TEC to the FBC: %0d CPU clocks, x's write to DRAWSTATUS's answer", tv);
     end
 
+    // ---- the TEC's rounding where random operands seldom go: a product
+    // whose sticky bit is in its lowest 12 (a tie without it), one that
+    // rounds to an exponent of 255 (infinity), infinity plus one; and an FBC
+    // point followed by
+    // a line vertex: the point is the line's first
+    begin
+        int nb = 0;
+        wr32(24'h701008, 32'h00004000);
+        wr32(24'h7011C0, 32'h3F800400); wr32(24'h7011C4, 32'h3F801002);
+        wr32(24'h701010, 32'h00303132);
+        rd32(24'h7011C8, q); check(q == 32'h3F801403, $sformatf("a product's sticky bit: %08x", q));
+        wr32(24'h7011C0, 32'h7F400000); wr32(24'h7011C4, 32'h3FC00000);
+        wr32(24'h701010, 32'h00303132);
+        rd32(24'h7011C8, q); check(q == 32'h7F800000, $sformatf("a product to infinity: %08x", q));
+        wr32(24'h7011C0, 32'h7F800000); wr32(24'h7011C4, 32'h3F800000);   // inf . 1 + 1 . 1
+        wr32(24'h7011C8, 32'h3F800000); wr32(24'h7011CC, 32'h3F800000);
+        wr32(24'h701010, 32'h40303234);
+        rd32(24'h7011D0, q); check(q == 32'h7F800000, $sformatf("infinity plus one: %08x", q));
+        wr32(24'h700100, 32'h55);
+        wr32(24'h700804, 600); wr32(24'h700800, 200);
+        wr32(24'h700844, 600); wr32(24'h700840, 300);
+        rd32(24'h700014, q);
+        wait_idle();
+        while (!mem_idle) @(posedge mclk);
+        for (int x = 195; x < 306; x++)
+            nb += ((fb_peek(600 * FBW + x) == 8'h55) != (x >= 200 && x <= 300));
+        check(nb == 0, $sformatf("a point, then a line vertex: %0d pixels wrong", nb));
+    end
+
     // ---- the TEC's data registers, as cg6_cntxsave and cg6_cntxrestore
     // use them: 64 with VDC 0x8000, 64 with 0xA000, read back in both; and
     // with VDC's type 0 (integer) the first bank's, converted to IEEE single
