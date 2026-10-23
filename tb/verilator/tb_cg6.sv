@@ -35,6 +35,7 @@ module tb_cg6;
 
 localparam [25:0] COLOR_WORD = 26'h0C80000;
 localparam int    FBW = 1152, FBH = 900, NPIX = FBW * FBH;
+localparam bit [15:0] JUNK = 16'hA55A;          // outside the frame buffer
 
 reg clk = 0, mclk = 0, pclk = 0;
 always #20000 clk  = ~clk;                      // the CPU: 25 MHz
@@ -392,6 +393,12 @@ task automatic replay(input string pfx, input int ti);
             chip.mem[fb_key(2 * k)] = {img[2 * k], img[2 * k + 1]};
         for (int p = NPIX; p < 1048576; p += 2)
             chip.mem[fb_key(p)] = 16'h0000;
+        // the memory either side of the 1 MiB holds something, which the
+        // engine must neither read (a source byte outside it is 0) nor write
+        for (int p = 1048576; p < 1048576 + 4096; p += 2)
+            chip.mem[fb_key(p)] = JUNK;
+        for (int p = -65536; p < 0; p += 2)
+            chip.mem[fb_key(p)] = JUNK;
         sh_addr = 0; sh_step = 0;
         lockstep = (ti == lock_trace);
         if (lockstep) begin
@@ -453,9 +460,11 @@ task automatic replay(input string pfx, input int ti);
         for (int p = 1048576; p < 1048576 + 2048; p += 2) begin
             int k;
             k = fb_key(p);
-            if (chip.mem.exists(k) && chip.mem[k] != 16'h0) bad++;
+            if (chip.mem.exists(k) && chip.mem[k] != JUNK) bad++;
         end
-        check(bad == 0, $sformatf("%s: %0d words past the frame buffer written", pfx, bad));
+        for (int p = -65536; p < 0; p += 2)
+            if (chip.mem[fb_key(p)] != JUNK) bad++;
+        check(bad == 0, $sformatf("%s: %0d words outside the frame buffer written", pfx, bad));
 
         load_image({pfx, ".fin"});
         bad = 0;
@@ -696,7 +705,7 @@ initial begin
         for (int p = 1048576; p < 1048576 + 2048; p += 2) begin
             int k;
             k = fb_key(p);
-            if (chip.mem.exists(k) && chip.mem[k] != 16'h0) past++;
+            if (chip.mem.exists(k) && chip.mem[k] != JUNK) past++;
         end
         check(nb == 0, $sformatf("a fill to the frame buffer's end: %0d of its pixels not drawn", nb));
         check(past == 0, $sformatf("... and none past it: %0d words written", past));
