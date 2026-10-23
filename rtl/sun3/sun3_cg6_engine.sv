@@ -608,7 +608,7 @@ module sun3_cg6_engine #(
                 lady <= l_ady;
                 lneg <= (l_dy < 0);
                 lmaj <= l_maj;
-                le   <= -s22'((l_maj ? l_dx : l_ady) >>> 1);
+                le   <= 22'sd0 - s22'((l_maj ? l_dx : l_ady) >>> 1);
                 lrem <= l_maj ? l_dx : l_ady;
                 st   <= E_LGEN;
             end

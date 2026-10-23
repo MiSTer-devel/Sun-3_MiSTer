@@ -108,7 +108,7 @@ run "the pattern's bits LSB leftmost"     $E -e "s/{8{s_patt ? prot\[15 - b\] : 
 run "the pattern drawn without d"         $E -e "s/wire        s_var  = (cmd == C_BLIT) || (cmd == C_FONT) || s_patt;/wire        s_var  = (cmd == C_BLIT) || (cmd == C_FONT);/"
 # ---- stage 2: lines
 run "a line from its first vertex"        $E -e "s/wire               l_sw  = (vx1 < vx0);/wire               l_sw  = 1'b0;/"
-run "a line's error from 0"               $E -e "s/le   <= -s22'((l_maj ? l_dx : l_ady) >>> 1);/le   <= 22'sd0;/"
+run "a line's error from 0"               $E -e "s/le   <= 22'sd0 - s22'((l_maj ? l_dx : l_ady) >>> 1);/le   <= 22'sd0;/"
 run "a line's minor step at 0"            $E -e "s/wire               lstep = (le2 > 0) \&\& (lrem != 0);/wire               lstep = (le2 >= 0) \&\& (lrem != 0);/"
 run "a line's last pixel dropped"         $E -e "s/lrem <= l_maj ? l_dx : l_ady;/lrem <= (l_maj ? l_dx : l_ady) - 18'sd1;/"
 run "a 45-degree line y-major"            $E -e "s/wire               l_maj = (l_dx >= l_ady);/wire               l_maj = (l_dx > l_ady);/"
