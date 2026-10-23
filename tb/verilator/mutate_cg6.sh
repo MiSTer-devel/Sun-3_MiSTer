@@ -153,6 +153,7 @@ run "the cursor under the colour"         $S -e "s/ol3  <= (col2 != 2'd0) ? col2
 # ---- the TEC (sun3_cg6_tec.sv, and its place in the register file)
 run "TEC: to integer toward zero"         $X -e "s/f2i = ~{1'b0, ip} + {31'h0, ~frac};/f2i = ~{1'b0, ip} + 32'h1;/"
 run "TEC: to fixed a bit short"           $X -e "s/(fixed ? 9'd16 : 9'd0)/(fixed ? 9'd15 : 9'd0)/"
+run "TEC: autoload rounded as fixed"      $X -e "s/wire \[31:0\] dq_i = f2i(dq, (st == S_RD) \&\& (vtype == 3'd1));/wire [31:0] dq_i = f2i(dq, vtype == 3'd1);/"
 run "TEC: to integer not saturated"       $X -e "s/else if (v\[30:23\] == 8'hFF || e >= 9'd158)/else if (v[30:23] == 8'hFF || e >= 9'd159)/"
 run "TEC: from fixed a bit out"           $X -e "s/? 10'sd142 : 10'sd158;/? 10'sd143 : 10'sd158;/"
 run "TEC: ties rounded up"                $X -e "s/wire        r_inc  = n_m\[11\] \& ((|n_m\[10:0\]) | n_m\[12\]);/wire        r_inc  = n_m[11];/"
@@ -175,7 +176,7 @@ run "TEC: autoload always a point"        $X -e "s/agrp <= c_adr\[8:6\];/agrp <=
 run "TEC: autoload read while written"    $X -e "s/                    st <= S_AUTO0;/                    st <= S_AUTO1;/"
 run "TEC: a fixed vertex as an integer"   $X -e "s/pk_e  <= ((adr\[11\] ? (adr\[10:9\] == 2'd1)/pk_e  <= ((adr[11] ? (adr[10:9] == 2'd0)/"
 run "TEC: a float vertex converted"       $X -e "s/pk_bv <= (adr\[11\] ? (adr\[10:9\] == 2'd2)/pk_bv <= (adr[11] ? 1'b0/"
-run "TEC: fixed reads not converted"      $X -e "s/(vtype == 3'd1) ? f2i(dq, 1'b1) : dq;/dq;/"
+run "TEC: fixed reads not converted"      $X -e "s/q    <= (vtype <= 3'd1) ? dq_i : dq;/q    <= (vtype == 3'd0) ? dq_i : dq;/"
 run "TEC: integer writes not converted"   $X -e "s/: (vtype > 3'd1)) || (wdata == 32'h0);/: (vtype != 3'd1)) || (wdata == 32'h0);/"
 run "TEC: the second bank's writes in the first" $X -e "s/(((adr\[11:8\] == 4'h1) \&\& (vtype != 3'd5)) || w_vtx)/((adr[11:8] == 4'h1) || w_vtx)/"
 run "TEC: a command's A its first only"   $X -e "s/S_AL:    ra = (3'(k + 3'd1) < nk) ? 6'(aa + 6'(k) + 6'd1) : bb;/S_AL:    ra = (3'(k + 3'd1) < nk) ? aa : bb;/"

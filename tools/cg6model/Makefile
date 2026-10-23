@@ -11,6 +11,7 @@
 #
 #   make -C tools/cg6model xnews [XN=2000 SEED=]   OpenWindows 2.0's own TEC code
 #                                          (xnews.c) against the model's TEC
+#   make -C tools/cg6model mutatexn        the model's TEC broken: xnews.c must see it
 #   make -C tools/cg6model tracexn [B=dir] [XTN=300] [SEED=]
 #                                          $(B)/t_xn.{txt,ini,fin}, for tb_cg6
 #
@@ -98,6 +99,10 @@ xnews: $(B)/xnews68k
 	$(B)/xnews68k -T
 	$(B)/xnews68k $(XNEWS) -n $(XN) -s $(SEED)
 
+mutatexn: $(B)/xnews68k
+	XNEWS=$(abspath $(XNEWS)) M68K="$(M68KDEFS) -I$(abspath $(MB))" \
+	    MUOBJ="$(abspath $(MUOBJ))" bash mutatexn.sh
+
 tracexn: $(B)/xnews68k
 	$(B)/xnews68k $(XNEWS) -n $(XTN) -s $(SEED) -t $(B)/t_xn.txt -I $(B)/t_xn.ini -F $(B)/t_xn.fin
 
@@ -134,4 +139,4 @@ clean:
 	rm -rf $(B)/harness $(B)/harness68k $(B)/lp.* $(B)/lp68k.* $(B)/trace.txt \
 	    $(B)/initial.bin $(B)/final.bin $(B)/t_lp68k.* $(B)/xnews68k $(B)/t_xn.* $(MB)
 
-.PHONY: all run run68k trace68k xnews tracexn mutate mutate68k clean
+.PHONY: all run run68k trace68k xnews tracexn mutatexn mutate mutate68k clean

@@ -1,8 +1,14 @@
 /*
  * xnews.c -- OpenWindows 2.0's own GX code against cg6model's TEC.
  *
- *   xnews68k XNEWS [-n N] [-s seed] [-t trace -I initial -F final] [-v]
+ *   xnews68k XNEWS [-n N] [-s seed] [-t trace -I initial -F final] [-v] [-c]
  *   xnews68k -T                the TEC's arithmetic against the host's floats
+ *
+ * -c: exit 1 unless the TEC agrees with xnews's float software bit for bit,
+ * its fixed and integer results land on the exact one's pixel at least
+ * 99.5% of the time, its autoloaded vertices are the exact ones rounded
+ * down at least 99.9% of the time, and what it draws the exact vertices'
+ * drawing in 99.5% of the tests (mutatexn.sh's test).
  *
  * XNEWS is the sun3 /usr/openwin/bin/xnews of OpenWindows 2.0 (SunOS 4.1.1's
  * tape: 1,335,296 bytes, SHA-256 e0c03ef4...5011bf3c6), an unstripped 68020
@@ -59,7 +65,7 @@
 static uint8_t *ram;
 static struct cg6 G, R;		/* the board; the reference */
 static FILE *trace;
-static int verbose, kinds = 15;	/* -k: 1 point, 2 path, 4 vec, 8 area */
+static int verbose, check, kinds = 15;	/* -k: 1 point, 2 path, 4 vec, 8 area */
 static unsigned long icount, nboard;
 static volatile int returned;
 
@@ -87,7 +93,8 @@ static uint64_t d2u(double d) { uint64_t u; memcpy(&u, &d, 8); return u; }
 static double u2d(uint64_t u) { double d; memcpy(&d, &u, 8); return d; }
 
 /* ---- the reference's mirror of the board's cycles (the drawing tests) ---- */
-static int mirror;			/* the drawing tests: R follows G */
+static int mirror;			/* the drawing tests: 1 R follows G's FBC cycles, its
+					   TEC vertices exact; 2 the vertices checked only */
 static int tec_x_kind, tec_y_kind;	/* the last Y written: its kind */
 static double tec_y, cur_x, cur_y;	/* the exact point, the exact last result */
 static unsigned long nvert, nvert_bad;
@@ -138,8 +145,10 @@ static void mirror_tec_write(uint32_t o, uint32_t v)
 		if (G.tec[0] >> 14 & 1) {
 			int32_t ex = (int32_t)floor(cur_x), ey = (int32_t)floor(cur_y);
 			uint32_t r = 0x800 + 0x40 * obj;
-			cg6_write(&R, CG6_FBC + r + 4, 4, ey);
-			cg6_write(&R, CG6_FBC + r, 4, ex);
+			if (mirror == 1) {
+				cg6_write(&R, CG6_FBC + r + 4, 4, ey);
+				cg6_write(&R, CG6_FBC + r, 4, ex);
+			}
 			nvert++;
 			/* the board's vertex, as it was queued */
 			if (G.x[(G.nv - 1) & 3] - G.offx != ex || G.y[(G.nv - 1) & 3] - G.offy != ey) {
@@ -167,7 +176,7 @@ static uint32_t mem_rd(uint32_t a, int size)
 {
 	if (board(a)) {
 		uint32_t off = CG6_FBC + (a - VBASE), v = cg6_read(&G, off, size);
-		if (mirror && off < CG6_TEC)
+		if (mirror == 1 && off < CG6_TEC)
 			cg6_read(&R, off, size);
 		return v;
 	}
@@ -182,8 +191,10 @@ static void mem_wr(uint32_t a, int size, uint32_t v)
 		uint32_t off = CG6_FBC + (a - VBASE);
 		cg6_write(&G, off, size, v);
 		if (mirror) {
-			if (off < CG6_TEC)
-				cg6_write(&R, off, size, v);
+			if (off < CG6_TEC) {
+				if (mirror == 1)
+					cg6_write(&R, off, size, v);
+			}
 			else if (size == 4)
 				mirror_tec_write(off - CG6_TEC, v);
 		}
@@ -759,6 +770,13 @@ static void draw_setup(int *ox, int *oy, int clip[4])
 		wr8(FBS + FB_FLAGS, ram[FBS + FB_FLAGS] | 0x20);
 	}
 	tec_w(0x000, (tec_r(0x000) & ~0x3fu) | 0x22);
+	/* sometimes a translation in it, as _sh_lg_area_2GS puts the origin
+	   there (0xeea7c): relative vertices must not have it */
+	if (rn(4) == 0) {
+		tec_w(0x190, (uint32_t)(rn(200) << 16 | rn(65536)));
+		tec_w(0x19c, (uint32_t)(rn(200) << 16 | rn(65536)));
+		wr8(FBS + FB_FLAGS, ram[FBS + FB_FLAGS] & ~0x20);	/* the identity, again, next */
+	}
 	fbc_w(0x108, 0xa980ff00);			/* the foreground colour */
 	fbc_w(0x100, fcol);
 	fbc_w(0x10c, 0xff);
@@ -868,7 +886,35 @@ static void test_area(void)
 		}
 	}
 	wr16(E + EL * ne + 2, T_END);
-	mirror = 1;
+	/* the reference draws the fan itself, from the exact vertices rounded
+	   down (and through the translation, if any): a point at the first,
+	   then each quadrilateral's own, as xnews's restart should begin it */
+	{
+		double tx = u2f(G.tec_data[0x24]), ty = u2f(G.tec_data[0x27]);
+		int32_t qx[32], qy[32];
+		for (int i = 0; i < k; i++) {
+			qx[i] = (int32_t)floor(px[i] + tx);
+			qy[i] = (int32_t)floor(py[i] + ty);
+		}
+		cg6_write(&R, CG6_FBC + 0x0c0, 4, ox);
+		cg6_write(&R, CG6_FBC + 0x0c4, 4, oy);
+		for (int last = 0, first = 1; last < k - 1; first = 0) {
+			int n = first ? 3 : 2;
+			cg6_write(&R, CG6_FBC + 0x804, 4, qy[0]);
+			cg6_write(&R, CG6_FBC + 0x800, 4, qx[0]);
+			if (!first) {
+				cg6_write(&R, CG6_FBC + 0x8c4, 4, qy[last]);
+				cg6_write(&R, CG6_FBC + 0x8c0, 4, qx[last]);
+			}
+			for (int j = 0; j < n && last < k - 1; j++) {
+				last++;
+				cg6_write(&R, CG6_FBC + 0x8c4, 4, qy[last]);
+				cg6_write(&R, CG6_FBC + 0x8c0, 4, qx[last]);
+			}
+			cg6_read(&R, CG6_FBC + FBC_DRAWSTATUS, 4);
+		}
+	}
+	mirror = 2;
 	call(sym("_sh_lg_area_2US"), 3, GS, E, 0);
 	mirror = 0;
 	draw_check("area_2US");
@@ -924,6 +970,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "-I") && i + 1 < argc) ini = argv[++i];
 		else if (!strcmp(argv[i], "-F") && i + 1 < argc) fin = argv[++i];
 		else if (!strcmp(argv[i], "-v")) verbose = 1;
+		else if (!strcmp(argv[i], "-c")) check = 1;
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) kinds = atoi(argv[++i]);
 		else die("unknown argument %s", argv[i]);
 	}
@@ -977,5 +1024,24 @@ int main(int argc, char **argv)
 	printf("  drawing: %lu autoloaded vertices, %lu not the exact one rounded down; "
 	       "%lu tests, %lu with pixels that differ (%lu pixels)\n",
 	       nvert, nvert_bad, ndraw_tests, ndraw_bad, ndraw_pix);
+	if (check) {
+		int bad = 0;
+		for (int i = 0; i < 2; i++) {
+			if (i == 1 && (pt_tec_sw[i].exact != pt_tec_sw[i].n || pa_tec_sw[i].exact != pa_tec_sw[i].n))
+				bad++, printf("-c: float results not the software's\n");
+			if (pa_tec_ex[i].pix < pa_tec_ex[i].n * 0.995 || pt_tec_ex[i].pix < pt_tec_ex[i].n * 0.995)
+				bad++, printf("-c: %s results off the exact pixel\n", i ? "float" : "fixed");
+		}
+		if (pt_tec_ex[2].exact < pt_tec_ex[2].n * 0.995)
+			bad++, printf("-c: integer results not the exact ones\n");
+		if (nvert_bad > nvert / 1000 || !nvert)
+			bad++, printf("-c: autoloaded vertices not the exact ones\n");
+		if (pa_types_bad)
+			bad++, printf("-c: path elements of another kind\n");
+		if (ndraw_bad > ndraw_tests / 200 || !ndraw_tests)
+			bad++, printf("-c: drawn otherwise than the exact vertices draw\n");
+		printf("-c: %s\n", bad ? "FAIL" : "ok");
+		return bad != 0;
+	}
 	return 0;
 }

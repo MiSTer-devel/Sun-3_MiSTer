@@ -209,7 +209,8 @@ The indexed registers queue vertices for DRAWSTATUS:
   the previous vertex. libpixrect uses only absolute ones; sunGX.c uses
   relative lines, triangles and quadrilaterals for CoordModePrevious.
 * The completed vertices also land in x0/y0 .. x3/y3, at the queue index
-  modulo 4.
+  modulo 4. MISC's index (5:4) reads that index for the next vertex
+  (xnews reads the vertex before it back: *The TEC*).
 * Writing a different primitive's register starts a new queue. The
   exception is a point followed by triangle or quadrilateral vertices: the
   point is the polygon's first vertex.
@@ -308,36 +309,259 @@ commands, for N status reads after each one. The tests pass at -b 0 to 3.
 
 ## The TEC
 
-TEC registers (0xFF701000):
-* MV matrix control (+0), clip (+4), VDC (+8);
-* commands (+0x10..0x1C);
-* 64 data registers (+0x100..0x1FC);
-* integer, fixed and float indexed vertices (+0x800..0xD1C), which go to the
-  FBC transformed.
-
-Its users:
+The TEC ("transform engine", 0xFF701000) is a matrix unit in front of the
+FBC. Its users:
 * The PROM and the kernel write MV, clip and VDC = 0 ("turn off frobs in
   transform engine (makes X11 work)", NetBSD).
 * The kernel's `cg6_cntxsave` reads the 64 data registers twice, with VDC
-  0x8000 and 0xA000.
+  0x8000 and 0xA000, and `cg6_cntxrestore` writes both back (**verified**,
+  cgsix.o 1.49).
 * **libpixrect never touches the TEC** (`-S`), and neither does sunGX.c.
-* **OpenWindows 3's xnews does use it**: `_lego_load_mv`, `_sh_lego_load_trans_2d`
-  (a 2x3 matrix into the data registers, MV = 0x112), `_sh_lg_tec_ex_abs`
-  and `_rel` (TEC exceptions).
-* **So does OpenWindows 2.0's sun3 xnews**, on every GX, all the time
-  (*Stage 2: SunView*, *OpenWindows 2.0 and the TEC*).
+* **OpenWindows 2.0's sun3 xnews uses it on every GX, all the time**:
+  matrices, point and path transforms, and as the vertex front end of its
+  NeWS and X11 fills and strokes (*What xnews does with it*, below).
+  OpenWindows 3's xnews too (`_lego_load_mv`, `_sh_lego_load_trans_2d`,
+  `_sh_lg_tec_ex_abs` and `_rel`).
 
-The data registers have **two banks**: VDC's type field (bits 15:13; 4 and 5
-are Solaris's INTRNL0 and INTRNL1) picks the view. The sun3 kernel's
-`cg6_cntxsave` reads all 64 with VDC 0x8000 and again with 0xA000, and
-`cg6_cntxrestore` writes both back (**verified**, cgsix.o 1.49). With
-types 0 to 2 (integer, 16.16 fixed, IEEE single) the board converts on
-access (**verified** from xnews's use). The model and the core keep every
-type but 5 as bank 0, raw.
+This section is the TEC as xnews 2.0 needs it, read from its 68020 code
+(`openwin/bin/xnews` on the 4.1.1 tape, 1,335,296 bytes, SHA-256
+e0c03ef4...5011bf3c6, not stripped; addresses are its text's) and from
+`incl/pixrect/cg6tec.h` (1.2 88/10/07), and checked by running xnews's own
+routines against the model (*The TEC's check*, below). The bit fields are
+cg6tec.h's, which says its structures assume "the compiler assigns bit
+fields left to right": on the 68020 the first field is bit 31.
 
-The model is a register file: it reads back what was written and transforms
-nothing. That is enough for (a) to (c) below. It is not enough for an
-OpenWindows that uses the TEC (*Risks*).
+### The registers
+
+| offset | register | |
+|---|---|---|
+| 0x000 | MV | the vertex matrix's shape and switches |
+| 0x004 | clipcheck | clip enables and results; stored |
+| 0x008 | VDC | the data registers' type; the VDC multiply |
+| 0x010..0x01C | COMMAND1..4 | a matrix product |
+| 0x100..0x1FC | DATA00..63 | the data registers |
+| 0x800, 0xA00, 0xC00 | I, B, F vertices | integer, 16.16 fixed ("B") and IEEE single; point, line, triangle, quadrilateral, rectangle 0x40 apart; ABS x y z w at +0..+0xC, REL x y z w at +0x10..+0x1C |
+
+**MV** (`l_tec_mv_t`): 15 divide, 14 autoload, 13 h (the point has a w),
+12 z (the point has a z), 10 i (the matrix's rows: 0 three, 1 four), 9:8 j
+(its columns, 1 to 4), 5:0 the data register its first element is in. The
+matrix is stored **column by column**: element (row k, column j) at index
++ j x rows + k (**verified**: `_sh_lego_load_trans_2d` 0xeb9b6 puts a
+PostScript matrix [a b c d tx ty] at 0x22 as a c tx b d ty, `_lego_load_mv`
+0x3bf70 a 4x4 at 0x12 as its columns). xnews's values:
+* 0x112: 3 rows, 2 columns at 0x12 (`_sh_init_cg6` 0xeb93c, the 2D CTM);
+* 0x122 with autoload, 0x4122: the identity at 0x22 that drawing goes
+  through (`_sh_lg_Path_Raster` 0x4260c sets the index from the frame
+  buffer's +0x5a, 0x22; `_sh_lg_vec_2U` 0xef676, `_sh_lg_area_2US`
+  0x608f4, `_sh_lg_hol_2U` 0x5636c, `_xform_conic`/`cubic` 0xedc7a set bit
+  14; `_sh_lg_area_2GS` 0xeea96 and the exception handlers clear it);
+* 0x612 and 0x8712 (4x3, and 4x4 with divide) for a 3D canvas's CTM
+  (`_lego_load_mv` 0x3c07a, `_sh_lego_load_trans_3d` 0xebb90). A 3D
+  canvas's renderers are stubs in this build, so these are only loaded.
+
+**VDC** (`l_tec_vdc_t`): 15:13 type, 12 multiply, 8 k (2D/3D), 5:0 the VDC
+matrix's index. xnews sets 0x200C at start (fixed, the index 0x0C), clears
+bit 12 every time it touches VDC (`_pipeline_context` 0xa644, `_val_nop`
+0xebcbc), and from then on changes only the type, through a copy at the
+frame buffer struct's +0x58 (0x0000, 0x2000, 0x4000). `_lego_load_vdc`
+(0xebbaa), which would load a VDC matrix and set the multiply, is never
+called (**verified**: no reference to it in text or data).
+
+**COMMAND** (`l_tec_cmd_t`): 31:30 m - 1 (A's columns), 29:28 n - 1 (B's
+columns), 27:24 the identity signs, 21:16 A's index, 13:8 B's, 5:0 C's.
+xnews writes COMMAND1 only, three values:
+* 0x90322236 (`_point_transform` 0x9e0a, 2D): A (x y w) at 0x32, B the 3x2
+  at 0x22, C at 0x36;
+* 0xF0322236 (the same, 3D): 1x4 times 4x4;
+* 0x90321236 (`_upd_2d` 0xee54e, a path's relative and later elements):
+  times the CTM at 0x12.
+
+It writes the inputs, writes COMMAND1, and at once reads C (0x11d8..), with
+nothing between: **C = A (1 x m) . B (m x n)**, B column by column as MV's
+matrix is, C's j-th element at C + j (**verified** by the agreement below:
+any other reading fails at once).
+
+### The data registers
+
+Inside, a data register is an IEEE single (**inferred**: xnews writes a
+matrix and reads its products in the same type, fixed or float, and in
+`_upd_2d_mv` 0xee394 writes vertices as fixed and reads the results as
+float). Software sees it through VDC's type:
+
+| type | a write | a read |
+|---|---|---|
+| 0 integer | converted, rounded to nearest | rounded toward minus infinity, saturated |
+| 1 16.16 fixed | converted (value / 65536), rounded to nearest | x 65536, toward minus infinity, saturated |
+| 2 IEEE single | as it is | as it is |
+| 4 INTRNL0 | as it is | as it is |
+| 5 INTRNL1 | a second bank of 64, raw | the second bank |
+| 3, 6, 7 | as it is | as it is |
+
+xnews uses all three of 0 to 2 for data: `_point_transform` writes integer
+points at type 0 (0x9ef2), fixed at 1, float at 2, and reads the results at
+the same type. Its fixed results are 16.16 (`_sh_lg_vec_2U` reads data 4
+and 5 at type 1 as the current point, and puts `>> 16` of it in the FBC,
+0xef68c). `_sh_lg_load_ident` (0x2370a) writes 1 as 0x3F800000 at type 2
+and 0x10000 otherwise.
+
+Rounding toward minus infinity is **inferred**, from xnews:
+* `_sh_lg_hol_2U` closes an outline with an FBC line to the subpath's
+  start (0x5673e), its x and y the integer halves (`move.w`) of data 4 and
+  5 as read at its moveto, in 16.16. For that end to meet the TEC's own
+  first vertex, autoloaded, the TEC's float-to-integer must be the floor
+  of its float-to-fixed, which is the floor of the value.
+* Its fan restarts and its own vertices use `asr.l #16` (0xef69c, 0x609ee),
+  a floor, never `+ 0x8000`; xnews's software rasteriser rounds
+  (`_sh_fb_Vect`), so the GX code was written for a TEC that does not.
+
+The 64-bit TEC_DATA (`typedef double`) and the two banks the kernel saves
+suggest a wider register inside; nothing xnews does needs it. The model
+and the core keep bank 0 an IEEE single (types 4, 3, 6, 7 its raw bits)
+and bank 1 a plain store.
+
+### The vertex registers
+
+A write to a vertex register's coordinate converts it by the register's
+kind (integer, fixed, float: not by VDC) and puts it in **data register 0
+to 3** (x y z w: `L_TEC_X` .. `L_TEC_W`, "used as index to store index
+writes in tec_data array"). **x is the last written and transforms the
+point** (**verified**: every vertex xnews writes is y then x, z or w first
+when it has them: 0xef71a, 0x5643c, 0x60908, 0xedd76; it reads the result
+at once after x):
+
+* the point is (x y w) for a 3-row matrix, (x y z w) for 4; z is data 2
+  with MV's z bit, else 0; w is data 3 with h, else **1 for ABS, 0 for
+  REL**;
+* for each of the matrix's columns j: the dot product, **into data register
+  4 + j** (`L_TEC_X_MV` .., "used as index to store xform results"; xnews
+  keeps pointers to data 4..7 at the frame buffer struct's +0x78..+0x84 and
+  reads data 4 and 5 after each vertex: `_upd_2d_mv` 0xee3a0,
+  `_sh_lg_vec_2U` 0xef7d4);
+* a **REL** vertex adds its product to data 4 + j as it was: the TEC keeps
+  the current point. xnews sets data 4 and 5 to the current point (16.16)
+  before it draws (`_sh_lg_vec_2U` 0xef680, `_sh_lg_area_2US` 0x608ce), and
+  then writes relative lines and quadrilateral vertices (0xa54, 0xc54,
+  0xad0, 0xcd0) and nothing else.
+
+With **autoload** (MV bit 14) the result, data 4 and 5 rounded toward
+minus infinity, goes into the FBC's queue as an absolute vertex of the
+same kind: a TEC line vertex as an FBC line vertex, with the FBC's raster
+offset added (**verified** by xnews's use: it sets the raster offset to
+the window's origin, 0xef658, and adds the origin to data 4 and 5 for its
+device current point, 0xef7da; `_xform_conic` 0xedd0c reads the FBC's x0
+and y0 back, `<< 16`, as the curve's control point; `_sh_lg_area_2US`
+reads the vertex before MISC's index, 0x609b4). DRAWSTATUS then draws it:
+xnews reads DRAWSTATUS after each line vertex and at each 0x43 element of
+a fill. xnews draws, through the TEC:
+* **lines**, fixed and float, absolute and relative (`_sh_lg_vec_2U`, the
+  thin strokes, and `_sh_lg_hol_2U`, outlines);
+* **fills** as fans of quadrilaterals: a TEC point, then up to three TEC
+  quadrilateral vertices, then DRAWSTATUS; the next quadrilateral begins
+  with an FBC point (not the TEC's) at the vertex before MISC's index, the
+  fan's first (`_sh_lg_area_2US`);
+* **curves**: `_xform_conic`, `_xform_cubic` autoload TEC points and read
+  them back from the FBC;
+* never triangles, rectangles, integer vertices or W.
+
+**MISC's index** (5:4, `l_fbc_misc_index`) reads the slot the queue's next
+vertex goes to, the number queued modulo 4 (**inferred**: `_sh_lg_L2Ds`
+0xebe6a takes a failed line's ends from x/y[index - 2] and [index - 1]; the
+fill's restart from [index] after point + 3 quadrilateral vertices, the
+fan's first). The FBC model and the core now read it so; index_mod (6)
+reads 0, and a written index is ignored.
+
+### Clipcheck, exceptions, divide
+
+xnews writes clipcheck 0 (no clip planes) and never enables them. It
+clears TEC exceptions where it might meet one (`andi.l #$7f030303`: the
+exception and every result bit, 0xef80a; `andi.l #$7fffffff`, 0xede1a)
+when FBC STATUS bit 30 (`L_FBC_TEC_EXCEPTION`) or clipcheck bit 31 says
+so, and goes on; `_sh_lg_tec_ex_abs`/`_rel`, which would turn autoload off
+and redo the point, are not called. So the model and the core never raise
+a TEC exception: STATUS bit 30 and clipcheck read as stored. MV's divide
+and the VDC multiply are only set for 3D canvases, which this xnews does
+not draw; neither is built.
+
+### What the model and the core do, and leave out
+
+Built: the data registers in every type and both banks; the vertex
+registers of every kind and object, ABS and REL, x y z w, through MV's
+every shape (3 or 4 rows, 1 to 4 columns, h and z); autoload into every
+FBC primitive; COMMAND1 for every m and n. The arithmetic is IEEE single
+as `cg6model.c` defines it: round to nearest even; a denormal operand or
+result is zero; an exponent of 255 is infinity (no NaNs: inf - inf is the
+first operand, inf x 0 is zero); overflow is infinity. Each product and
+each sum is rounded, the dot product taken in order (x m0 + y m1) + w m2,
+as xnews's own float code (`_sh_trans_mul_abs_f2d` 0xbd48e) does it.
+
+Left out: MV's divide; the VDC multiply and its matrix; the clip planes,
+clipcheck's results and TEC exceptions; COMMAND2..4 (stored); the
+command's identity bits; NaN.
+
+### The TEC's check
+
+`tools/cg6model/xnews.c` (`make -C tools/cg6model xnews`) loads xnews whole
+onto Musashi as a 68020, with its shared libc's floating point (Sun's
+`V`/`F` routines through the PLT) done in C on the host's IEEE floats, and
+calls its own routines with the structures they read (a canvas, its
+matrix, its frame buffer's TEC/FBC pointer and type cache, a path):
+* `_point_transform` (0x9e0a, COMMAND1) against the software's
+  (0x3c06, `_sh_trans_mul_abs_*`), on random matrices (identity, scale and
+  flip, rotation, shear; fixed and float) and points (fixed, float,
+  integer, vectors);
+* `_sh_cg6_Path_Transform` (the vertex registers, then COMMAND1 for relative
+  elements, as a GX's pipelined canvas has it) against
+  `_sh_fb_Path_Transform` (`_upd_pipe_xf_b2d`, `_xf_f2d`), on random paths;
+* `_sh_lg_vec_2U` and `_sh_lg_area_2US`, drawing with autoload, while a
+  second model is given the same FBC cycles with each autoloaded vertex
+  replaced by the exact one, rounded down; the two frame buffers are
+  compared.
+
+Each result is compared with the exact one (doubles from the stored
+inputs) and with the software's. `-T` first checks the TEC's arithmetic
+against the host's IEEE single: 20 million operations on normal values, 0
+differ.
+
+**Results** (2026-10-23, `xnews68k XNEWS -n 20000 -s 1 -c`):
+
+| compared | results | exact | the same pixel |
+|---|---|---|---|
+| point, TEC vs software, float matrices and points | 2,622 | **100%** | 100% |
+| path, TEC vs software, float | 57,710 | **100%** | 100% |
+| point, TEC vs software, fixed | 2,224 | 5.5% (worst 19,100/65536: the software's) | 98.92% |
+| path, TEC vs software, fixed | 8,444 | 14.4% (worst 259/65536) | 99.99% |
+| point, TEC vs exact, integer points | 2,212 | 99.91% | 99.91% |
+| path, TEC vs exact, fixed | 65,604 | 7.1% (39% within 1/65536, worst 261/65536) | 99.98% |
+| path, TEC vs exact, float | 57,710 | 5.4% (90% within an ulp) | 99.96% |
+| drawing: autoloaded vertices vs the exact one rounded down | 75,128 | all but 2 | 2 tests of 10,001 differ, 76 pixels |
+
+(10 million 68020 instructions, 1.07 million board accesses; 91,884 TEC
+vertices, 75,128 of them autoloaded, and 51,375 commands.)
+* **The float paths agree with xnews's software bit for bit**: the TEC
+  computes what `_sh_trans_mul_abs_f2d` and `_upd_pipe_xf_f2d` do, in the
+  same order. The software's float results are no nearer the exact ones
+  than the TEC's (90.2% within an ulp, worst 27,100 ulps where a sum
+  cancels).
+* **In fixed** the software multiplies 16.16 by 16.16 exactly and the TEC
+  has 24 bits: a few hundred 65536ths out at screen coordinates, another
+  pixel in 2 results in 10,000 (paths). The software's point transform is
+  the worse of the two at its worst (its vectors), another pixel than the
+  exact one in 1%.
+* An integer point lands on another pixel in 9 in 10,000: a value within
+  float's precision of an integer. The two drawn vertices that differ are
+  such values too (x.99997 in 16.16 is x+1 as a single).
+* 29,824 path elements the software makes float, xnews's TEC path leaves
+  fixed: its own choice, not the TEC's. 2,026 results beyond 16.16's range
+  are not counted (the TEC saturates, the software wraps).
+* The drawing tests sometimes put a translation in the identity, as
+  `_sh_lg_area_2GS` does (0xeea7c), so that relative vertices are seen to
+  leave it out. The fills' reference is drawn from the polygon, not from
+  xnews's cycles, so that the fan's restart at MISC's index is checked.
+
+`make -C tools/cg6model mutatexn` breaks 14 of the model's TEC rules one at
+a time (the rounding, the sticky bits, the fixed point, the matrix's and
+the command's layouts, relative vertices, autoload's rounding and offset,
+MISC's index), and `-T` or `-c` catches 14 of 14.
 
 ## The THC
 
@@ -531,6 +755,9 @@ behaviour.
   pr_makefromfd's view of its by-value `struct pr_size` and of
   `pr_devdata` (fd and va at +0xc/+0x10 on SPARC, +0xa/+0xe on the
   68020, where an int is 2-aligned after the short dev_t);
+* `xnews.c` (`xnews68k`): OpenWindows 2.0's sun3 xnews, loaded whole on
+  Musashi, its own TEC routines against the model's TEC (*The TEC's
+  check*);
 * `mutate.sh`.
 
 ```
@@ -539,7 +766,12 @@ make -C tools/cg6model mutate
 make -C tools/cg6model run68k [N= SEED= BUSY=]        # LIBPIXRECT68K=, MUSASHI=
 make -C tools/cg6model mutate68k
 make -C tools/cg6model trace68k [B=dir TN=300 SEED=1] # $(B)/t_lp68k.{txt,ini,fin}
+make -C tools/cg6model xnews [XN=2000 SEED=1]         # XNEWS=, MUSASHI=
+make -C tools/cg6model tracexn [B=dir XTN=300 SEED=1] # $(B)/t_xn.{txt,ini,fin}
 ```
+
+`XNEWS` defaults to `build/dist/sunos-4.1.1-sun3/usr/openwin/bin/xnews`
+(SHA-256 e0c03ef4...5011bf3c6, from the 4.1.1 tape).
 
 `LIBPIXRECT` defaults to `build/dist/sunos-4.1.3-sparc/libpixrect.a`
 (SHA-256 d7703e9f...fdf50175, from the 4.1.3 image above);
@@ -1021,7 +1253,8 @@ the 68020 `lib/libpixrect.a` (`tools/sunos/aoutdis.py`):
   rectangle's are; the model computes in 32. Only a vertex beyond
   +-32,767 draws differently, and nothing Sun's code sends is that far out
   (libpixrect clips first). The `-G` generator keeps them inside.
-* The TEC's arithmetic, pick mode, z, "linear" raster mode, the polygon
+* The TEC's arithmetic (built since: *The TEC in the core*), pick mode, z,
+  "linear" raster mode, the polygon
   overlap flag and the clipcheck register's meaning are still not built.
 
 ### How it is checked
@@ -1074,6 +1307,9 @@ the 68020 `lib/libpixrect.a` (`tools/sunos/aoutdis.py`):
   `cg6_cntxsave` reads, read back).
 
 ### OpenWindows 2.0 and the TEC
+
+*Built since: The TEC (the spec, from xnews) and The TEC in the core.
+What follows is the stage-2 finding that led there.*
 
 OpenWindows 2.0's sun3 `xnews` (on the 4.1.1 tape) was disassembled
 (capstone; scripts kept out of the tree). **It uses the TEC's arithmetic on
@@ -1170,3 +1406,119 @@ With *Colour board type* GX, SunOS 4.1.1_U1 installed:
 * **Stage 4** (X11): MIT Xsun's `sunGX.c` (relative vertices and triangles
   are built and in the `-G` traces, never yet driven by real code); then
   the TEC's 2D affine subset for OpenWindows, from a board trace.
+
+## The TEC in the core
+
+**Status (2026-10-23, Verilator only; not yet on the board):** the TEC as
+*The TEC* specifies it, for OpenWindows 2.0's xnews.
+
+### What is built
+
+* **`sun3_cg6_tec.sv`**, inside `sun3_cg6.sv`, **on the CPU's clock**. The
+  register file is there, and the TEC's work is a few dozen clocks a
+  vertex, which the CPU waits for anyway before its next FBC cycle (a
+  DRAWSTATUS read): on `clk_mem` it would be three times faster but need
+  a clock crossing for every data register access and for the autoloaded
+  vertex into the queue, and the CPU's clock has the slack (every stage a
+  register at 30 ns). It has:
+  * the 64 data registers, IEEE single, in one M10K, read and written
+    converted by VDC's type (bank 1, type 5, stays in the register file's
+    store);
+  * MV and VDC's type; COMMAND1;
+  * one multiply (24 x 24 bits: one DSP), one add (align, add or
+    subtract), one normalise-and-round they share, and the conversions to
+    and from integer and 16.16 (the normaliser for integers in, one
+    floor-and-saturate for integers out);
+  * a sequencer: a vertex's x converted, y z w read, then for each column
+    each term multiplied, rounded, added, rounded, the relative vertex's
+    last result added, the result written; with autoload data 4 and 5
+    rounded down and handed to the register file (`av`). A command loads
+    A, then the same columns.
+* **`sun3_cg6.sv`**: every TEC write goes to the TEC (and the store, for
+  reading back), and bank 0's reads come from it. While it is busy every
+  TEC and FBC cycle waits (`tstall`): a read until its value is ready, a
+  DRAWSTATUS until the autoloaded vertex is queued. A write is answered at
+  once and the TEC works on (the CPU runs on until its next TEC or FBC
+  cycle). TEC cycles also wait for the drawing engine, as FBC writes do,
+  so an autoloaded vertex never lands while the engine reads the queue's
+  copy. The autoloaded vertex goes into the queue as a CPU's would (a new
+  queue but for a point before triangle or quadrilateral vertices), with
+  the raster offset added. **MISC's index** (5:4) reads `nv mod 4`.
+* A 2D vertex (3 x 2, with autoload) takes VCLK CPU clocks from its x's
+  write to the answer of the DRAWSTATUS read after it (`tb_cg6`'s directed
+  test): 1.SPEED us at 33 MHz.
+
+### Where it differs from the model
+
+Nowhere the bench can see: the model's TEC (`cg6model.c`, `tec_*`) is the
+RTL's arithmetic, step for step, and the bench compares every TEC
+register read and every pixel. Its denormals, infinities and rounding are
+checked against the host's IEEE single for normal values (`xnews68k -T`).
+
+### Left out
+
+MV's divide (3D canvases), the VDC multiply and its matrix, the clip
+planes, clipcheck's results and TEC exceptions (STATUS bit 30 reads 0),
+COMMAND2..4 (stored), the command's identity bits, NaNs. All are unused by
+xnews 2.0 on a 2D screen (*The TEC*). The data registers' type 4 is the
+IEEE single as it is, not whatever wider form a real TEC has inside.
+
+### How it is checked
+
+* **`xnews68k`** (*The TEC's check*): xnews's own transforms and drawing
+  routines against the model, and against xnews's software and the exact
+  result.
+* **`tb_cg6`** replays, besides the PROM's, the generator's and the two
+  libpixrect traces:
+  * **`t_xn`**, `xnews68k`'s trace (`tracexn`, 300 tests): every TEC and
+  FBC access xnews's routines make, its TEC reads compared and its
+  frame buffer at the end;
+  * the generator's (`-G`) new **TEC tests**: data registers written and
+  read in types 0, 1, 2 and 4, specials and saturation included; vertex
+  registers of every kind and object, absolute and relative, through
+  every MV shape (3 or 4 rows, 1..4 columns, h and z); autoload into
+  every primitive, drawn; COMMAND1 for every m and n, anywhere in the 64
+  (504 vertices, 247 autoloaded, 66 commands at the default 400 tests);
+  * a directed TEC line through a scaling matrix, drawn, its results read
+  back in 16.16, and timed; and the two banks' test, with type 0's
+  conversion.
+* **`mutate_cg6.sh`**: MUTN mutants of the TEC and its place in the
+  register file (rounding, saturation, the sticky bits, the alignment,
+  infinities, MV's fields, relative vertices, autoload, the command's
+  fields, the types' conversions, the second bank, the stall, MISC's
+  index), MUTRES.
+
+### Area (a guess; no fit yet)
+
+| block | ALMs | DSP | M10K |
+|---|---|---|---|
+| the multiply's operands, exponents and specials | 60-90 | 1 | |
+| the add: compare, align (27 bits), add/subtract | 180-250 | | |
+| normalise (36-bit count and shift) and round | 160-220 | | |
+| float to integer or 16.16 (one) | 100-150 | | |
+| the operands and results (4 + 3 words), sequencer | 250-350 | | |
+| data registers | | | 1 |
+| the register file: stalls, the autoloaded vertex into the queue | 60-100 | | |
+| **total** | **800-1,150** | **1** | **1** |
+
+### On the board
+
+With *Colour board type* GX and SunOS 4.1.1_U1, `openwin` from the
+console login:
+1. The desktop: olwm's frames and menus (FBC rectangles, lines and text,
+   not the TEC), the workspace pattern, the pointer.
+2. **NeWS through the TEC** (`/usr/openwin/demo`, run with `psh`): `lines`
+   and `vectors` (thin strokes, `_sh_lg_vec_2U`), `poly`, `piechart`,
+   `colorwheel` and `world` (fills: fans of quadrilaterals), `spiral`,
+   `rubber`, `spin` and `flyinglogos` (rotated and scaled paths, matrices
+   in the TEC), `widedemo` (wide lines, as fills), `roundclock` and
+   `monaeyes` (arcs and curves, `_xform_conic`), `fish`, `scaledtext`.
+   Each should look as it does on the cg4; a shape off by a pixel at its
+   edges, or a fill that misses a sliver along a fan's diagonal, is the
+   rounding.
+3. **X11 through the TEC**: `ico` and `ico2` (polygons), `plaid`
+   (rectangles: not the TEC), `maze`, `muncher` and `worm` (lines),
+   `puzzle`, `xsol`, `gammon`, `xcalc`, `xlock`.
+4. `xterm` and text (not the TEC), window moves and resizes (blits).
+5. Against the cg4 in the same slot: the same demos side by side for
+   exactness, and `xnews_uptime`-style timings of `lines` for speed.

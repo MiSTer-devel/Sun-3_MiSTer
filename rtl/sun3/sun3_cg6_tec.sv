@@ -204,6 +204,10 @@ module sun3_cg6_tec (
                          (r_e >= 11'sd255) ? {pk_s, 8'hFF, 23'h0} :
                          (r_e <= 11'sd0) ? {pk_s, 31'h0} : {pk_s, r_e[7:0], r_frac};
 
+    // one conversion from the data registers' read port: a read in its
+    // type, an autoloaded vertex's integers
+    wire [31:0] dq_i = f2i(dq, (st == S_RD) && (vtype == 3'd1));
+
     // an integer written: its magnitude
     wire [31:0] w_mag = wdata[31] ? (~wdata + 32'd1) : wdata;
 
@@ -249,7 +253,7 @@ module sun3_cg6_tec (
 
             // ---- a data register's read, in the type's terms ------------------------------
             S_RD: begin
-                q    <= (vtype == 3'd0) ? f2i(dq, 1'b0) : (vtype == 3'd1) ? f2i(dq, 1'b1) : dq;
+                q    <= (vtype <= 3'd1) ? dq_i : dq;
                 busy <= 1'b0;
                 st   <= S_IDLE;
             end
@@ -395,9 +399,9 @@ module sun3_cg6_tec (
 
             // ---- autoload: data 4 and 5, rounded down, to the FBC -------------------------
             S_AUTO0: st <= S_AUTO1;
-            S_AUTO1: begin ax <= f2i(dq, 1'b0); st <= S_AUTO2; end
+            S_AUTO1: begin ax <= dq_i; st <= S_AUTO2; end
             S_AUTO2: begin
-                ay   <= f2i(dq, 1'b0);
+                ay   <= dq_i;
                 agrp <= c_adr[8:6];
                 av   <= 1'b1;
                 st   <= S_AUTO3;
