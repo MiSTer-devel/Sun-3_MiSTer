@@ -7,7 +7,7 @@
 # framework is replaced: the PLLs (pll_stub.sv), hps_io (hps_io_model.sv) and
 # the SDRAM chip (sdram_model.sv).  (After Sun-2_MiSTer's.)
 #
-#   make -C tb/verilator tb_emu [MEM_MIB=24] [TIMEOUT_MS=3000] [ROM=...] [DISK=...] [DISK1=...] [EEPROM=...] [KEYS=...] [SIMARGS=...]
+#   make -C tb/verilator tb_emu [MEM_MIB=24] [TIMEOUT_MS=3000] [ROM=...] [DISK=...] [DISK1=...] [CDROM=...] [EEPROM=...] [KEYS=...] [SIMARGS=...]
 #
 # MEM_MIB overrides the .qsf's SUN3_MEM_MIB.  The PROM is the simulation's
 # `fast' image (tools/: noparity plus Sun-3_FPGA's fastboot list -- the
@@ -23,7 +23,7 @@ TIMEOUT_MS ?= 3000
 ROM        ?= $(TOP_DIR)/build/rom/sun3_60_v1.9_fast.bin
 EMU_OBJ    := obj_tb_emu
 EMU_RUN    ?= run_tb_emu
-EMU_SIM_ARGS = +rom=$(abspath $(ROM)) +timeout_ms=$(TIMEOUT_MS) $(if $(DISK),+disk=$(abspath $(DISK))) $(if $(DISK1),+disk1=$(abspath $(DISK1))) $(if $(EEPROM),+eeprom=$(abspath $(EEPROM))) $(if $(KEYS),'+keys=$(KEYS)') $(SIMARGS)
+EMU_SIM_ARGS = +rom=$(abspath $(ROM)) +timeout_ms=$(TIMEOUT_MS) $(if $(DISK),+disk=$(abspath $(DISK))) $(if $(DISK1),+disk1=$(abspath $(DISK1))) $(if $(CDROM),+cdrom=$(abspath $(CDROM))) $(if $(EEPROM),+eeprom=$(abspath $(EEPROM))) $(if $(KEYS),'+keys=$(KEYS)') $(SIMARGS)
 
 # The defines, with SUN3_MEM_MIB taken from MEM_MIB, and SUN3_SIM for the
 # RTL's simulation-only parts (power-up garbage, the cache's counters).

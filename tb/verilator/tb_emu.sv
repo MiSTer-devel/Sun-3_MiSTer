@@ -29,8 +29,10 @@
 //  +pctrace_to=<ms> write each decoded instruction's address and first word
 //  to pctrace.txt; +memdump=<hex> +memdump_len=<hex> write main memory to
 //  memdump.bin at the end.  The tape's own trace is +trace_tape, the cg4's
-//  +trace_cg4, the SCSI bus's +trace_scsi (sun3_si.sv), and hps_io_model's
-//  +trace_vd logs every block of every virtual drive.
+//  +trace_cg4, the SCSI bus's +trace_scsi (sun3_si.sv), the CD-ROM's
+//  +trace_cd (sun3_cdrom.sv: every command and its status), and
+//  hps_io_model's +trace_vd logs every block of every virtual drive.
+//  hps_io_model's +cdrom=<file> (make's CDROM=) puts an .iso in the CD-ROM.
 //
 //      make -C tb/verilator tb_emu
 //============================================================================
