@@ -33,6 +33,15 @@
  *
  * harness -R trace initial final [polls] replays a trace on a fresh model and
  * checks it ends at the final image: the trace is complete.
+ *
+ * -K kind,kind,... runs only those kinds of test (fill copy mem8 mem1 mem1rv
+ * readback putget vector batchrop stencil replrop polygon polyline
+ * polypoint), so that a trace holds only what an RTL stage draws.
+ *
+ * harness -G prefix [-n N] [-s seed] needs no library: it writes test_prom's
+ * sequence and N tests that drive the engine directly as traces, each with
+ * its frame buffer before and after (gen_run, below), for tb/verilator's
+ * tb_cg6.
  */
 #include <stdarg.h>
 #include <stdint.h>
@@ -614,10 +623,48 @@ static void keep_inside(int op, const struct region *r, int *x, int *y, int *w, 
 
 static void rop_ref(const struct region *, int, int, int, int, int, uint32_t, int, int, uint8_t);
 
+/*
+ * -K: the kinds of test that run, by name, for a trace that an RTL stage can
+ * replay (docs/cg6.md, "Stages": stage 1 takes fills, text and copies).  The
+ * first seven are test_rop's own kinds, in its order.
+ */
+static const char *const kind_names[] = {
+	"fill", "copy", "mem8", "mem1", "mem1rv", "readback", "putget",
+	"vector", "batchrop", "stencil", "replrop", "polygon", "polyline", "polypoint",
+};
+enum { K_ROP_KINDS = 7, K_VECTOR = 7, K_BATCH, K_STENCIL, K_REPLROP, K_POLYGON, K_POLYLINE, K_POLYPOINT, K_N };
+static unsigned kinds = (1u << K_N) - 1;
+
+static int rop_kind(void)
+{
+	int k;
+
+	do k = rn(K_ROP_KINDS); while (!(kinds >> k & 1));
+	return k;
+}
+
+static void parse_kinds(const char *s)
+{
+	char buf[256], *t;
+
+	snprintf(buf, sizeof buf, "%s", s);
+	kinds = 0;
+	for (t = strtok(buf, ","); t; t = strtok(NULL, ",")) {
+		int k;
+		for (k = 0; k < K_N && strcmp(t, kind_names[k]); k++)
+			;
+		if (k == K_N)
+			die("-K: no test kind %s", t);
+		kinds |= 1u << k;
+	}
+	if (!kinds)
+		die("-K: no test kinds");
+}
+
 static void test_rop(void)
 {
 	struct region r = random_region();
-	int x, y, w, h, sx = 0, sy = 0, op = random_op(), kind = rn(7);
+	int x, y, w, h, sx = 0, sy = 0, op = random_op(), kind = rop_kind();
 	uint32_t d, m, spr = 0;
 	char what[160];
 
@@ -1084,6 +1131,262 @@ static uint32_t prom_thc_misc(void)		/* the raster moves as it is polled */
 	return pr(CG6_THC + 0x818);
 }
 
+/*
+ * -G prefix: traces for an RTL bench that need no library (tb/verilator's
+ * tb_cg6).  prefix_prom.{txt,ini,fin} is test_prom's sequence; prefix_gen.*
+ * drives the engine directly, register by register, the way the PROM and
+ * libpixrect do: rectangles and points, the font register in colour1 and
+ * colour8, blits, the CPU's own frame-buffer cycles between them, and
+ * registers written and read back.  Each is a trace in -t's format, the
+ * frame buffer before it (.ini) and after (.fin).  The model is the
+ * reference, so nothing here is compared: the RTL is, against the model.
+ */
+#define FBC_Y1	0x094
+#define FBC_X2	0x0a0
+#define FBC_Y2	0x0a4
+#define FBC_X3	0x0b0
+#define FBC_Y3	0x0b4
+
+static const char *gen_prefix;
+static FILE *gen_trace;
+static char gen_name[512];
+
+static void gen_image(const char *ext)
+{
+	char path[600];
+	FILE *o;
+
+	snprintf(path, sizeof path, "%s.%s", gen_name, ext);
+	if (!(o = fopen(path, "wb")) || fwrite(G.fb, 1, CG6_W * CG6_H, o) != CG6_W * CG6_H)
+		die("can't write %s", path);
+	fclose(o);
+}
+
+static void gen_open(const char *what)
+{
+	char path[600];
+
+	snprintf(gen_name, sizeof gen_name, "%s_%s", gen_prefix, what);
+	gen_image("ini");
+	snprintf(path, sizeof path, "%s.txt", gen_name);
+	if (!(gen_trace = fopen(path, "w")))
+		die("can't write %s", path);
+	trace = gen_trace;
+}
+
+static void gen_close(void)
+{
+	trace = NULL;
+	fclose(gen_trace);
+	gen_trace = NULL;
+	gen_image("fin");
+}
+
+static void gw(uint32_t reg, uint32_t v) { cg6_write(&G, CG6_FBC + reg, 4, v); }
+static uint32_t gr(uint32_t reg) { return cg6_read(&G, CG6_FBC + reg, 4); }
+static void g_wait(void) { while (gr(FBC_STATUS) & FBC_S_BUSY) ; }
+static void g_go(uint32_t reg) { while (gr(reg) & FBC_S_FULL) ; }
+
+/* a coordinate: mostly on the screen, sometimes off it, rarely anywhere */
+static int32_t g_coord(int lim, int wild)
+{
+	switch (rn(16)) {
+	case 0: case 1: return rn(lim + 400) - 200;
+	case 2: return wild ? (int32_t)rnd() : rn(3 * lim) - lim;
+	case 3: return wild ? (rn(2) ? 40000 + rn(100000) : -40000 - rn(100000)) : lim - 1 - rn(8);
+	default: return rn(lim);
+	}
+}
+
+/* the raster state: colours, the raster op and its fields, the masks, the clip */
+static void g_state(void)
+{
+	static const uint16_t ops[] = { 0xff00, 0xcccc, 0x5555, 0x6c60, 0xaaaa, 0x0000, 0x3c3c, 0xfc30 };
+	uint32_t rop = rn(2) ? ops[rn(8)] : (rnd() & 0xffff);
+
+	/* plane and pixel fields 0..3 (0 keeps the old one); the pattern's 0..2:
+	   the pattern itself (3) is a later stage's */
+	rop |= (uint32_t)rn(4) << 30 | (uint32_t)rn(4) << 28 | (uint32_t)rn(3) << 26 |
+	       (uint32_t)rn(4) << 24 | (uint32_t)rn(4) << 22 | (rnd() & 0x30000);
+	gw(FBC_RASTEROP, rop);
+	gw(FBC_FCOLOR, rn(4) ? (uint32_t)rn(256) : rnd());
+	gw(FBC_BCOLOR, rn(4) ? (uint32_t)rn(256) : rnd());
+	gw(FBC_PLANEMASK, rn(3) ? 0xff : rnd());
+	gw(FBC_PIXELMASK, rn(3) ? 0xffffffff : rnd());
+	if (rn(3)) {
+		gw(FBC_CLIPMINX, 0); gw(FBC_CLIPMINY, 0);
+		gw(FBC_CLIPMAXX, CG6_W - 1); gw(FBC_CLIPMAXY, CG6_H - 1);
+	} else {
+		gw(FBC_CLIPMINX, g_coord(CG6_W, 0)); gw(FBC_CLIPMINY, g_coord(CG6_H, 0));
+		gw(FBC_CLIPMAXX, g_coord(CG6_W, 0)); gw(FBC_CLIPMAXY, g_coord(CG6_H + 12, 0));
+	}
+	gw(FBC_OFFX, rn(4) ? 0 : rn(41) - 20);
+	gw(FBC_OFFY, rn(4) ? 0 : rn(41) - 20);
+}
+
+/* a vertex of primitive group p (0 point .. 4 rect), y and x in either order,
+   absolute or, sometimes, relative to the last */
+static void g_vertex(int p, int32_t x, int32_t y)
+{
+	uint32_t base = FBC_IPOINT + 0x40 * p, rel = rn(6) == 0 ? 0x10 : 0;
+
+	if (rel) {			/* relative to the last vertex: as many pixels again */
+		x = rn(81) - 40;
+		y = rn(41) - 20;
+	}
+	if (rn(5) == 0)
+		gw(base + 0x08, rnd());	/* z: stored, never drawn */
+	if (rn(2)) { gw(base + rel + 4, y); gw(base + rel, x); }
+	else { gw(base + rel, x); gw(base + rel + 4, y); }
+}
+
+static void g_rect(void)
+{
+	int32_t x0 = g_coord(CG6_W, 1), y0 = g_coord(CG6_H, 1), x1, y1;
+
+	if (rn(3)) {
+		x1 = x0 + rn(rn(4) ? 64 : 700) - 2;
+		y1 = y0 + rn(rn(4) ? 40 : 600) - 2;
+	} else {
+		x1 = g_coord(CG6_W, 1);
+		y1 = g_coord(CG6_H, 1);
+	}
+	g_state();
+	if (rn(6) == 0)		/* a vertex of another kind first: a new queue */
+		g_vertex(rn(4), g_coord(CG6_W, 0), g_coord(CG6_H, 0));
+	if (rn(8) == 0) {	/* a point */
+		g_vertex(0, x0, y0);
+	} else {
+		if (rn(6) == 0)	/* three vertices: the last two count */
+			g_vertex(4, g_coord(CG6_W, 0), g_coord(CG6_H, 0));
+		g_vertex(4, x0, y0);
+		g_vertex(4, x1, y1);
+	}
+	g_go(FBC_DRAWSTATUS);
+	if (rn(4))
+		g_wait();
+}
+
+static void g_font(void)
+{
+	int c8 = rn(3) == 0, k = 1 + rn(c8 ? 8 : 24);
+	int32_t x0 = g_coord(CG6_W, 1), y0 = g_coord(CG6_H, 1);
+
+	g_state();
+	gw(FBC_MISC, (c8 ? 1u : 2u) << 17 | (rn(4) ? 0 : rnd() & 0x3e7fff));	/* data: colour8 or colour1 */
+	gw(FBC_INCX, rn(3) ? 0 : rn(9) - 4);
+	gw(FBC_INCY, rn(3) ? 1 : rn(5) - 2);
+	gw(FBC_Y0, y0);
+	gw(FBC_X0, x0);
+	gw(FBC_X1, x0 + (rn(4) ? (c8 ? rn(6) : rn(36)) : rn(80) - 10) - 1);
+	if (rn(3) == 0)
+		gw(FBC_Y1, rnd());
+	for (int i = 0; i < k; i++)
+		gw(FBC_FONT, rnd());
+	if (rn(2))
+		g_wait();
+}
+
+static void g_blit(void)
+{
+	int w = 1 + rn(rn(4) ? 64 : 1152), h = 1 + rn(rn(4) ? 40 : 900);
+	int32_t sx = rn(CG6_W + 100) - 50, sy = rn(CG6_H + 100) - 50, dx, dy;
+
+	if (rn(2)) {		/* overlapping, every direction */
+		dx = sx + rn(41) - 20;
+		dy = sy + rn(21) - 10;
+	} else {
+		dx = rn(CG6_W + 100) - 50;
+		dy = rn(CG6_H + 100) - 50;
+	}
+	if (rn(8) == 0) { sy = CG6_H + rn(30) - 10; }	/* a source past the frame buffer */
+	g_state();
+	gw(FBC_X0, sx); gw(FBC_Y0, sy);
+	gw(FBC_X1, sx + w - 1); gw(FBC_Y1, sy + h - 1);
+	gw(FBC_X2, dx); gw(FBC_Y2, dy);
+	gw(FBC_X3, dx + w - 1); gw(FBC_Y3, dy + h - 1);
+	g_go(FBC_BLITSTATUS);
+	if (rn(4))
+		g_wait();
+}
+
+/* the CPU's own cycles to the frame buffer, then at once an engine command
+   that reads them */
+static void g_cpu(void)
+{
+	int n = 1 + rn(40);
+
+	g_wait();
+	for (int i = 0; i < n; i++) {
+		int size = 1 << rn(3);
+		uint32_t a = (rn(4) ? rn(CG6_W * 40) : rn(CG6_W * CG6_H)) & ~(uint32_t)(size - 1);
+		if (rn(3))
+			cg6_write(&G, CG6_FB + a, size, rnd());
+		else
+			cg6_read(&G, CG6_FB + a, size);
+	}
+	if (rn(2)) {		/* a copy from where they went, straight after */
+		g_state();
+		gw(FBC_RASTEROP, 0xa980cccc);
+		gw(FBC_PLANEMASK, 0xff);
+		gw(FBC_PIXELMASK, 0xffffffff);
+		gw(FBC_CLIPMINX, 0); gw(FBC_CLIPMINY, 0);
+		gw(FBC_CLIPMAXX, CG6_W - 1); gw(FBC_CLIPMAXY, CG6_H - 1);
+		gw(FBC_X0, 0); gw(FBC_Y0, 0);
+		gw(FBC_X1, CG6_W - 1); gw(FBC_Y1, 39);
+		gw(FBC_X2, rn(5)); gw(FBC_Y2, 40 + rn(800));
+		g_go(FBC_BLITSTATUS);
+	}
+	g_wait();
+	for (int i = 0; i < 4; i++)
+		cg6_read(&G, CG6_FB + (rn(CG6_W * CG6_H) & ~3u), 4);
+}
+
+/* registers written and read back, the 2-bit fields that keep their value */
+static void g_regs(void)
+{
+	static const uint16_t regs[] = { FBC_MISC, FBC_CLIPCHECK, FBC_X0, FBC_Y0, FBC_X1 + 0x10, FBC_Y0 + 0x30,
+		FBC_OFFX, FBC_OFFY, FBC_INCX, FBC_INCY, FBC_CLIPMINX, FBC_CLIPMAXY, FBC_FCOLOR, FBC_BCOLOR,
+		FBC_RASTEROP, FBC_PLANEMASK, FBC_PIXELMASK, FBC_PATTALIGN, FBC_CONFIG };
+	int n = 1 + rn(12);
+
+	g_wait();
+	for (int i = 0; i < n; i++) {
+		uint32_t r = regs[rn(sizeof regs / sizeof regs[0])];
+		gw(r, rnd());
+		gr(r);
+		if (rn(2))
+			gr(regs[rn(sizeof regs / sizeof regs[0])]);
+	}
+	gr(FBC_FONT);
+	cg6_read(&G, CG6_FHC, 4);
+	g_state();		/* nothing left in a state the next test cannot undo */
+	gw(FBC_MISC, 2u << 17);
+}
+
+static void gen_run(long n)
+{
+	cg6_reset(&G);
+	fill_random(G.fb, sizeof G.fb);
+	/* the images are the screen's 900 lines; the rest of the 1 MiB starts as
+	   zeros, which an RTL bench's memory has too */
+	memset(G.fb + CG6_W * CG6_H, 0, CG6_FBSIZE - CG6_W * CG6_H);
+	gen_open("gen");
+	for (long i = 0; i < n; i++) {
+		switch (rn(8)) {
+		case 0: case 1: g_rect(); break;
+		case 2: case 3: g_font(); break;
+		case 4: case 5: g_blit(); break;
+		case 6: g_cpu(); break;
+		default: g_regs(); break;
+		}
+	}
+	g_wait();
+	gen_close();
+	printf("-G: %ld tests; engine: %lu points %lu rects %lu blits %lu font, %lu pixels\n", n,
+	       G.ndraw[PRIM_POINT], G.ndraw[PRIM_RECT], G.nblit, G.nfont, G.npix);
+}
+
 static void test_prom(void)
 {
 	static const uint32_t table[][2] = {	/* 0xFEFD588 */
@@ -1101,6 +1404,8 @@ static void test_prom(void)
 	start("prom 3.0.1 console");
 	cg6_reset(&G);
 	fill_random(G.fb, sizeof G.fb);
+	if (gen_prefix)			/* -G: this sequence traced, for an RTL bench */
+		gen_open("prom");
 	/* the probe: the P4 ID byte, 0x60 the GX at 1152x900 (0xFEF2552) */
 	bad += cg6_read(&G, CG6_FHC, 1) != 0x60;
 	pw(CG6_FHC, 0x10bbb);			/* 0xFEF60DC: 1152, 68020, test 11x11 */
@@ -1174,6 +1479,8 @@ static void test_prom(void)
 	for (int j = 0; j < 748 - 22; j++)
 		bad += memcmp(&G.fb[(oy + j) * CG6_W + ox], &before[(oy + j + 22) * CG6_W + ox], 960) != 0;
 	result_prom("PROM 3.0.1: ID, set-up, clear, text, cursor, scroll", bad);
+	if (gen_prefix)
+		gen_close();
 
 	/*
 	 * The retrace interrupt as Solaris's cg6thc.h macros drive it (SunOS's
@@ -1237,6 +1544,20 @@ int main(int argc, char **argv)
 	FILE *f;
 	long len;
 
+	/* -G prefix [-n N] [-s seed]: the library-free traces (gen_run) */
+	if (argc >= 3 && !strcmp(argv[1], "-G")) {
+		n = 400;
+		gen_prefix = argv[2];
+		for (int i = 3; i < argc; i++) {
+			if (!strcmp(argv[i], "-n") && i + 1 < argc) n = atol(argv[++i]);
+			else if (!strcmp(argv[i], "-s") && i + 1 < argc) rs ^= (uint64_t)atol(argv[++i]) * 0x9e3779b97f4a7c15ull;
+			else { fprintf(stderr, "bad argument %s\n", argv[i]); return 2; }
+		}
+		G.trace = tracefn;
+		test_prom();
+		gen_run(n);
+		return nfail != 0;
+	}
 	/* -R trace initial final: replay a trace on a fresh model, as an RTL bench would */
 	if ((argc == 5 || argc == 6) && !strcmp(argv[1], "-R")) {
 		FILE *t = fopen(argv[2], "r"), *fi = fopen(argv[3], "rb"), *ff = fopen(argv[4], "rb");
@@ -1281,6 +1602,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "-I") && i + 1 < argc) initial_path = argv[++i];
 		else if (!strcmp(argv[i], "-F") && i + 1 < argc) final_path = argv[++i];
 		else if (!strcmp(argv[i], "-k") && i + 1 < argc) trace_test = atol(argv[++i]);
+		else if (!strcmp(argv[i], "-K") && i + 1 < argc) parse_kinds(argv[++i]);
 		else { fprintf(stderr, "bad argument %s\n", argv[i]); return 2; }
 	}
 	ram = calloc(1, RAM_SIZE);
@@ -1367,7 +1689,16 @@ int main(int argc, char **argv)
 		n = 0;
 	}
 	for (long i = 0; i < n; i++) {
-		switch (rn(9)) {
+		static const int kind_of[9] = { -1, -1, K_VECTOR, K_BATCH, K_STENCIL, K_REPLROP,
+						K_POLYGON, K_POLYLINE, K_POLYPOINT };
+		int t = rn(9);
+
+		/* -K: a kind left out is drawn again (test_rop: when none of its own are in) */
+		if (kind_of[t] < 0 ? !(kinds & ((1u << K_ROP_KINDS) - 1)) : !(kinds >> kind_of[t] & 1)) {
+			i--;
+			continue;
+		}
+		switch (t) {
 		case 0: case 1: test_rop(); break;
 		case 2: test_vector(); break;
 		case 3: test_batch(); break;

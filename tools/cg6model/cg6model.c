@@ -28,10 +28,15 @@ uint8_t cg6_rop8(uint32_t rop, uint8_t f, uint8_t b, uint8_t s, uint8_t d)
 	return r;
 }
 
-/* a 2-bit field of MISC or RASTEROP: 0 written means "leave it as it is" */
+/*
+ * a 2-bit field of MISC or RASTEROP: 0 written means "leave it as it is".
+ * `fields' has each field's low bit; MISC's are at odd bits, RASTEROP's at
+ * even ones, so every bit is looked at (stepping by two from 0 once missed
+ * all of MISC's but the blit field).
+ */
 static uint32_t merge_fields(uint32_t old, uint32_t v, uint32_t fields)
 {
-	for (int sh = 0; sh < 32; sh += 2)
+	for (int sh = 0; sh < 31; sh++)
 		if (fields >> sh & 1 && (v >> sh & 3) == 0)
 			v = (v & ~(3u << sh)) | (old & 3u << sh);
 	return v;
