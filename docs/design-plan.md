@@ -766,6 +766,25 @@ whole core would reset and come up again).
 3. NetBSD/sun3: install from a miniroot written to the swap partition, or
    from a tape image. Not by netboot.
 
+   **Status (2026-10-23):** the 11.0 release's boot tape panics the RAMDISK
+   kernel with `radix already initialized`, on the board and in `tb_emu`
+   from zeroed memory alike. It is NetBSD's bug, not the core's: 11.0's
+   standalone programs (tapeboot, ufsboot, netboot, bootxx;
+   `sun68k/stand/libsa/sun3.c` 1.11) alias their 0x200000-0x2dffff into
+   DVMA space at 0xfff00000 by sharing PMEGs, and the PROM's SCSI driver
+   keeps its own mappings there. In `tb_emu`, tapeboot gives the segment at
+   0xff00000 PMEG 0x10 (VA 0x200000's), Rev 3.0.1's tape driver then maps
+   its page 9 to PA 0x17e6000 for itself, and the kernel inherits VA
+   0x212000 -> PA 0x17e6000, where its BSS (`radix_initialized`, VA
+   0x0e212808) lives. `pmap_bootstrap` assumes PA = VA - KERNBASE and hands
+   PA 0x17e6000 to UVM as free, and the first allocation of it sets the
+   flag. NetBSD fixed it on 2026-08-19 (sun3.c 1.12, netbsd-11 ticket
+   #420: the alias moves to 0x240000/0xfff40000). `tools/netbsd/fixdvma.py`
+   makes the same change in the 11.0 binaries (tapeboot, and the five
+   copies in `miniroot.fs`, which installboot puts on the disk); with the
+   mended tape the kernel's BSS is at PA = VA - KERNBASE and boots past
+   the panic. `tb_emu`'s `+vwatch=` and `+mmutrace` found it.
+
 ### Phase 8: later
 
 * **GX (cg6)** on P4: an accelerated 8-bit frame buffer whose console needs

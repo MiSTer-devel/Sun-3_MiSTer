@@ -28,7 +28,9 @@
 //  +eeprom_boot=st auto-boots from the tape (rtl/sun3/eeprom.v).
 //
 //  For chasing a fault: +watch=<hex> / +watch2=<hex> log every CPU and
-//  Wishbone cycle to 16 bytes of main memory; +pctrace_from=<ms>
+//  Wishbone cycle to 16 bytes of main memory; +vwatch=<hex> every CPU cycle
+//  to 16 bytes of virtual address, with the physical address the MMU made of
+//  it; +mmutrace every segment and page map write; +pctrace_from=<ms>
 //  +pctrace_to=<ms> write each decoded instruction's address and first word
 //  to pctrace.txt; +memdump=<hex> +memdump_len=<hex> write main memory to
 //  memdump.bin at the end.  The tape's own trace is +trace_tape, the cg4's
@@ -274,17 +276,64 @@ always @(posedge dut.machine.sun3.wbridge.CLK) begin
     w_ack_q <= dut.machine.sun3.wbridge.W_ACK;
     if (dut.machine.sun3.wbridge.W_ACK && !w_ack_q && dut.machine.sun3.wbridge.MATCH_MEM &&
         watched(dut.machine.sun3.wbridge.P_ADR_IN))
-        $display("[%0t] watch: CPU %s %08x, data in %08x out %08x, lanes %b%b%b%b", $time,
+        $display("[%0t] watch: CPU %s %08x, data in %08x out %08x, lanes %b%b%b%b, va %08x, pc %08x", $time,
                  dut.machine.sun3.wbridge.P_RW_n ? "read " : "write", dut.machine.sun3.wbridge.P_ADR_IN,
                  dut.machine.sun3.wbridge.P_DATA_IN, dut.machine.sun3.wbridge.P_DATA_OUT,
                  dut.machine.sun3.wbridge.EN_UUBYTE, dut.machine.sun3.wbridge.EN_ULBYTE,
-                 dut.machine.sun3.wbridge.EN_LUBYTE, dut.machine.sun3.wbridge.EN_LLBYTE);
+                 dut.machine.sun3.wbridge.EN_LUBYTE, dut.machine.sun3.wbridge.EN_LLBYTE,
+                 dut.machine.sun3.P_ADR_IN, dut.machine.rd68021_cpu.u_ifu.pc_d);
 end
 always @(posedge dut.clk_mem)
     if (dut.wb_cyc && dut.wb_stb && dut.wb_ack && watched({dut.wb_adr, 2'b00}))
         $display("[%0t] watch: WB  %s word %08x (byte %08x) data %08x sel %b", $time,
                  dut.wb_we ? "write" : "read ", dut.wb_adr, {dut.wb_adr, 2'b00},
                  dut.wb_we ? dut.wb_dat_m2s : dut.wb_dat_s2m, dut.wb_sel);
+
+// +vwatch=<hex>: the 16 bytes at that CPU (virtual) address -- every CPU
+// cycle to them as it ends (DSACK, STERM or BERR), with the physical address
+// the MMU made of it, the function code, whether main memory took it, and
+// the last instruction decoded.  For when a virtual address does not land
+// where it should.  A write's data is right; a read's `out' is taken as the
+// cycle ends and is not always the data the CPU latches (a cache hit's).
+bit [31:0] vwatch_va;
+bit        vwatching;
+initial vwatching = $value$plusargs("vwatch=%h", vwatch_va);
+reg vw_end_q = 1'b0;
+always @(posedge dut.machine.sun3.CLK) begin : vwatch
+    bit vw_end;
+    vw_end = !dut.machine.sun3.P_AS_n &&
+             (dut.machine.sun3.P_DSACK_n != 2'b11 || !dut.machine.sun3.P_STERM_n || !dut.machine.sun3.P_BERR_n);
+    vw_end_q <= vw_end;
+    if (vwatching && vw_end && !vw_end_q && dut.machine.sun3.P_ADR_IN[31:4] == vwatch_va[31:4])
+        $display("[%0t] vwatch: %s va %08x pa %08x fc %0d mem %b berr %b, data in %08x out %08x, pc %08x", $time,
+                 dut.machine.sun3.P_RW_n ? "read " : "write", dut.machine.sun3.P_ADR_IN,
+                 dut.machine.sun3.pa_forshow, dut.machine.sun3.P_FC, dut.machine.sun3.MATCH_MEM,
+                 !dut.machine.sun3.P_BERR_n, dut.machine.sun3.P_DATA_IN, dut.machine.sun3.P_DATA_OUT,
+                 dut.machine.rd68021_cpu.u_ifu.pc_d);
+end
+
+// +mmutrace: every write to the segment map and the page map, with the
+// virtual address it was made for, the context, the PMEG, the value and the
+// last instruction decoded.
+bit mmutracing;
+initial mmutracing = $test$plusargs("mmutrace");
+reg mt_smap_q = 1'b0, mt_pmap_q = 1'b0;
+always @(posedge dut.machine.sun3.CLK) begin : mmutrace
+    bit s, p;
+    s = dut.machine.sun3.mmu.WR & dut.machine.sun3.mmu.MATCH_SMAP & dut.machine.sun3.mmu.C_S4;
+    p = dut.machine.sun3.mmu.WR & dut.machine.sun3.mmu.MATCH_PMAP_MA & dut.machine.sun3.mmu.C_S4;
+    mt_smap_q <= s;
+    mt_pmap_q <= p;
+    if (mmutracing && s && !mt_smap_q)
+        $display("[%0t] mmu: smap ctx %0d va %08x <= pmeg %02x, pc %08x", $time,
+                 dut.machine.sun3.mmu.cx_ctx2smap, dut.machine.sun3.mmu.P_A,
+                 dut.machine.sun3.mmu.P_DIN[31:24], dut.machine.rd68021_cpu.u_ifu.pc_d);
+    if (mmutracing && p && !mt_pmap_q)
+        $display("[%0t] mmu: pmap ctx %0d va %08x pmeg %02x <= pte %08x (pa %08x), pc %08x", $time,
+                 dut.machine.sun3.mmu.cx_ctx2smap, dut.machine.sun3.mmu.P_A,
+                 dut.machine.sun3.mmu.ia_smap2pmap, dut.machine.sun3.mmu.P_DIN,
+                 {dut.machine.sun3.mmu.P_DIN[18:0], 13'd0}, dut.machine.rd68021_cpu.u_ifu.pc_d);
+end
 
 // +pctrace_from=<ms> +pctrace_to=<ms>: every instruction the CPU decodes
 // between those times, its address and first word, into pctrace.txt.
