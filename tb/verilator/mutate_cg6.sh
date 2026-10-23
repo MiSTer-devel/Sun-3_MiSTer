@@ -15,6 +15,7 @@ mkdir -p $W
 [ -f $T/t_prom.txt ] && [ -f $T/t_gen.txt ] || { echo "no traces in $T: make tb_cg6 first"; exit 1; }
 TRACES="+t0=$T/t_prom +t1=$T/t_gen"
 [ -f $T/t_lp.txt ] && TRACES="$TRACES +t2=$T/t_lp"
+[ -f $T/t_lp68k.txt ] && TRACES="$TRACES +t3=$T/t_lp68k"
 # JOBS=n runs n mutants at once, each in its own directory; tb_cg6 stops at
 # its first failure (+failfast)
 JOBS=${JOBS:-1}

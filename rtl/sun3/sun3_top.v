@@ -142,10 +142,15 @@ module sun3_top(/* clock, reset */
 	   output wire [25:0] ge_word,
 	   output wire 	     ge_req,
 	   output wire 	     ge_we,
-	   output wire [31:0] ge_wdata,
-	   output wire [3:0] ge_sel,
+	   output wire [127:0] ge_wdata,
+	   output wire [15:0] ge_sel,
 	   input wire 	     ge_done,
 	   input wire [127:0] ge_rdata,
+	   /* its cursor, for the scan-out (cg4_cm_clk) */
+	   input wire [4:0]  cg6_cur_row,
+	   output wire [31:0] cg6_cur_a,
+	   output wire [31:0] cg6_cur_b,
+	   output wire [31:0] cg6_cur_xy,
 `endif
 `ifdef SUN3_TOD_LOAD
 	   /* setting the TOD chip from outside, in CLK (icm7170.v) */
@@ -382,6 +387,10 @@ module sun3_top(/* clock, reset */
 		  .ge_sel(ge_sel),
 		  .ge_done(ge_done),
 		  .ge_rdata(ge_rdata),
+		  .cg6_cur_row(cg6_cur_row),
+		  .cg6_cur_a(cg6_cur_a),
+		  .cg6_cur_b(cg6_cur_b),
+		  .cg6_cur_xy(cg6_cur_xy),
 `endif
 `ifdef SUN3_TOD_LOAD
 		  .tod_ld(tod_ld),
