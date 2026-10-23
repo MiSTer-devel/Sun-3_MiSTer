@@ -25,6 +25,13 @@
 //  port: a third client that takes turns with the CPU unless it says it is
 //  urgent.
 //
+//  The GX's engine port (ge_*: a burst read, a word written with byte
+//  selects, at an SDRAM word) is the fourth client: every mix of byte selects
+//  through it, its bursts and the CPU's reads of what it wrote, requests back
+//  to back (the next one asked on the edge the last is answered, as
+//  sun3_cg6_engine.sv asks), turns with a streaming CPU, and the scan-out
+//  ahead of it.
+//
 //  The shadow counts halfwords in address order: halfword 2w is Wishbone word
 //  w's bits 31:16, 2w+1 its bits 15:0.  A line's halfword j is therefore at
 //  bits [16*(j^1) +: 16].
@@ -70,6 +77,13 @@ reg         cs_req  = 0, cs_urgent = 0;
 wire        cs_done;
 wire [127:0] cs_rdata;
 
+reg  [25:0] ge_word = 0;
+reg         ge_req = 0, ge_we = 0;
+reg  [31:0] ge_wdata = 0;
+reg  [3:0]  ge_sel = 0;
+wire        ge_done;
+wire [127:0] ge_rdata;
+
 wire [15:0] SDRAM_DQ;
 wire [12:0] SDRAM_A;
 wire        SDRAM_DQML, SDRAM_DQMH;
@@ -82,6 +96,8 @@ sun3_mister_sdram #(.FB_WB_BASE(FB_WB_BASE), .FB_SDRAM_WORD(FB_SDRAM_WORD)) dut 
     .wb_we_i(we), .wb_dat_o(rdat), .wb_ack_o(ack), .wb_line_o(line),
     .fb_c_addr(fb_addr), .fb_c_req(fb_req), .fb_c_done(fb_done), .fb_c_rdata(fb_rdata),
     .cs_word(cs_word), .cs_req(cs_req), .cs_urgent(cs_urgent), .cs_done(cs_done), .cs_rdata(cs_rdata),
+    .ge_word(ge_word), .ge_req(ge_req), .ge_we(ge_we), .ge_wdata(ge_wdata), .ge_sel(ge_sel),
+    .ge_done(ge_done), .ge_rdata(ge_rdata),
     .SDRAM_DQ(SDRAM_DQ), .SDRAM_A(SDRAM_A), .SDRAM_DQML(SDRAM_DQML), .SDRAM_DQMH(SDRAM_DQMH),
     .SDRAM_BA(SDRAM_BA), .SDRAM_nCS(SDRAM_nCS), .SDRAM_nWE(SDRAM_nWE),
     .SDRAM_nRAS(SDRAM_nRAS), .SDRAM_nCAS(SDRAM_nCAS), .SDRAM_CKE(SDRAM_CKE),
@@ -412,6 +428,79 @@ task automatic cs_check(input [25:0] start, input integer n, input string what);
     end
 endtask
 
+// ---- the engine-like client: a queue of operations, the next asked on the
+// edge the last is answered -----------------------------------------------------------
+typedef struct packed { bit we; bit [25:0] word; bit [31:0] data; bit [3:0] sel; } geop_t;
+geop_t      geq [$];
+bit [127:0] ge_got [$];
+integer     ge_dones = 0, ge_in_stream = 0, ge_in_cs = 0, wb_in_ge = 0;
+always @(posedge clk) begin
+    if (cyc && ack && geq.size() != 0) wb_in_ge <= wb_in_ge + 1;
+    if (ge_req && ge_done) begin
+        if (!ge_we) ge_got.push_back(ge_rdata);
+        ge_dones <= ge_dones + 1;
+        if (stream_left > 0) ge_in_stream <= ge_in_stream + 1;
+        if (cs_req && !cs_urgent && !cyc) ge_in_cs <= ge_in_cs + 1;
+        void'(geq.pop_front());
+        if (geq.size() != 0) begin
+            ge_we <= geq[0].we; ge_word <= geq[0].word; ge_wdata <= geq[0].data; ge_sel <= geq[0].sel;
+        end else
+            ge_req <= 1'b0;
+    end else if (!ge_req && geq.size() != 0) begin
+        ge_req <= 1'b1;
+        ge_we <= geq[0].we; ge_word <= geq[0].word; ge_wdata <= geq[0].data; ge_sel <= geq[0].sel;
+    end
+end
+
+task automatic ge_op(input bit w, input [25:0] word, input [31:0] d, input [3:0] sl);
+    geop_t o;
+    begin
+        o.we = w; o.word = word; o.data = d; o.sel = sl;
+        geq.push_back(o);
+        if (w)                                  // the shadow: halves at word, word + 1
+            for (int half = 0; half < 2; half++) begin
+                int h, sh;
+                bit [15:0] v;
+                h  = int'(word) + half;
+                sh = 1 - half;
+                v = cgm.exists(h) ? cgm[h] : 16'h0;
+                if (sl[sh*2 + 1]) v[15:8] = d[sh*16 + 8 +: 8];
+                if (sl[sh*2])     v[7:0]  = d[sh*16 +: 8];
+                if (sl[sh*2 +: 2] != 0) begin
+                    cgm[h] = v;
+                    cgk[h] = (cgk.exists(h) ? cgk[h] : 2'b00) | sl[sh*2 +: 2];
+                end
+            end
+    end
+endtask
+
+task automatic ge_wait;
+    begin
+        do @(negedge clk); while (ge_req || geq.size() != 0);
+    end
+endtask
+
+// the bursts the engine read, against the shadow
+task automatic ge_check(input [25:0] start, input integer n, input string what);
+    bit [127:0] e, care;
+    bit [1:0] known;
+    begin
+        check(ge_got.size() == n, $sformatf("%s: %0d bursts answered for %0d asked", what, ge_got.size(), n));
+        for (int b = 0; b < n && b < ge_got.size(); b++) begin
+            for (int k = 0; k < 8; k++) begin
+                int q;
+                q = int'(start) + b*8 + k;
+                e[16*(k^1) +: 16] = cgm.exists(q) ? cgm[q] : 16'h0;
+                known = cgk.exists(q) ? cgk[q] : 2'b00;
+                care[16*(k^1) +: 16] = {{8{known[1]}}, {8{known[0]}}};
+            end
+            check(((ge_got[b] ^ e) & care) == 0,
+                  $sformatf("%s: burst %0d read %032x, expected %032x (mask %032x)", what, b, ge_got[b], e, care));
+        end
+        ge_got.delete();
+    end
+endtask
+
 // ---- the sequence --------------------------------------------------------------
 int unsigned seed = 32'h5EED_0001;
 function automatic [31:0] rnd;
@@ -578,6 +667,45 @@ initial begin
     cs_check(CG_COLOR_WORD, 72, "polite cg4 scan-out beside a streaming CPU");
     check(cs_in_stream >= 64, $sformatf("a polite scan-out has turns beside a streaming CPU: %0d of 72 bursts while it streamed", cs_in_stream));
     check(cs_run_urgent >= 32, $sformatf("an urgent scan-out keeps the SDRAM: %0d bursts in a row while the CPU waited", cs_run_urgent));
+
+    // 12. the GX's engine port: every mix of byte selects, in the colour plane
+    //     where the engine draws, read back by the engine and by the CPU
+    for (int m = 1; m < 16; m++) begin
+        ge_op(1, CG_COLOR_WORD + 26'h1000 + 26'(2*m), 32'h5A5A_5A5A, 4'b1111);
+        ge_op(1, CG_COLOR_WORD + 26'h1000 + 26'(2*m), 32'h0102_0304 * m, 4'(m));
+    end
+    ge_op(1, CG_COLOR_WORD + 26'h1000, 32'hFFFF_FFFF, 4'b0000);       // nothing to write: answered
+    ge_wait();
+    check(chip_cell(CG_COLOR_WORD + 26'h101E) == 16'h0F1E && chip_cell(CG_COLOR_WORD + 26'h101F) == 16'h2D3C,
+          "an engine word's bits 31:16 are its SDRAM word, 15:0 the next");
+    for (int b = 0; b < 4; b++) ge_op(0, CG_COLOR_WORD + 26'h1000 + 26'(8*b), 0, 4'h0);
+    ge_wait();
+    ge_check(CG_COLOR_WORD + 26'h1000, 4, "engine bursts");
+    for (int m = 1; m < 16; m++)
+        wread_check(cgw(24'h800000 + 24'h2000 + 24'(4*m)), $sformatf("the CPU reads the engine's byte selects %b", 4'(m)));
+    // back to back: writes and reads mixed, each asked as the last is answered
+    for (int i = 0; i < 64; i++) begin
+        ge_op(1, CG_COLOR_WORD + 26'h2000 + 26'(2*i), rnd(), 4'hF);
+        if (i % 4 == 3) ge_op(0, CG_COLOR_WORD + 26'h2000 + 26'(2*i - 6), 0, 4'h0);
+    end
+    ge_wait();
+    ge_check(CG_COLOR_WORD + 26'h2000, 16, "engine, back to back");
+    // turns with a CPU that streams: both get on
+    for (int i = 0; i < 200; i++) ge_op(0, CG_COLOR_WORD + 26'h2000 + 26'(8 * (i % 16)), 0, 4'h0);
+    stream(30'h0000100, 400);
+    ge_wait();
+    stream_wait();
+    ge_got.delete();
+    check(wb_in_ge >= 150, $sformatf("the CPU has turns beside the engine: %0d reads while it asked", wb_in_ge));
+    check(ge_in_stream >= 150, $sformatf("the engine has turns beside a streaming CPU: %0d of 200 bursts", ge_in_stream));
+    // below a polite scan-out, when the CPU is quiet: the scan-out first
+    for (int i = 0; i < 100; i++) ge_op(0, CG_COLOR_WORD + 26'h2000, 0, 4'h0);
+    cs_fetch(CG_COLOR_WORD, 72, 0);
+    cs_wait();
+    ge_wait();
+    ge_got.delete();
+    cs_check(CG_COLOR_WORD, 72, "a polite scan-out beside the engine");
+    check(ge_in_cs <= 2, $sformatf("the engine waits for a polite scan-out: %0d bursts while it asked", ge_in_cs));
 
     check(chip.errors == 0, $sformatf("chip protocol: %0d violations", chip.errors));
     check(chip.max_refresh_gap > 0 && chip.max_refresh_gap <= 780,

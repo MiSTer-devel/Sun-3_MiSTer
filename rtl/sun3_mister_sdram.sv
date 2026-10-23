@@ -32,6 +32,7 @@
 //                    overlay  PA 0xFF400000 + o (128 KiB)  -> CG_OVERLAY_WORD + o/2
 //                    enable   PA 0xFF600000 + o (128 KiB)  -> CG_ENABLE_WORD + o/2
 //   cg4 scan-out   cs_word (an SDRAM word, burst-aligned)   -> as given
+//   GX engine      ge_word (an SDRAM word)                  -> as given
 //
 // FB_WB_BASE is where the bridge puts the bw2 window, {11'h07F, A[20:2]}:
 // byte 0x0FE00000.  The frame buffer sits 24 MiB up, in bank 3 of a 32 MiB
@@ -43,6 +44,11 @@
 // cg4's is 90 bursts a line, most of the SDRAM's time, so it takes turns with
 // the CPU and demands priority only when it says it is about to run dry
 // (cs_urgent; sun3_cg4_scanout.sv), as Sun-2_MiSTer's colour scan-out does.
+// The GX's drawing engine (rtl/sun3/sun3_cg6_engine.sv) comes last: below the
+// scan-outs, even a polite one, and taking turns with the CPU, who was served
+// last going to the back.  It reads a burst, as the scan-outs do, and writes
+// a 32-bit word with byte selects, as the CPU does; with ge_req low the
+// adapter is as it was without it.
 //
 // **Handshakes.**  Both clients hold a request until it is answered and only
 // then move on, and both see the answer a clock after it is given: the bridge
@@ -94,6 +100,16 @@ module sun3_mister_sdram #(
     input  wire         cs_urgent,
     output reg          cs_done    = 1'b0,
     output reg  [127:0] cs_rdata   = 128'h0,
+
+    // the GX's drawing engine: a burst read, or a word written (ge_word is
+    // then the SDRAM word of its high half, D31:16, as for the CPU)
+    input  wire [25:0]  ge_word,
+    input  wire         ge_req,
+    input  wire         ge_we,
+    input  wire [31:0]  ge_wdata,
+    input  wire [3:0]   ge_sel,
+    output reg          ge_done    = 1'b0,
+    output reg  [127:0] ge_rdata   = 128'h0,
 
     // SDRAM pins
     inout  wire [15:0]  SDRAM_DQ,
@@ -191,11 +207,15 @@ module sun3_mister_sdram #(
     reg [2:0]   st      = S_IDLE;
     reg         for_fb  = 1'b0;         // whose read this is
     reg         for_cs  = 1'b0;
+    reg         for_ge  = 1'b0;
     // Turns between the cg4's scan-out and the CPU: whoever was served last
     // goes to the back.  0 the scan-out, 1 the CPU.
     reg         last_cpu = 1'b0;
     wire        wb_want  = wb_cyc_i & wb_stb_i;
     wire        pick_cs  = cs_req & (cs_urgent | !wb_want | last_cpu);
+    // Turns between the CPU and the engine: 1 the engine went last.
+    reg         last_ge  = 1'b0;
+    wire        pick_ge  = ge_req & (!wb_want | !last_ge);
     reg [2:0]   widx    = 3'd0;
     reg [127:0] line    = 128'h0;
     reg [1:0]   lane    = 2'd0;
@@ -207,6 +227,7 @@ module sun3_mister_sdram #(
         wb_ack_o  <= 1'b0;
         fb_c_done <= 1'b0;
         cs_done   <= 1'b0;
+        ge_done   <= 1'b0;
 
         if (init) begin
             st   <= S_IDLE;
@@ -216,6 +237,7 @@ module sun3_mister_sdram #(
             S_IDLE: begin
                 for_fb <= 1'b0;
                 for_cs <= 1'b0;
+                for_ge <= 1'b0;
                 if (fb_c_req) begin
                     // The bw2's scan-out first: it has a deadline and asks for
                     // a line's worth every scan line, so the CPU barely notices.
@@ -229,8 +251,9 @@ module sun3_mister_sdram #(
                     c_word   <= {cs_word[25:3], 3'b000};
                     c_rd     <= 1'b1;
                     st       <= S_RD;
-                end else if (wb_want) begin
+                end else if (wb_want && !pick_ge) begin
                     last_cpu <= 1'b1;
+                    last_ge  <= 1'b0;
                     lane <= wb_adr_i[1:0];
                     if (!wb_we_i) begin
                         c_word <= {wb_word[25:3], 3'b000};     // the whole line
@@ -256,6 +279,35 @@ module sun3_mister_sdram #(
                         wb_ack_o <= 1'b1;                      // nothing to write
                         st       <= S_GAP;
                     end
+                end else if (pick_ge) begin
+                    // the engine: as the CPU's, its own data and answer
+                    for_ge   <= 1'b1;
+                    last_cpu <= 1'b1;
+                    last_ge  <= 1'b1;
+                    if (!ge_we) begin
+                        c_word <= {ge_word[25:3], 3'b000};
+                        c_rd   <= 1'b1;
+                        st     <= S_RD;
+                    end else if (ge_sel[3:2] != 2'b00) begin
+                        c_word  <= ge_word;
+                        c_din   <= ge_wdata[31:16];
+                        c_bs    <= ge_sel[3:2];
+                        c_wr    <= 1'b1;
+                        lo_left <= (ge_sel[1:0] != 2'b00);
+                        lo_din  <= ge_wdata[15:0];
+                        lo_bs   <= ge_sel[1:0];
+                        st      <= S_WR;
+                    end else if (ge_sel[1:0] != 2'b00) begin
+                        c_word  <= ge_word + 26'd1;
+                        c_din   <= ge_wdata[15:0];
+                        c_bs    <= ge_sel[1:0];
+                        c_wr    <= 1'b1;
+                        lo_left <= 1'b0;
+                        st      <= S_WR;
+                    end else begin
+                        ge_done <= 1'b1;
+                        st      <= S_GAP;
+                    end
                 end
             end
 
@@ -278,6 +330,9 @@ module sun3_mister_sdram #(
                     end else if (for_cs) begin
                         cs_rdata <= {line[127:112], dout, line[95:0]};
                         cs_done  <= 1'b1;
+                    end else if (for_ge) begin
+                        ge_rdata <= {line[127:112], dout, line[95:0]};
+                        ge_done  <= 1'b1;
                     end else begin
                         wb_line_o <= {line[127:112], dout, line[95:0]};
                         wb_dat_o  <= (lane == 2'd3) ? {line[127:112], dout}
@@ -302,7 +357,8 @@ module sun3_mister_sdram #(
                         st      <= S_WR;
                     end else begin
                         c_wr     <= 1'b0;
-                        wb_ack_o <= 1'b1;
+                        if (for_ge) ge_done  <= 1'b1;
+                        else        wb_ack_o <= 1'b1;
                         st       <= S_GAP;
                     end
                 end else if (!c_wr)

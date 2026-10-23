@@ -49,3 +49,9 @@ run "cg4 burst answered as the CPU's" -e 's/end else if (for_cs) begin/end else 
 run "cg4 window's high half whole" -e 's/                        c_bs    <= wb_sel_i\[3:2\];/                        c_bs    <= wb_is_cg ? 2'"'"'b11 : wb_sel_i[3:2];/'
 run "cg4 window's low half whole"  -e 's/                        lo_bs   <= wb_sel_i\[1:0\];/                        lo_bs   <= wb_is_cg ? 2'"'"'b11 : wb_sel_i[1:0];/' \
                                    -e 's/                        c_bs    <= wb_sel_i\[1:0\];/                        c_bs    <= wb_is_cg ? 2'"'"'b11 : wb_sel_i[1:0];/'
+# The GX's engine port
+run "engine never served"          -e 's/wire        pick_ge  = ge_req \& (!wb_want | !last_ge);/wire        pick_ge  = 1'"'"'b0;/'
+run "engine never yields"          -e 's/wire        pick_ge  = ge_req \& (!wb_want | !last_ge);/wire        pick_ge  = ge_req;/'
+run "engine burst answered as the CPU's" -e 's/end else if (for_ge) begin/end else if (1'"'"'b0) begin/'
+run "engine's low half dropped"    -e 's/lo_left <= (ge_sel\[1:0\] != 2.b00);/lo_left <= 1'"'"'b0;/'
+run "engine's halves swapped"      -e 's/c_din   <= ge_wdata\[31:16\];/c_din   <= ge_wdata[15:0];/'
