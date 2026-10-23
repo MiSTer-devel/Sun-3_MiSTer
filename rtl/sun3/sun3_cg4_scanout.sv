@@ -38,6 +38,10 @@
 // of a burst is at {b[3:2], ~b[1:0], 3'b000}, and pixel p of a 1-bit burst at
 // {p[6:5], ~p[4:0]}, as fb_scanout.sv takes the bw2's.
 //
+// **Colour only** (`colour_only', the GX: sun3_cg6.sv): a line is its 72
+// colour bursts alone, and no pixel is an overlay colour.  It is a level that
+// changes only while the machine is in reset.
+//
 // **Latency**: rgb is four clocks behind cx/cy -- the line buffers' read, the
 // colour map's address, its read (in sun3_cg4.sv, on this clock), the mix.
 // Sun-3.sv delays the syncs and DE to match while the cg4 is shown.
@@ -56,6 +60,7 @@ module sun3_cg4_scanout #(
     input  wire         mclk,
     input  wire         mrst,
     input  wire         enable,         // shown: fetch nothing otherwise
+    input  wire         colour_only,    // the GX: no overlay or enable planes
     output wire [25:0]  c_word,         // SDRAM word of the 16-byte burst
     output wire         c_req,
     output wire         c_urgent,
@@ -114,12 +119,14 @@ module sun3_cg4_scanout #(
 
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg [7:0]  rm_s1 = 8'hFF, cmd_s1 = 8'h00;
-    reg        von_s1 = 1'b0;
+    reg        von_s1 = 1'b0, co_s1 = 1'b0;
     reg [7:0]  rm = 8'hFF, cmd = 8'h00;
     reg        von = 1'b0;
     always @(posedge clk_pixel) begin
-        rm_s1 <= read_mask; cmd_s1 <= command; von_s1 <= video_on;
-        rm    <= rm_s1;     cmd    <= cmd_s1;  von    <= von_s1;
+        rm_s1 <= read_mask; cmd_s1 <= command; von_s1 <= video_on; co_s1 <= colour_only;
+        rm    <= rm_s1;     von    <= von_s1;
+        // colour only: neither overlay input is enabled
+        cmd   <= co_s1 ? {cmd_s1[7:2], 2'b00} : cmd_s1;
     end
 
     // stage 1: the line buffers; stage 2: the colour map's address and the
@@ -169,6 +176,7 @@ module sun3_cg4_scanout #(
     reg  [10:0] fetch_row = 11'd0;      // next line to fetch
     reg  [10:0] shown     = 11'd0;      // lines whose display has begun
     reg  [6:0]  beat      = 7'd0;       // 0..8 enable, 9..17 overlay, 18..89 colour
+    wire [6:0]  beat0;                  // a line's first: 18 when colour only
     // Nothing is fetched until a frame starts.  A frame's start forgets where
     // the fetch was, so a burst must not be in flight then: the fetch ends
     // with the frame's last line, well before, but not if it began at some
@@ -182,6 +190,7 @@ module sun3_cg4_scanout #(
     // the burst's SDRAM word: colour lines are 1152 bytes (576 words), the
     // 1-bit planes' 144 (72); a burst is 8 words
     localparam int OB0 = MBEATS, CB0 = 2 * MBEATS;      // the first overlay and colour beats
+    assign beat0 = colour_only ? 7'(CB0) : 7'd0;
     wire [6:0]  mb = (beat >= 7'(OB0)) ? beat - 7'(OB0) : beat;
     wire [6:0]  cb = beat - 7'(CB0);
     assign c_word = (beat < 7'(OB0))
@@ -212,7 +221,7 @@ module sun3_cg4_scanout #(
         if (mrst || fs_pulse) begin
             fetch_row <= 11'd0;
             shown     <= 11'd0;
-            beat      <= 7'd0;
+            beat      <= beat0;
             en_ones   <= 1'b1;
             ov_ones   <= 1'b1;
         end else begin
@@ -224,7 +233,7 @@ module sun3_cg4_scanout #(
                 else if (beat < 7'(CB0))
                     ov_ones <= ov_ones & all_ones;
                 if (beat == 7'(BEATS - 1) || (beat == 7'(CB0 - 1) && no_colour)) begin
-                    beat      <= 7'd0;
+                    beat      <= beat0;
                     fetch_row <= fetch_row + 11'd1;
                     en_ones   <= 1'b1;
                     ov_ones   <= 1'b1;

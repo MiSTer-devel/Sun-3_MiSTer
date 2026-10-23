@@ -46,3 +46,6 @@ run "skipped whatever the command"   -e "s/no_colour = en_ones \&\& (ole\[0\] ||
 run "OL1 skips without the enable"   -e "s/no_colour = en_ones \&\& (ole\[0\] || (ole\[1\] \&\& ov_ones \&\& all_ones));/no_colour = (ole[0] \&\& en_ones) || (ole[1] \&\& ov_ones \&\& all_ones);/"
 run "overlay's last burst not looked at" -e "s/(ole\[1\] \&\& ov_ones \&\& all_ones)/(ole[1] \&\& ov_ones)/"
 run "enable's ones kept across lines" -e "0,/                    en_ones   <= 1'b1;/s///"
+# colour only (the GX)
+run "colour only fetches the 1-bit planes" -e "s/assign beat0 = colour_only ? 7'(CB0) : 7'd0;/assign beat0 = 7'd0;/"
+run "colour only shows the overlay"  -e "s/cmd   <= co_s1 ? {cmd_s1\[7:2\], 2'b00} : cmd_s1;/cmd   <= cmd_s1;/"

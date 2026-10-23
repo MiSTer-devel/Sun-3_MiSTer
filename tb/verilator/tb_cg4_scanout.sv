@@ -20,6 +20,9 @@
 //      ones over an enable plane that is not, which do; the bursts a frame
 //      are counted, and every pixel still checked.
 //
+//    * colour only, as the GX has it: 72 bursts a line, and no overlay colour
+//      whatever the planes and the command register say.
+//
 //      make -C tb/verilator tb_cg4_scanout
 //============================================================================
 `timescale 1ps/1ps
@@ -47,6 +50,7 @@ video_timing #(
 
 // ---- the DUT ------------------------------------------------------------------
 reg          enable = 1;
+reg          colour_only = 0;
 wire [25:0]  c_word;
 wire         c_req, c_urgent;
 reg          c_done = 0;
@@ -60,7 +64,7 @@ wire [23:0]  rgb;
 wire         retrace;
 
 sun3_cg4_scanout dut (
-    .mclk(mclk), .mrst(mrst), .enable(enable),
+    .mclk(mclk), .mrst(mrst), .enable(enable), .colour_only(colour_only),
     .c_word(c_word), .c_req(c_req), .c_urgent(c_urgent), .c_done(c_done), .c_rdata(c_rdata),
     .clk_pixel(pclk), .pix_rst(prst), .cx(cx), .cy(cy),
     .video_on(video_on), .read_mask(read_mask), .command(command),
@@ -151,7 +155,7 @@ end
 
 // ---- the check: every pixel, four clocks after its cx/cy ------------------------
 function automatic [23:0] expect_px(input [11:0] x, input [10:0] y, input [31:0] s,
-                                    input bit von, input [7:0] rm, input [7:0] cmd,
+                                    input bit von, input bit co, input [7:0] rm, input [7:0] cmd,
                                     input [23:0] o1, input [23:0] o2, input [23:0] o3);
     int row, col, idx;
     bit [7:0] cb, ob8, eb8;
@@ -168,6 +172,7 @@ function automatic [23:0] expect_px(input [11:0] x, input [10:0] y, input [31:0]
         ob  = ob8[7 - col % 8];                 // pixel 0 is a byte's MSB
         eb  = eb8[7 - col % 8];
         ol  = {ob & eb & cmd[1], eb & cmd[0]};  // the overlay only where enabled
+        if (co) ol = 2'd0;                      // colour only: no overlay at all
         case (ol)
             2'd1:    return o1;
             2'd2:    return o2;
@@ -188,7 +193,7 @@ bit         checking = 0;                   // this frame is checked
 initial for (int i = 0; i < 16; i++) begin errors[i] = 0; pixels[i] = 0; ubursts[i] = 0; fbursts[i] = 0; end
 
 always @(posedge pclk) begin
-    exp_d[0] <= expect_px(cx, cy, seed, video_on, read_mask, command, ovl1, ovl2, ovl3);
+    exp_d[0] <= expect_px(cx, cy, seed, video_on, colour_only, read_mask, command, ovl1, ovl2, ovl3);
     chk_d[0] <= checking;                   // the whole raster: black outside the screen
     de_d[0]  <= de;
     for (int k = 1; k < 4; k++) exp_d[k] <= exp_d[k-1];
@@ -271,11 +276,16 @@ initial begin
     mode = 0;
     next_frame();                           // 12: neither: every line in colour
     command = 8'h40;
-    next_frame();                           // 13: done
+    next_frame();                           // 13: colour only (the GX): the console's planes
+    colour_only = 1;                        //     and both overlay enables ignored, quick
+    command = 8'h43;
+    next_frame();                           // 14: colour only, slowly
+    mode = 1;
+    next_frame();                           // 15: done
     checking = 0;
     repeat (8) @(posedge pclk);
 
-    for (int f = 2; f <= 12; f++) begin
+    for (int f = 2; f <= 14; f++) begin
         if (f == 7) continue;
         check(errors[f] == 0, $sformatf("frame %0d: %0d of %0d pixels wrong", f, errors[f], pixels[f]));
         check(pixels[f] == 1160 * 904, $sformatf("frame %0d: %0d pixels checked", f, pixels[f]));
@@ -294,6 +304,8 @@ initial begin
     check(fbursts[11] - fbursts[10] == 225 * 18 + 675 * 90,
           $sformatf("frame 11: %0d bursts (225 lines, both planes all ones, need no colour)", fbursts[11] - fbursts[10]));
     check(fbursts[12] - fbursts[11] == 900 * 90, $sformatf("frame 12: %0d bursts (all in colour)", fbursts[12] - fbursts[11]));
+    check(fbursts[13] - fbursts[12] == 900 * 72, $sformatf("frame 13: %0d bursts (colour only)", fbursts[13] - fbursts[12]));
+    check(fbursts[14] - fbursts[13] == 900 * 72, $sformatf("frame 14: %0d bursts (colour only, slowly)", fbursts[14] - fbursts[13]));
     check(retrace_bad == 0, $sformatf("retrace is vertical blank: %0d clocks otherwise", retrace_bad));
     $display("tb_cg4_scanout: %0d bursts, %0d urgent", bursts, urgent_bursts);
 
@@ -304,7 +316,7 @@ initial begin
 end
 
 initial begin
-    #(64'd400_000_000_000);                // 400 ms: 13 frames are 220
+    #(64'd400_000_000_000);                // 400 ms: 15 frames are 250
     $display("FAIL  timeout");
     $display("FAIL");
     $finish;
