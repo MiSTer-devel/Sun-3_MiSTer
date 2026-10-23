@@ -2,11 +2,15 @@
  * cg6model harness: run SunOS's own libpixrect against the GX model.
  *
  * The image is Sun's libpixrect object code, linked flat by aoutlink.py and
- * run in sparc.c.  RAM is 0..32 MiB; the board appears where pr_makefromfd
- * would have mapped it (cg6reg.h's CG6_VADDR layout from 0x70000000), and
- * every load or store libpixrect makes there becomes a bus cycle on the
- * model, in the board's own offsets.  libc and Sun's runtime (.mul, .div,
- * malloc ...) are served in C: an undefined symbol is `unimp 0; nop'.
+ * run in sparc.c (SunOS 4.1.3's SPARC library), or, built with -DM68K as
+ * harness68k, on Musashi as a 68020 (SunOS 4.1.1's sun3 library).  RAM is
+ * 0..32 MiB; the board appears where pr_makefromfd would have mapped it
+ * (cg6reg.h's CG6_VADDR layout from 0x70000000, the same in both of its
+ * branches), and every load or store libpixrect makes there becomes a bus
+ * cycle on the model, in the board's own offsets.  libc and Sun's runtime
+ * (.mul, .div, malloc ...) are served in C: an undefined symbol is `unimp 0;
+ * nop' on SPARC, `illegal; rts' on the 68020.  Only the CPU back-end
+ * (below, "the CPU") differs between the two; the tests are the same.
  *
  * Each test does one operation twice: through the cg6 routines on the model,
  * and through libpixrect's memory-pixrect routines (mem_rop, mem_vector,
@@ -48,14 +52,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef M68K
+#include "m68k.h"
+#else
 #include "sparc.h"
+#endif
 #include "cg6model.h"
 
 #define RAM_SIZE	0x2000000
 #define IMAGE_BASE	0x10000
 #define HEAP_END	0x1e00000
 #define STACK_TOP	0x1ff0000
-#define RET_ADDR	0x0f00		/* `unimp 1': a call has returned */
+#define RET_ADDR	0x0f00		/* `unimp 1' (illegal): a call has returned */
+#define CRASH_ADDR	0x0f10		/* 68020: illegal; an exception was taken */
 
 /* where pr_makefromfd maps the board (cg6reg.h: CG6_VBASE, CG6_VADDR) */
 #define VBASE		0x70000000u
@@ -74,11 +83,20 @@
 
 static uint8_t *ram;
 static struct cg6 G;
+#ifndef M68K
 static struct sparc C;
+#endif
 static FILE *trace;
 static int verbose, stats;
 static const char *one_vector, *one_poly, *initial_path, *final_path;
 static unsigned long nboard;
+
+static uint32_t cpu_pc(void);
+#ifdef M68K
+#define ICOUNT	icount
+#else
+#define ICOUNT	C.icount
+#endif
 
 static void die(const char *fmt, ...)
 {
@@ -87,7 +105,7 @@ static void die(const char *fmt, ...)
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
-	fprintf(stderr, " (pc %08x)\n", C.pc);
+	fprintf(stderr, " (pc %08x)\n", cpu_pc());
 	exit(2);
 }
 
@@ -115,6 +133,14 @@ static char cats[NCAT][24], cat[24];
 static uint32_t reguse[NCAT][0x1000 / 4 / 32];
 static unsigned long fbuse[NCAT][2];
 
+/*
+ * A call that writes the font register more than font_limit times is
+ * stopped there (test_stencil): cg6_stencil's dbra loop on the 68020.
+ */
+static unsigned long nfontw, font_limit;
+static int stopped;
+static void cpu_stop(void);
+
 static int catno(void)
 {
 	for (int i = 0; i < NCAT; i++) {
@@ -130,6 +156,10 @@ static void tracefn(void *arg, int wr, uint32_t off, int size, uint32_t v)
 {
 	(void)arg;
 	nboard++;
+	if (wr && off == CG6_FBC + FBC_FONT && font_limit && ++nfontw > font_limit && !stopped) {
+		stopped = 1;
+		cpu_stop();
+	}
 	if (trace)
 		fprintf(trace, "%c%d %06x %08x\n", wr ? 'w' : 'r', size, off, v);
 	if (stats && cat[0]) {
@@ -272,7 +302,21 @@ static void h_free(uint32_t a)
 		die("free of %08x, never allocated", a);
 }
 
-/* ---- libc, and Sun's runtime: arguments in %o0.., the result in %o0 ---- */
+/* ---- the CPU: arguments and results of a stub, a call into the image ---- */
+#ifdef M68K
+/* the 68020's: arguments on the stack above the return address, the
+   result in d0 (d0, d1, a0, a1 scratch) */
+static unsigned long icount;
+static volatile int returned;
+
+static uint32_t cpu_pc(void) { return m68k_get_reg(NULL, M68K_REG_PPC); }
+static uint32_t oarg(int i) { return rd32(m68k_get_reg(NULL, M68K_REG_SP) + 4 + 4 * i); }
+static void ret(uint32_t v) { m68k_set_reg(M68K_REG_D0, v); }
+static void ret2(uint32_t v) { m68k_set_reg(M68K_REG_D1, v); }
+#else
+/* SPARC's: arguments in %o0.., the result in %o0 */
+static uint32_t cpu_pc(void) { return C.pc; }
+
 static uint32_t oarg(int i)
 {
 	if (i < 6)
@@ -281,6 +325,8 @@ static uint32_t oarg(int i)
 }
 
 static void ret(uint32_t v) { sparc_set(&C, R_O(0), v); }
+static void ret2(uint32_t v) { sparc_set(&C, R_O(1), v); }
+#endif
 
 static void fbmake(void);
 
@@ -318,11 +364,11 @@ static void stub(const char *name)
 	else if (!strcmp(name, ".mul")) {
 		int64_t p = (int64_t)a * b;
 		ret((uint32_t)p);
-		sparc_set(&C, R_O(1), (uint64_t)p >> 32);
+		ret2((uint64_t)p >> 32);
 	} else if (!strcmp(name, ".umul")) {
 		uint64_t p = (uint64_t)(uint32_t)a * (uint32_t)b;
 		ret((uint32_t)p);
-		sparc_set(&C, R_O(1), p >> 32);
+		ret2(p >> 32);
 	} else if (!strcmp(name, ".div")) {
 		if (!b) die(".div by zero");
 		ret(a / b);
@@ -345,6 +391,87 @@ static void stub(const char *name)
 		die("unexpected call to %s", name);
 }
 
+#ifdef M68K
+unsigned int m68k_read_memory_8(unsigned int a) { return mem_rd(a, 1); }
+unsigned int m68k_read_memory_16(unsigned int a) { return mem_rd(a, 2); }
+unsigned int m68k_read_memory_32(unsigned int a) { return mem_rd(a, 4); }
+void m68k_write_memory_8(unsigned int a, unsigned int v) { mem_wr(a, 1, v); }
+void m68k_write_memory_16(unsigned int a, unsigned int v) { mem_wr(a, 2, v); }
+void m68k_write_memory_32(unsigned int a, unsigned int v) { mem_wr(a, 4, v); }
+unsigned int m68k_read_disassembler_16(unsigned int a) { return rd16(a % RAM_SIZE); }
+unsigned int m68k_read_disassembler_32(unsigned int a) { return rd32(a % RAM_SIZE); }
+
+static void insn_hook(unsigned int pc) { (void)pc; icount++; }
+
+/* end the call now: it returns, its result undefined */
+static void cpu_stop(void)
+{
+	returned = 1;
+	m68k_end_timeslice();
+}
+
+/* ILLEGAL at RET_ADDR (returned), CRASH_ADDR (every exception vector) or a
+   stub; a stub's RTS follows it */
+static int illegal(int opcode)
+{
+	uint32_t pc = cpu_pc();
+
+	(void)opcode;
+	if (pc == RET_ADDR) {
+		returned = 1;
+		m68k_end_timeslice();
+		return 1;
+	}
+	if (pc == CRASH_ADDR)
+		die("exception taken");
+	for (int i = 0; i < nsyms; i++)
+		if (syms[i].stub && syms[i].addr == pc) {
+			stub(syms[i].name);
+			return 1;
+		}
+	return 0;
+}
+
+static uint32_t call(const char *fn, int n, ...)
+{
+	uint32_t a[16], sp = STACK_TOP - 0x200;
+	va_list ap;
+
+	va_start(ap, n);
+	for (int i = 0; i < n; i++)
+		a[i] = va_arg(ap, uint32_t);
+	va_end(ap);
+	for (int i = n - 1; i >= 0; i--)
+		wr32(sp -= 4, a[i]);
+	wr32(sp -= 4, RET_ADDR);
+	m68k_set_reg(M68K_REG_SR, 0x2700);
+	m68k_set_reg(M68K_REG_A7, sp);
+	m68k_set_reg(M68K_REG_PC, sym(fn));
+	returned = 0;
+	for (long i = 0; !returned; i++) {
+		if (i > 40000)
+			die("%s does not return", fn);
+		m68k_execute(100000);
+	}
+	return m68k_get_reg(NULL, M68K_REG_D0);
+}
+
+static void cpu_init(void)
+{
+	/* vectors: every exception lands on CRASH_ADDR */
+	wr32(0, STACK_TOP);
+	wr32(4, RET_ADDR);
+	for (uint32_t v = 8; v < 0x400; v += 4)
+		wr32(v, CRASH_ADDR);
+	wr16(RET_ADDR, 0x4afc);
+	wr16(CRASH_ADDR, 0x4afc);
+	m68k_init();
+	m68k_set_cpu_type(M68K_CPU_TYPE_68020);
+	m68k_set_illg_instr_callback(illegal);
+	m68k_set_instr_hook_callback(insn_hook);
+	m68k_pulse_reset();
+}
+#else
 static int unimp(struct sparc *s, uint32_t insn)
 {
 	if (s->pc == RET_ADDR && insn == 1) {
@@ -388,6 +515,18 @@ static uint32_t call(const char *fn, int n, ...)
 	return sparc_get(&C, R_O(0));
 }
 
+static void cpu_stop(void) { C.stop = 1; }
+
+static void cpu_init(void)
+{
+	wr32(RET_ADDR, 1);			/* unimp 1 */
+	sparc_init(&C);
+	C.rd = mem_rd;
+	C.wr = mem_wr;
+	C.unimp = unimp;
+}
+#endif
+
 /* ---- pixrects in RAM ---- */
 #define PR_OPS	0
 #define PR_W	4
@@ -405,22 +544,41 @@ static uint32_t call(const char *fn, int n, ...)
 /*
  * pr_makefromfd(fd, size, depth, devdata, curdd, mmapsize, privsize, mmapoffset):
  * a pixrect with privsize bytes of private data, and *curdd pointing at a
- * device record whose va (+0x10) is where the board is mapped.
+ * device record (struct pr_devdata) whose va is where the board is mapped.
+ * The struct pr_size goes by value: on SPARC as a pointer to a copy, on the
+ * 68020 as its two words on the stack.  pr_devdata's dev_t is a short, so
+ * fd and va are at +0xc and +0x10 on SPARC, +0xa and +0xe on the 68020
+ * (where an int is 2-aligned; the sun3 cg6.o's cg6_make reads them there).
  */
+#ifdef M68K
+#define SZ_ARGS		2		/* a struct pr_size: two stack words */
+#define DD_FD		0xa
+#define DD_VA		0xe
+#else
+#define SZ_ARGS		1		/* a pointer to the copy */
+#define DD_FD		0xc
+#define DD_VA		0x10
+#endif
+
 static void fbmake(void)
 {
-	uint32_t size = oarg(1), curdd = oarg(4), privsize = oarg(6);
+	uint32_t curdd = oarg(3 + SZ_ARGS), privsize = oarg(5 + SZ_ARGS);
 	uint32_t pr = h_alloc(20), d = h_alloc(privsize), dd = h_alloc(0x20);
 
 	memset(&ram[d], 0, privsize);
 	memset(&ram[dd], 0, 0x20);
 	wr32(pr + PR_OPS, 0);
-	wr32(pr + PR_W, rd32(size));
-	wr32(pr + PR_H, rd32(size + 4));
-	wr32(pr + PR_DEPTH, oarg(2));
+#ifdef M68K
+	wr32(pr + PR_W, oarg(1));
+	wr32(pr + PR_H, oarg(2));
+#else
+	wr32(pr + PR_W, rd32(oarg(1)));
+	wr32(pr + PR_H, rd32(oarg(1) + 4));
+#endif
+	wr32(pr + PR_DEPTH, oarg(1 + SZ_ARGS));
 	wr32(pr + PR_DATA, d);
-	wr32(dd + 0xc, oarg(0));
-	wr32(dd + 0x10, VBASE);
+	wr32(dd + DD_FD, oarg(0));
+	wr32(dd + DD_VA, VBASE);
 	wr32(curdd, dd);
 	ret(pr);
 }
@@ -452,7 +610,7 @@ static void fill_random(uint8_t *p, size_t n)
 /* ---- the comparison ---- */
 static uint32_t FB;		/* the cg6 pixrect */
 static uint32_t M;		/* the 1152x900x8 memory mirror */
-static unsigned long ntests, nfail, nfallback, nmemdis, nsunbug;
+static unsigned long ntests, nfail, nfallback, nmemdis, nsunbug, nrunaway;
 static uint8_t before[CG6_W * CG6_H], ref[CG6_W * CG6_H];
 static int have_ref;
 static unsigned long fallback_mark;
@@ -955,10 +1113,34 @@ static void test_stencil(void)
 	snprintf(what, sizeof what, "stencil op %02x src %d at %d,%d %dx%d in %d,%d %dx%d stencil at %d,%d",
 		 op, kind, x, y, w, h, r.ox, r.oy, r.w, r.h, stx, sty);
 	start(what);
+	/*
+	 * The 68020 cg6_stencil, with an 8-bit source narrower than a 32-pixel
+	 * group on one of its two alignment paths, decrements the group count
+	 * from 0 to -1 (cg6_stencil.o +0x74c) and runs PR_LOOP on it: its
+	 * 68000 form, a dbra (pr_impl_util.h's LOOP_DECR, --n != -1), goes
+	 * round 65,536 times where SPARC's (--n >= 0) goes none (docs/cg6.md).
+	 * A stencil writes the font register at most ~16,000 times (300x200
+	 * at 4 pixels a write); the harness stops one at 100,000, does what
+	 * the routine's exit does (the pixel mask back to all ones) and counts
+	 * it instead of comparing.
+	 */
+	nfontw = 0;
+	stopped = 0;
+	font_limit = 100000;
 	call("_cg6_stencil", 12, d, x, y, w, h, op, st, stx, sty, spr, sx, sy);
-	call("_mem_stencil", 12, m, x, y, w, h, op, st, stx, sty, spr, sx, sy);
-	stencil_ref(&r, x, y, w, h, op, st, stx, sty, spr, sx, sy);
-	compare(what, 0xff);
+	font_limit = 0;
+	if (stopped) {
+		nrunaway++;
+		ntests++;
+		if (verbose)
+			fprintf(stderr, "note %s: Sun's 68020 dbra loop ran away\n", what);
+		cg6_write(&G, CG6_FBC + FBC_PIXELMASK, 4, 0xffffffff);
+		sync_mirror();
+	} else {
+		call("_mem_stencil", 12, m, x, y, w, h, op, st, stx, sty, spr, sx, sy);
+		stencil_ref(&r, x, y, w, h, op, st, stx, sty, spr, sx, sy);
+		compare(what, 0xff);
+	}
 	call("_mem_destroy", 1, st);
 	if (spr)
 		call("_mem_destroy", 1, spr);
@@ -1771,12 +1953,7 @@ int main(int argc, char **argv)
 	fclose(f);
 	load_syms(argv[2]);
 	heap_init();
-	wr32(RET_ADDR, 1);			/* unimp 1 */
-
-	sparc_init(&C);
-	C.rd = mem_rd;
-	C.wr = mem_wr;
-	C.unimp = unimp;
+	cpu_init();
 	G.trace = tracefn;
 	G.busy_polls = busy;
 	test_prom();
@@ -1791,13 +1968,18 @@ int main(int argc, char **argv)
 	}
 	trace = trace_file;
 
-	/* cg6_make(fd, size, depth, attr): the library's own attach */
+	/* cg6_make(fd, size, depth, attr): the library's own attach; size by
+	   value (fbmake) */
 	{
+		strcpy(cat, "make");
+#ifdef M68K
+		FB = call("_cg6_make", 5, 3, CG6_W, CG6_H, 8, 0);
+#else
 		uint32_t size = h_alloc(8);
 		wr32(size, CG6_W);
 		wr32(size + 4, CG6_H);
-		strcpy(cat, "make");
 		FB = call("_cg6_make", 4, 3, size, 8, 0);
+#endif
 		if (!FB)
 			die("cg6_make failed");
 		cat[0] = 0;
@@ -1865,9 +2047,10 @@ int main(int argc, char **argv)
 		}
 	}
 	printf("%lu tests, %lu failed, %lu where Sun's mem code is the one wrong, "
-	       "%lu batchrops with cg6_batchrop's stale clip; %lu board accesses, %lu instructions; "
+	       "%lu batchrops with cg6_batchrop's stale clip, %lu runaway stencils; "
+	       "%lu board accesses, %lu instructions; "
 	       "engine: %lu points %lu lines %lu tris %lu quads %lu rects %lu blits %lu font, %lu refused\n",
-	       ntests, nfail, nmemdis, nsunbug, nboard, C.icount, G.ndraw[0], G.ndraw[1], G.ndraw[2], G.ndraw[3],
+	       ntests, nfail, nmemdis, nsunbug, nrunaway, nboard, ICOUNT, G.ndraw[0], G.ndraw[1], G.ndraw[2], G.ndraw[3],
 	       G.ndraw[4], G.nblit, G.nfont, G.nfull);
 	if (stats)
 		print_stats();

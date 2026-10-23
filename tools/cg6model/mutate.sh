@@ -4,12 +4,21 @@
 # it, must fail.  A "NOT CAUGHT" is a hole in the harness.
 #
 #   bash tools/cg6model/mutate.sh [N]     (after make -C tools/cg6model)
+#
+# With M68K (the compiler flags) and MUOBJ (Musashi's objects) set, as
+# `make -C tools/cg6model mutate68k' sets them, the harness is the 68020's,
+# running the sun3 libpixrect (lp68k).
 set -u
 D=$(cd "$(dirname "$0")" && pwd)
 B=${B:-$D/../../build/cg6model}
 N=${1:-1500}
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
+if [ -n "${M68K:-}" ]; then
+	build=(-DM68K $M68K "$W/harness.c" "$W/cg6model.c" $MUOBJ -lm); img=lp68k
+else
+	build=("$W/harness.c" "$W/cg6model.c" "$W/sparc.c"); img=lp
+fi
 
 # from @@ to @@ what: literal text in cg6model.c
 mutations=(
@@ -44,8 +53,8 @@ open(p, "w").write(s.replace(os.environ["FROM"], os.environ["TO"], 1))' "$W/cg6m
 		echo "BAD MUTATION (no change): $what"
 		continue
 	fi
-	gcc -O2 -o "$W/h" "$W/harness.c" "$W/cg6model.c" "$W/sparc.c" 2>/dev/null || { echo "BAD MUTATION (no build): $what"; continue; }
-	if (cd "$W" && timeout 600 ./h "$B/lp.bin" "$B/lp.sym" -n "$N" -s 1 -b 2 >/dev/null 2>&1); then
+	gcc -O2 -o "$W/h" "${build[@]}" 2>/dev/null || { echo "BAD MUTATION (no build): $what"; continue; }
+	if (cd "$W" && timeout 600 ./h "$B/$img.bin" "$B/$img.sym" -n "$N" -s 1 -b 2 >/dev/null 2>&1); then
 		echo "NOT CAUGHT: $what"
 	else
 		echo "caught: $what"
