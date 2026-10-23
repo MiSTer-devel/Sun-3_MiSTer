@@ -13,7 +13,7 @@ VFLAGS := --binary --timing -Wno-fatal -Wno-WIDTH -Wno-WIDTHEXPAND -Wno-WIDTHTRU
           -I$(RTL)/sun3 +define+SIMULATION=1
 
 TESTS := tb_mister_sdram tb_mister_block tb_mister_kbd_mouse tb_mister_bell tb_kbm_scc tb_mister_tod tb_mt02 \
-         tb_cg4 tb_cg4_scanout tb_mister_eeprom tb_si tb_vint tb_mister_enet tb_mister_cpuclk
+         tb_cg4 tb_cg4_scanout tb_mister_eeprom tb_si tb_vint tb_mister_enet tb_mister_cpuclk tb_cdrom
 
 # The whole core is its own makefile; it is a run, not a quick test, so it is
 # not part of `all'.
@@ -94,6 +94,15 @@ tb_mt02:
 	    $(RTL)/vendor/wish5380/wish5380_pkg.sv $(RTL)/vendor/wish5380/scsi_fabric.sv \
 	    $(RTL)/sun3/sun3_mt02.sv $@.sv
 	./obj_$@/$@ +dir=obj_$@
+
+# The CD-ROM, sr0 at target 6: the commands SunOS's sr driver and the PROM's
+# disk driver send, in 512- and 2048-byte blocks, against a disc made in the
+# bench.
+tb_cdrom:
+	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
+	    $(RTL)/vendor/wish5380/wish5380_pkg.sv $(RTL)/vendor/wish5380/scsi_fabric.sv \
+	    $(RTL)/sun3/sun3_cdrom.sv $@.sv
+	./obj_$@/$@
 
 # The on-board SCSI's DMA (sun3_si.sv) against the byte-per-cycle engine it
 # replaced (sun3_si_ref.sv): the same commands must leave the same memory,
