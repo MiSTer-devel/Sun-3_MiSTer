@@ -137,8 +137,8 @@ Sun-2). Netbooting is not part of bring-up. A CD-ROM target is deferred:
    (bit 7 set: 1152x900) and sets the console's width and height only from
    it. Upstream let that read time out, so with no P4 board the console was
    zero wide: the white screen. The core answers it now (`MATCH_VIDSENSE`,
-   0x80), and 3.0.1 runs with the colour board on and off. Rev 1.9 stays
-   the default `boot0.rom`; 3.0.1 is a *Load ROM* away.
+   0x80), and 3.0.1 runs with the colour board on and off. It is the
+   default `boot0.rom` since; 1.9 is a *Load ROM* away.
 
    A 3/60C was often a "without mono" board (501-1322/1345) plus the cg4.
    Whether "Colour board On" should also remove the on-board bw2 is open.

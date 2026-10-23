@@ -18,11 +18,11 @@ Order of priority, from the owner:
   on a 1 GB disk image, booting multi-user** ([install-sunos.md](install-sunos.md)).
   The kernel finds `cgfour0`.
 * Main_MiSTer `sun-family` knows the Sun-3: the disk write buffer, the ID
-  PROM with machine type 0x17, and the `S3ETH001` mailbox. `releases/MiSTer`
-  is `de5e963` on upstream `c97c052` (pushed), on the board since
-  2026-10-06; Phases 1 to 6 were tested on `55fe6c8`.
-* `releases/`: the core (`Sun-3_20261005.rbf`, built from `7bc4785`), that
-  Main, and the patched 1.9 PROM as `boot0.rom`.
+  PROM with machine type 0x17, and the `S3ETH001` mailbox: `de5e963` on
+  upstream `c97c052` (pushed), on the board since 2026-10-06; Phases 1 to 6
+  were tested on `55fe6c8`.
+* `releases/`: the core and the patched Rev 3.0.1 PROM as `boot0.rom`
+  (2026-10-22; 1.9 before it, which still runs).
 * The core on the board (`_Unstable/Sun-3_20261005-clk.rbf`) has the
   second disk (Phase 3, step 1), the packed SCSI DMA, the cg4's overlay
   gated by its enable plane, level 4 through the DSACK PAL, the LANCE, and

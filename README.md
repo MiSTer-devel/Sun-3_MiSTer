@@ -6,9 +6,9 @@ colour frame buffer. It also has the LANCE Ethernet, the on-board SCSI with
 disk and QIC tape, the Sun keyboard and mouse, and the ICM7170 clock. It runs
 Sun's own boot PROM and SunOS.
 
-**Status: early, but it boots SunOS.** On a MiSTer (2026-10-04) the Rev 1.9
-PROM comes up on the colour board's console, takes the keyboard, and keeps
-its settings in an EEPROM file. SunOS 4.1.1 installs from QIC tape images onto
+**Status: early, but it boots SunOS.** On a MiSTer the boot PROM (Rev
+3.0.1; Rev 1.9 runs too) comes up on the colour board's console or the mono
+one, takes the keyboard, and keeps its settings in an EEPROM file. SunOS 4.1.1 installs from QIC tape images onto
 a 1 GB disk image and boots from it multi-user, and takes 4.1.1_U1, the Y2K
 patch and Sun's later patches
 ([docs/install-sunos.md](docs/install-sunos.md)). A second disk works,
@@ -43,31 +43,25 @@ The network and the ID PROM are served by Main_MiSTer's Sun family support
 
 ## What you will need
 
-* **the core**, from [`releases/`](releases/): `Sun-3_20261005.rbf`, for
-  `_Computer/` (or `_Unstable/`). Beside it are `boot0.rom` (below) and
-  `MiSTer`, a Main_MiSTer with Sun support, for the network and the ID PROM
-  (see *The network*): upstream Main_MiSTer `c97c052` with the
-  `sun-family` branch (`de5e963`) of
-  [danifunker/Main_MiSTer](https://github.com/danifunker/Main_MiSTer/tree/sun-family)
-  on it, GPL-3.0 like Main_MiSTer itself. It replaces `/media/fat/MiSTer`.
-  A running Main cannot be overwritten in place, so keep the old one, copy
-  the new one to `/media/fat/MiSTer.new`, `mv` it over `/media/fat/MiSTer`,
-  and reboot the MiSTer;
+* **the core**, from [`releases/`](releases/): `Sun-3_20261022.rbf`, for
+  `_Computer/` (or `_Unstable/`);
 * a DE10-Nano with an **SDRAM board of 32 MB or more**;
-* the boot PROM, Sun's Rev 1.9 for the 3/60, patched for this machine,
+* the boot PROM, Sun's Rev 3.0.1 for the 3/60, patched for this machine,
   at `games/Sun-3/boot0.rom`: `releases/boot0.rom` (see *The boot PROM*);
 * SunOS for sun3 on a QIC tape image: `python3 tools/mktape -o
   sunos-4.1.1-sun3.qic <the distribution's sun3 directory>`. Mount it as
-  *Tape (st0)* in the OSD. To install onto a disk, see
+  *Tape (ID 4)* in the OSD. To install onto a disk, see
   [docs/install-sunos.md](docs/install-sunos.md).
 
 ## The boot PROM
 
-The core runs Sun's own 3/60 boot PROM, Rev 1.9. It is not in the
+The core runs Sun's own 3/60 boot PROM, Rev 3.0.1. It is not in the
 bitstream: Main_MiSTer sends `games/Sun-3/boot0.rom` when the core starts,
 and the machine stays in reset until it has arrived. `releases/boot0.rom`
 is the stock image with seven patches, each listed with its reason in
-[`tools/sun3_60_v1.9_noparity.txt`](tools/sun3_60_v1.9_noparity.txt):
+[`tools/sun3_60_v3.0.1_noparity.txt`](tools/sun3_60_v3.0.1_noparity.txt)
+(and, at their places in Rev 1.9, in
+[`tools/sun3_60_v1.9_noparity.txt`](tools/sun3_60_v1.9_noparity.txt)):
 
 * six take out the parity memory this machine does not have (Sun-3_FPGA's
   verified "noparity" set): the PROM no longer turns parity checking on,
@@ -79,13 +73,25 @@ is the stock image with seven patches, each listed with its reason in
   string pointers, and 0xffffffff made it overwrite itself.
 
 To make the same file yourself, `make -C tools` fetches the stock image
-from sun3arc.org, checks its SHA-256, and writes
-`build/rom/sun3_60_v1.9_noparity.bin` (sha256 `31688f6f…63de`, the same
+from sun3arc.org (or takes one dropped into `build/rom/` as
+`sun3_60_v3.0.1.bin`), checks its SHA-256, and writes
+`build/rom/sun3_60_v3.0.1_noparity.bin` (sha256 `9162b135…2e21`, the same
 as `releases/boot0.rom`). `tools/rompatch` checks every word it changes
-before changing it, and keeps the PROM's checksum right. `make -C tools
-all-roms` also patches Rev 3.0.1 the same way
-([`tools/sun3_60_v3.0.1_noparity.txt`](tools/sun3_60_v3.0.1_noparity.txt)),
-but only 1.9 has been run on the MiSTer.
+before changing it, and keeps the PROM's checksum right.
+
+Rev 3.0.1 prints the Host ID in its banner, and its SCSI unit numbers are
+target × 8 + LUN: the second disk (ID 1) is `b sd(0,8,0)`.
+
+### Rev 1.9
+
+Rev 1.9, the PROM this core first ran, still runs: `make -C tools
+all-roms` writes `build/rom/sun3_60_v1.9_noparity.bin` (sha256
+`31688f6f…63de`). Put it in `games/Sun-3/` under any name ending `.rom`
+and pick it with *Load ROM*: the machine resets into it for that session,
+and the next start loads `boot0.rom` again. Its disk unit numbers are
+target × 4 + LUN, so its second disk is `b sd(0,4,0)`; it has the fuller
+diagnostic menus (video, colour map, SCSI and memory tests) that 3.0.1
+dropped.
 
 ## Booting from tape
 
@@ -97,8 +103,10 @@ and at the `>` prompt type
 
 SunOS 4.1.1's tape boots its miniroot and asks whether to install it.
 The PROM's own tape open waits ten seconds for the drive, as on a real 3/60.
-L1-A (hold Right Alt + F1, the Sun's L1, and press A) stops SunOS and returns
-to the PROM.
+L1-A (hold Right Alt + F1, the Sun's L1, and press A), or *Stop-A (abort)*
+on the OSD's *Machine* page, stops SunOS and returns to the PROM; `c`
+continues it. With *Swap Alt/Win keys* (*Input* page) on, the L-keys' Right Alt
+is the Right Windows key instead, and the key beside the space bar is Meta.
 
 ## The EEPROM
 
@@ -108,7 +116,7 @@ the SD card. Create one once, for example on the MiSTer:
 
     dd if=/dev/zero of=/media/fat/games/Sun-3/Sun-3.nvr bs=2048 count=1
 
-and pick it in the OSD under **EEPROM**. MiSTer remembers it, and the core
+and pick it in the OSD under **EEPROM image** (the *Advanced* page). MiSTer remembers it, and the core
 reads it at every start, before the PROM runs. Changes are written back to
 it half a second after the machine makes them, from the PROM's `q` command
 or from SunOS's `eeprom`. A file picked while the machine runs is read at
@@ -178,9 +186,10 @@ right; programs simply run faster. Dhrystone 2.1 on the MiSTer:
 | 33 MHz | 5,450 |
 
 As with a crystal on a real board, the clock changes only in a reset:
-change it, then halt SunOS and choose *Reset* (a change made while SunOS
-runs waits for the next reset). To keep it for the next start, use *Save
-settings* on the OSD's System page.
+change it, then halt SunOS and choose *Apply and reset* (a change made
+while SunOS runs waits for the next reset, and the OSD shows *Changes
+pending* until then). To keep it for the next start, use *Save settings* on
+the OSD's System page.
 
 ## Window systems
 
@@ -255,12 +264,12 @@ the Sun-2, NeXT and Minimig A2065 cores. **It needs a Main_MiSTer with Sun
 support** (`support/sun/`, the `sun-family` branch of
 [danifunker/Main_MiSTer](https://github.com/danifunker/Main_MiSTer/tree/sun-family));
 without it the LANCE is on a cable to nowhere, and SunOS attaches `le0` all
-the same. *Network* in the OSD picks the host side:
+the same. *Network interface* in the OSD picks the host side:
 
-| Network | what it is |
+| Network interface | what it is |
 |---|---|
 | eth0 (the default) | MiSTer's own Ethernet port, shared: the Sun is a second machine on the LAN, with its own address |
-| Off | no cable |
+| None | no cable |
 | eth1 | a second port (a USB adapter), the Sun's alone |
 | macvlan | a virtual port on eth0 with the Sun's address |
 | tap0 | a tap interface on the MiSTer, for routing it yourself |
@@ -305,10 +314,10 @@ FTP both ways with equal sums, and had no errors on `le0` under load.
 * **A lot of text pasted into a telnet session is partly lost**: the Sun's
   pseudo-terminal input queue overflows, and it beeps and drops the rest.
   Move files by FTP.
-* **With *Network* eth0 the Sun cannot reach the MiSTer it runs on** (see
+* **With *Network interface* eth0 the Sun cannot reach the MiSTer it runs on** (see
   *The network*); every other machine on the LAN can.
-* **The CPU clock, the colour board and the diag switch change only in a
-  reset**, and the OSD keeps them for the next start only after *Save
+* **Every setting but the media, *Network interface* and *Input* changes
+  only in a reset** (*Apply and reset*), and the OSD keeps them for the next start only after *Save
   settings*.
 * **Not tried yet**: NFS, telnet and FTP from the Sun to another machine,
   and NetBSD. Parts of the cg4 that SunOS never uses are not modelled: the
