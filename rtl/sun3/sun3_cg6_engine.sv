@@ -76,10 +76,10 @@ module sun3_cg6_engine #(
 
     // the command, held still from start_tgl to done_tgl
     input  wire [2:0]   cmd,            // 0 rect, 1 blit, 2 font, 3 line, 4 poly
-    input  wire signed [15:0] x0, y0, x1, y1, x2, y2,          // a blit's and the font's
-    input  wire signed [15:0] vx0, vy0, vx1, vy1, vx2, vy2, vx3, vy3,  // a drawing's vertices
+    input  wire signed [15:0] i_x0, i_y0, i_x1, i_y1, i_x2, i_y2,      // a blit's and the font's
+    input  wire signed [15:0] i_vx0, i_vy0, i_vx1, i_vy1, i_vx2, i_vy2, i_vx3, i_vy3,  // a drawing's vertices
     input  wire [2:0]   vk,             // ... how many, a polygon's
-    input  wire signed [15:0] clipminx, clipminy, clipmaxx, clipmaxy,
+    input  wire signed [15:0] i_clipminx, i_clipminy, i_clipmaxx, i_clipmaxy,
     input  wire [31:0]  font,
     input  wire         colour8,        // MISC's data field is colour8
     input  wire [7:0]   fcolor, bcolor,
@@ -110,6 +110,7 @@ module sun3_cg6_engine #(
     end
     wire mrst    = rst_s[1];
     wire pending = st_s[1] ^ done_tgl;      // a command not yet answered
+
 
     wire gen = (cmd == C_LINE) || (cmd == C_POLY);  // spans from a generator
 
@@ -205,6 +206,25 @@ module sun3_cg6_engine #(
                      E_PS1  = 6'd30, E_PS2   = 6'd31, E_PS3   = 6'd32, E_PNEXT = 6'd33,
                      E_PST1 = 6'd34, E_PST2  = 6'd35;
     reg  [5:0]  st = E_IDLE;
+
+    // The command's coordinates and clip window, copied on mclk when a command
+    // is taken (E_IDLE, `pending'; they are held still from start_tgl to
+    // done_tgl, so the copy is exact).  The engine's comparisons and min/max
+    // read these local registers, not sun3_cg6.sv's on the CPU's clock: the
+    // full build failed to route with every use reaching back across the
+    // chip to the register file (sun3_cg6's ex/ey).
+    reg signed [15:0] x0 = 16'sd0, y0 = 16'sd0, x1 = 16'sd0, y1 = 16'sd0, x2 = 16'sd0, y2 = 16'sd0;
+    reg signed [15:0] vx0 = 16'sd0, vy0 = 16'sd0, vx1 = 16'sd0, vy1 = 16'sd0;
+    reg signed [15:0] vx2 = 16'sd0, vy2 = 16'sd0, vx3 = 16'sd0, vy3 = 16'sd0;
+    reg signed [15:0] clipminx = 16'sd0, clipminy = 16'sd0, clipmaxx = 16'sd0, clipmaxy = 16'sd0;
+    always @(posedge mclk)
+        if (st == E_IDLE && pending) begin
+            x0 <= i_x0; y0 <= i_y0; x1 <= i_x1; y1 <= i_y1; x2 <= i_x2; y2 <= i_y2;
+            vx0 <= i_vx0; vy0 <= i_vy0; vx1 <= i_vx1; vy1 <= i_vy1;
+            vx2 <= i_vx2; vy2 <= i_vy2; vx3 <= i_vx3; vy3 <= i_vy3;
+            clipminx <= i_clipminx; clipminy <= i_clipminy;
+            clipmaxx <= i_clipmaxx; clipmaxy <= i_clipmaxy;
+        end
     reg         last = 1'b0;            // E_NEXT: the command is finished
 
     reg  [10:0] xa = 11'd0, xb = 11'd0;     // the span on every row (0..1151)
