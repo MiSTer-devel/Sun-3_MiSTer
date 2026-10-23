@@ -103,10 +103,57 @@ and at the `>` prompt type
 
 SunOS 4.1.1's tape boots its miniroot and asks whether to install it.
 The PROM's own tape open waits ten seconds for the drive, as on a real 3/60.
-L1-A (hold Right Alt + F1, the Sun's L1, and press A), or *Stop-A (abort)*
-on the OSD's *Machine* page, stops SunOS and returns to the PROM; `c`
-continues it. With *Swap Alt/Win keys* (*Input* page) on, the L-keys' Right Alt
-is the Right Windows key instead, and the key beside the space bar is Meta.
+L1-A (see *The keyboard*), or *Stop-A (abort)* on the OSD's *Machine* page,
+stops SunOS and returns to the PROM; `c` continues it.
+
+## The keyboard
+
+The PC keyboard is a Sun Type 3, and the mouse a three-button Mouse Systems
+one. Most keys are where they are on the PC. The Sun keys a PC lacks:
+
+| Sun | PC |
+|---|---|
+| L1..L10 (Stop, Again, Props, Undo, Front, Copy, Open, Paste, Find, Cut) | **hold Right Alt** and press F1..F10 |
+| L1-A, the abort to the PROM | Right Alt + F1, and A while F1 is held (or *Stop-A* in the OSD) |
+| T1..T9, the top row | F1..F9 |
+| Meta (the diamond keys) | the Windows keys |
+| Alt | Left Alt |
+| R1..R15, the right keypad | the numeric keypad and the navigation keys: Num Lock R1, / R2, * R3, - R4, + R5; the arrows R8, R10, R12, R14; Home R7, PgUp R9, End R13, PgDn R15 |
+| Line Feed | keypad Enter |
+| Delete | Delete |
+
+Right Alt sends nothing by itself. MiSTer keeps Scroll Lock, F12 (the OSD)
+and F13 up, so they never reach the Sun.
+
+*Swap Alt/Win keys* on the *Input* page swaps each Alt with the Windows key
+beside it: the key next to the space bar is then Meta, the Windows keys are
+the Alts, and the L-keys are held with the **Right Windows** key instead of
+Right Alt. It acts at once.
+
+## The OSD
+
+The menu follows the layout of the other MiSTer workstation cores. On the top
+page:
+
+* *Pri. disk (ID 0)*, *Disk (ID 1)*, *Tape (ID 4)* and *Tape volume*: the
+  media, which change at once. The disks and the EEPROM image are remembered
+  and mounted again at the next start; the tape is not;
+* *Load ROM*: another boot PROM for this session (see *The boot PROM*);
+* *Network interface* (see *The network*);
+* the pages below, and *Apply and reset*.
+
+| page | rows |
+|---|---|
+| Machine | *CPU clock* (20, 25, 33 MHz), *Colour board* (On, Off), *Stop-A (abort)* |
+| Video | *Aspect ratio*, *Scale* |
+| Input | *Swap Alt/Win keys* |
+| Audio | *Keyboard bell* (Normal, Loud, Quiet, Off) |
+| Advanced | *Diag switch*, *Clock* (MiSTer's time, or 28 years back: the same day, weekday and time in 1998, for a SunOS without the Y2K patch), *EEPROM image* |
+
+Media, *Network interface*, *Input* and *Stop-A* act at once. Every other
+change waits for a reset, as a board's jumpers would: *Changes pending*
+shows above *Apply and reset* until then. To keep settings for the next
+start, use *Save settings* on the OSD's System page.
 
 ## The EEPROM
 
