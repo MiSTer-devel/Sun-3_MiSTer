@@ -37,14 +37,18 @@ board says so.
   map. It also has the 68020 `lib/libpixrect.a`, the sun3 kernel's
   `sys/sun3/OBJ/cgsix.o` and `cg6_colormap.o`, the `pixrect/cg6*.h`
   headers, sundiag's `cg6test`, and OpenWindows 2.0 (`openwin/bin/xnews`).
-  The checks below were made before this was found.
+  Its cg6 members carry the same SCCS ids as 4.1.3's, member for member
+  (cg6.c 1.11 90/07/27 ... cg6_stencil.c 1.9 89/12/15; **verified**), and
+  the harness runs it on a 68020 (*The C model*, *The 68020 run*). Only
+  mem_rop.c (4.27 89/07/26 here, 4.28 91/05/09 in 4.1.3) and
+  pr_polypoint.c (1.17, 1.18) differ among the members the harness links.
 
   Before that, SunOS 4.1.1 for sun3 was not on this machine, so
   the 68020 libpixrect and the sun3 `cgsix.o` were not available. The
   4.1.3 library's cg6 members carry SCCS dates of 1988-90. The newest is
   cg6.c 1.11 90/07/27, and 4.1.1 was released in late 1990, so they are very
-  probably the 4.1.1 sources compiled for SPARC (**inferred**). The harness is
-  written so a 68020 run is a back-end port away (*The C model*).
+  probably the 4.1.1 sources compiled for SPARC (**inferred**; since
+  verified, above).
 * **Solaris 9's** `<sys/cg6fbc.h>`, `<sys/cg6tec.h>`, `<sys/cg6thc.h>`
   (`~/sol9-toolchain/sysroot`): Sun's register names and bit fields.
 * **NetBSD** `sys/dev/sun/cgsix.c` and `cgsixreg.h`. Its own comment says
@@ -463,7 +467,7 @@ The harness checks all of it.
 
 The definition of each operation, a pixel at a time, judges between the
 model and the memory code when they disagree. The model is then right in
-every case, and three are Sun's:
+every case, and four are Sun's (the last only in the 68020 library):
 
 * **mem_rop, mem_stencil and pr_replrop's memory path** are wrong for a few
   narrow rectangles at some bit offsets: 1 to 3 tests in 4,000. The cg2
@@ -477,6 +481,18 @@ every case, and three are Sun's:
   is clipped by the stale window (it vanishes). On a real GX this would
   show too (**inferred**). The harness counts such batches separately:
   about 1 in 4,000 tests.
+* **The 68020 cg6_stencil runs away** with an 8-bit source narrower than
+  one 32-pixel group, on one of its two alignment paths: it takes the
+  group count from 0 to -1 (cg6_stencil.o +0x74c) and loops on it with
+  PR_LOOP (+0x7c0..0x7f0). pr_impl_util.h's 68000 LOOP_DECR is
+  `--n != -1`, a dbra, which goes round 65,536 times; SPARC's
+  `--n >= 0` goes none. Each time round it writes the pixel mask and 8
+  font words from past the source (**verified**: disassembly, header, and
+  the harness's trace). A 3/60 would draw garbage or fault
+  (**inferred**). The harness stops such a call at 100,000 font writes (a
+  stencil makes at most ~16,000), does what the routine's exit does (pixel
+  mask all ones), and counts it: 26 of the about 740 8-bit stencils in
+  20,000 tests.
 
 ## MAME
 
@@ -494,19 +510,31 @@ behaviour.
 `tools/cg6model/`:
 * `cg6model.c`, `cg6model.h`: the board, as this document specifies it;
 * `sparc.c`, `sparc.h`: a SPARC V8 integer interpreter;
-* `aoutlink.py`: links SunOS SPARC a.out objects flat (the Sun-2's
-  `tools/cg2model/aoutlink.py`, for SPARC relocations);
+* `aoutlink.py`: links SunOS SPARC or 68k a.out objects flat (the Sun-2's
+  `tools/cg2model/aoutlink.py`, with SPARC relocations added);
 * `harness.c`: runs libpixrect's cg6 code against the model, and the mem
-  code against a mirror;
+  code against a mirror. Built plain it runs SPARC code in `sparc.c`; with
+  `-DM68K` (`harness68k`) it runs 68020 code on Musashi (MIT licence,
+  fetched by the Makefile at the Sun-2's pinned commit 313ebf1, or
+  `MUSASHI=` a checkout). Only the CPU back-end differs: arguments
+  (`%o0..` or the stack), the stubs' trap (`unimp` or `illegal`), and
+  pr_makefromfd's view of its by-value `struct pr_size` and of
+  `pr_devdata` (fd and va at +0xc/+0x10 on SPARC, +0xa/+0xe on the
+  68020, where an int is 2-aligned after the short dev_t);
 * `mutate.sh`.
 
 ```
 make -C tools/cg6model [run] [N=20000 SEED=7 BUSY=3]   # LIBPIXRECT=... the library
 make -C tools/cg6model mutate
+make -C tools/cg6model run68k [N= SEED= BUSY=]        # LIBPIXRECT68K=, MUSASHI=
+make -C tools/cg6model mutate68k
+make -C tools/cg6model trace68k [B=dir TN=300 SEED=1] # $(B)/t_lp68k.{txt,ini,fin}
 ```
 
 `LIBPIXRECT` defaults to `build/dist/sunos-4.1.3-sparc/libpixrect.a`
-(SHA-256 d7703e9f...fdf50175, from the 4.1.3 image above).
+(SHA-256 d7703e9f...fdf50175, from the 4.1.3 image above);
+`LIBPIXRECT68K` to `build/dist/sunos-4.1.1-sun3/usr/lib/libpixrect.a`
+(SHA-256 41475a65...b33d0ade, from the 4.1.1 tape above).
 
 **What one run does:**
 1. `test_prom`: the PROM's console sequence, and the THC interrupt.
@@ -539,12 +567,40 @@ The engine work in 4,000 tests: about 9,000 points, 3,100 lines, 200 quads,
 triangles or relative vertices. `mutate.sh` breaks 17 of the model's rules
 one at a time and the harness catches 17 of 17.
 
-**A 68020 run** (SunOS 4.1.1's own sun3 libpixrect) needs:
-* the library (`/usr/lib/libpixrect.a` from the sun3 `usr` tar);
-* Musashi in place of `sparc.c`;
-* the Sun-2 cg2 harness's stack-argument `call` and stubs.
+### The 68020 run
 
-The tests and the model stay as they are.
+SunOS 4.1.1's own sun3 libpixrect, on Musashi as a 68020, with the same
+tests, seeds and model (2026-10-23):
+* 0 failures in 20,000 tests at -b 2 (`make run68k N=20000 BUSY=2`, 611
+  million 68020 instructions, 18.6 million board accesses), and in 32 x
+  4,000 tests at seeds 1, 6, 17-22 and -b 0 to 3;
+* 26 runaway stencils in the 20,000 (*What the harness found*), 0
+  stale-clip batchrops (SPARC: 0), and 39 "mem is wrong" cases (SPARC: 5).
+  37 of the 39 are pr_replrop, nearly all with 16-pixel-wide 1-bit
+  patterns, whose mem path draws rows that are no row of the pattern. The
+  model matches the definition there. Its mem_rop is the older 4.27
+  (**inferred** cause);
+* the engine work is the SPARC run's, test for test: 43,791 points,
+  15,182 lines, 0 triangles, 1,012 quads, 262,117 rectangles, 412 blits and
+  104,860 refusals. Font writes are 8.1 million against 5.5 million: the
+  26 stopped stencils' 100,000 each.
+
+Besides the runaway, the 68020 code drives the board exactly as the SPARC
+code does (**verified**, seed 3, 2,000 tests at -b 0, no runaway):
+* the same 1,046,310 accesses, at the same offsets, sizes and order;
+* `-S` is identical for every kind of test;
+* 2,186 written values differ, all don't-cares: 709 FCOLORs under raster
+  ops that ignore it (0, D, ~D, 1); 1,474 font words, in bits the clip
+  window removes (pr_replrop's odd-sized tiles); 3 stencils' pixel masks,
+  in bits outside the clip window or under the raster op D.
+
+Neither library touches the TEC beyond cg6_make's `bzero` of TEC +4..+7
+(four byte writes), nor writes the triangle (0x880) or any relative
+vertex register.
+
+`mutate68k` catches 17 of 17. `trace68k` writes a 300-test trace of every
+kind (303,592 accesses at seed 1, one of them a stopped stencil's 100,000
+font writes), which `-R` replays to 0 differences.
 
 ## The RTL plan
 
@@ -714,11 +770,11 @@ does.
   The model matches libpixrect's software paths, which is what Sun's own
   code checks itself against. A real board could differ at edges; nothing
   here could show it.
-* **SunOS 4.1.1's sun3 cgsix driver and libpixrect were not seen.** The P4
-  probe's FHC write, the context switch, and the mmap layout are taken from
-  the sun4c 4.1.3 driver and cg6reg.h's 68020 branch. A 68020 run of the
-  harness (*The C model*) settles libpixrect. Disassembling the sun3
-  `cgsix.o` settles the driver; build/dist/'s sun3 4.1.1 set holds both.
+* **SunOS 4.1.1's sun3 cgsix driver was not read.** The P4 probe's FHC
+  write, the context switch, and the mmap layout are taken from the sun4c
+  4.1.3 driver and cg6reg.h's 68020 branch. libpixrect is settled (*The
+  68020 run*). Disassembling the sun3 `cgsix.o`, in build/dist/'s sun3
+  4.1.1 set, settles the driver.
 * **SDRAM bandwidth.** The scan-out takes 62 MB/s of about 110-120. The
   engine and the CPU share the rest, so fills run at roughly 20-40
   Mpixel/s. That is fine for SunView. If not, move the frame buffer to DDR3,
