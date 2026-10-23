@@ -299,7 +299,13 @@ module sun3_mt02 #(
                 // the driver falls back to its generic entry.  The device type
                 // is still given, because the SunOS 4.1.1 tape bootblock will
                 // not boot from a SCSI device that does not say it is a tape.
-                resp = (idx == 10'd0) ? ((lun == 3'd0) ? 8'h01 : 8'h7f) : 8'h00;
+                // Byte 1 says the medium is removable, as a cartridge is:
+                // NetBSD's st matches a generic tape only when it is
+                // (`T_SEQUENTIAL, T_REMOV'), and said "tape fixed not
+                // configured" without it.  SunOS 4.1.1's st (1.98) tells the
+                // MT-02 by its sense length, not by these bytes.
+                resp = (idx == 10'd0) ? ((lun == 3'd0) ? 8'h01 : 8'h7f) :
+                       (idx == 10'd1 && lun == 3'd0) ? 8'h80 : 8'h00;
 
             R_SENSE:
                 case (idx[3:0])

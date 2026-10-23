@@ -272,8 +272,8 @@ initial begin
 
     // SunOS 4.0's st driver knows an MT-02 by an empty vendor field.
     cmd(8'h12, 0, 0, 0, 36, 0);
-    check(st_byte == 8'h00 && din.size() == 5 && din[0] == 8'h01 && din[1] == 0 && din[4] == 0,
-          "INQUIRY: five bytes, a sequential device and zeroes -- what SunOS 4.0 takes for an Emulex");
+    check(st_byte == 8'h00 && din.size() == 5 && din[0] == 8'h01 && din[1] == 8'h80 && din[4] == 0,
+          "INQUIRY: five bytes, a removable sequential device and zeroes -- an Emulex to SunOS, a tape to NetBSD");
     cmd(8'h12, 8'h20, 0, 0, 36, 0);
     check(din.size() == 5 && din[0] == 8'h7f, "INQUIRY of LUN 1: nothing there");
     cmd(8'h1a, 0, 0, 0, 12, 0);
