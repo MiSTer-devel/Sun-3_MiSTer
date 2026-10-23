@@ -105,6 +105,8 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/video_timing.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/fb_scanout.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg4.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg4_scanout.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg6_engine.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg6.sv
 
 # ---- MiSTer glue ------------------------------------------------------------------
 set_global_assignment -name QIP_FILE rtl/pll_serial.qip

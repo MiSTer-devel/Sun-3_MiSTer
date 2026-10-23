@@ -22,6 +22,9 @@
 //  carry one), e.g. +stop_on=> for the monitor's prompt, +screen_stats: the
 //  CPU's cycles to each screen plane with every heartbeat (they are always
 //  printed at the end).  +status=1000 takes the colour board out;
+//  +status=80000 makes it the GX instead of the cg4 (docs/cg6.md: Rev 3.0.1
+//  has a console on it, Rev 1.9 does not know it), and +trace_cg6 logs its
+//  register cycles;
 //  +eeprom_boot=st auto-boots from the tape (rtl/sun3/eeprom.v).
 //
 //  For chasing a fault: +watch=<hex> / +watch2=<hex> log every CPU and
@@ -231,6 +234,7 @@ always @(LED_USER) $display("[%0t] LED_USER = %0d (machine %s)", $time, LED_USER
 // The CPU's cycles to the screens, by plane: [0] reads, [1] writes.
 integer n_bw2 [0:1] = '{0, 0}, n_ovl [0:1] = '{0, 0}, n_enb [0:1] = '{0, 0}, n_col [0:1] = '{0, 0};
 always @(posedge dut.machine.sun3.MATCH_FB) n_bw2[!dut.machine.sun3.SUN3_RW_n] += 1;
+always @(posedge dut.machine.sun3.MATCH_CG6MEM) n_col[!dut.machine.sun3.SUN3_RW_n] += 1;
 always @(posedge dut.machine.sun3.MATCH_CG4MEM)
     case (dut.machine.sun3.ma_pmap2devices[18:7])
         12'hFF4: n_ovl[!dut.machine.sun3.SUN3_RW_n] += 1;

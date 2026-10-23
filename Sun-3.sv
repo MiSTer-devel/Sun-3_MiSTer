@@ -6,14 +6,14 @@
 //  pieces that join them.  The machine is fixed by Sun-3.qsf's macro block and
 //  described in docs/hardware.md: a Sun-3/60C with its RD68021 and RD68884,
 //  24 MiB, the on-board bw2, a cg4 colour board in the P4 slot, SCSI and
-//  serial ports.
+//  serial ports.  The P4 slot may hold the GX instead (docs/cg6.md).
 //
 //  Built so far (docs/design-plan.md): Phases 1 to 5 -- the PROM, its
 //  console with MiSTer's keyboard and mouse as a Sun Type 3 and a Sun-3
 //  mouse, the keyboard's bell, the TOD chip set from MiSTer's clock, two SCSI
 //  disks, the tape and a CD-ROM, the EEPROM kept in a file, the cg4
-//  (docs/cg4.md) and the LANCE on Main_MiSTer's network mailbox; and Phase
-//  6's CPU clock.
+//  (docs/cg4.md) and the LANCE on Main_MiSTer's network mailbox; Phase
+//  6's CPU clock; and Phase 8's first stage, the GX's PROM console.
 //
 //  Clocks (rtl/pll.v, rtl/pll_serial.v)
 //    clk_mem   100.000 MHz  SDRAM, the memory side of the Wishbone bridge, hps_io,
@@ -83,6 +83,8 @@ module emu
     //   status[16]     Clock               P5, at reset
     //   status[17]     Stop-A              P1 button
     //   status[18]     Swap Alt/Win keys   P3, at once
+    //   status[19]     Colour board type   P1, at reset: cg4 (0) or GX; shown
+    //                                      while the board is On
     //
     // v,1: Aspect ratio's third value was 4:3 and is [ARC1] now.
     //
@@ -116,6 +118,7 @@ module emu
 
         "P1O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;",
         "P1O[12],Colour board,On,Off;",
+        "H1P1O[19],Colour board type,cg4,GX;",
         "P1-;",
         "P1T[17],Stop-A (abort);",
 
@@ -143,10 +146,10 @@ module emu
     // logic below supplies the condition.  The colour board, the CPU clock and
     // the diag switch are sampled in reset by their own logic as well.
     wire        machine_reset_req;
-    reg  [16:0] cfg = 17'd0;
-    always @(posedge clk_mem) if (machine_reset_req) cfg <= status[16:0];
-    wire cfg_pending = {status[16:12], status[8:7], status[6:5], status[2:1]}
-                    != {cfg[16:12],    cfg[8:7],    cfg[6:5],    cfg[2:1]};
+    reg  [19:0] cfg = 20'd0;
+    always @(posedge clk_mem) if (machine_reset_req) cfg <= status[19:0];
+    wire cfg_pending = {status[19], status[16:12], status[8:7], status[6:5], status[2:1]}
+                    != {cfg[19],    cfg[16:12],    cfg[8:7],    cfg[6:5],    cfg[2:1]};
 
     // The raster is 1160x904 (the 1152x900 screen and a small border, which
     // fb_scanout needs for its prefetch) of square pixels.  V-Integer is the
@@ -215,7 +218,7 @@ module emu
 
         .buttons        (buttons),
         .status         (status),
-        .status_menumask({15'd0, cfg_pending}),
+        .status_menumask({14'd0, status[12], cfg_pending}),   // 1: the colour board is Off
 
         .ps2_key        (ps2_key),
         .ps2_mouse      (ps2_mouse),
@@ -395,13 +398,21 @@ module emu
     // The colour board, from the OSD, fitted or taken out while the machine is
     // in reset, as a board would be: the PROM and SunOS look for it once.  "On"
     // is status 0, so a new core starts with it.
+    // Its type, cg4 or GX (status[19], 0 the cg4), the same way: cg4_present
+    // says a board is in the slot, cg6_present that it is the GX.
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
-    reg cg4_s1 = 1'b0;
+    reg cg4_s1 = 1'b0, cg6_s1 = 1'b0;
     reg cg4_s2 = 1'b0, cg4_present = 1'b0;
+    reg cg6_s2 = 1'b0, cg6_present = 1'b0;
     always @(posedge cpu_clk) begin
         cg4_s1 <= ~status[12];
         cg4_s2 <= cg4_s1;
-        if (reset_cpu) cg4_present <= cg4_s2;
+        cg6_s1 <= ~status[12] & status[19];
+        cg6_s2 <= cg6_s1;
+        if (reset_cpu) begin
+            cg4_present <= cg4_s2;
+            cg6_present <= cg6_s2;
+        end
     end
 
     // ---- keyboard and mouse ---------------------------------------------------------
@@ -663,14 +674,23 @@ module emu
     wire         cs_req, cs_urgent, cs_done;
     wire [127:0] cs_rdata;
 
-    // Only the screen being shown is fetched: the cg4's when the board is in.
-    // The board changes only in a machine reset, so two flops are enough.
+    wire [25:0]  ge_word;
+    wire         ge_req, ge_we, ge_done;
+    wire [31:0]  ge_wdata;
+    wire [3:0]   ge_sel;
+    wire [127:0] ge_rdata;
+
+    // Only the screen being shown is fetched: the colour board's when one is
+    // in, its colour plane alone for the GX.  The board changes only in a
+    // machine reset, so two flops are enough.
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
-    reg cg4m_s1 = 1'b0;
-    reg cg4_mem = 1'b0;
+    reg cg4m_s1 = 1'b0, cg6m_s1 = 1'b0;
+    reg cg4_mem = 1'b0, cg6_mem = 1'b0;
     always @(posedge clk_mem) begin
         cg4m_s1 <= cg4_present;
         cg4_mem <= cg4m_s1;
+        cg6m_s1 <= cg6_present;
+        cg6_mem <= cg6m_s1;
     end
 
     sun3_mister_sdram sdram (
@@ -697,6 +717,14 @@ module emu
         .cs_urgent  (cs_urgent),
         .cs_done    (cs_done),
         .cs_rdata   (cs_rdata),
+
+        .ge_word    (ge_word),
+        .ge_req     (ge_req),
+        .ge_we      (ge_we),
+        .ge_wdata   (ge_wdata),
+        .ge_sel     (ge_sel),
+        .ge_done    (ge_done),
+        .ge_rdata   (ge_rdata),
 
         .SDRAM_DQ   (SDRAM_DQ),
         .SDRAM_A    (SDRAM_A),
@@ -809,6 +837,15 @@ module emu
         .cg4_cm_clk    (clk_pix),
         .cg4_cm_raddr  (cg4_cm_raddr),
         .cg4_cm_rdata  (cg4_cm_rdata),
+
+        .cg6_present   (cg6_present),
+        .ge_word       (ge_word),
+        .ge_req        (ge_req),
+        .ge_we         (ge_we),
+        .ge_wdata      (ge_wdata),
+        .ge_sel        (ge_sel),
+        .ge_done       (ge_done),
+        .ge_rdata      (ge_rdata),
 
         .blk_start     (blk_start),
         .blk_we        (blk_we),
@@ -942,7 +979,8 @@ module emu
     );
 
     // The cg4's picture (rtl/sun3/sun3_cg4_scanout.sv): its planes through the
-    // Bt458s, whose colour map it reads on this clock.
+    // Bt458s, whose colour map it reads on this clock.  The GX's is its
+    // colour plane alone, through the same Bt458.
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg cg4p_s1 = 1'b0;
     reg cg4_pix = 1'b0;
@@ -955,6 +993,7 @@ module emu
         .mclk      (clk_mem),
         .mrst      (reset_mem),
         .enable    (cg4_mem),
+        .colour_only (cg6_mem),
         .c_word    (cs_word),
         .c_req     (cs_req),
         .c_urgent  (cs_urgent),
@@ -976,8 +1015,8 @@ module emu
         .retrace   (cg4_retrace)
     );
 
-    // The screen: the cg4's when the board is in (a 3/60C's monitor is on the
-    // P4 board), the bw2's otherwise.  The cg4's pixels are four clocks behind
+    // The screen: the colour board's when one is in (a 3/60C's monitor is on
+    // the P4 board), the bw2's otherwise.  The cg4's pixels are four clocks behind
     // cx/cy, the bw2's none, so the syncs and DE wait for whichever is shown.
     reg [3:0] de_d = 4'h0, hs_d = 4'hF, vs_d = 4'hF;
     always @(posedge clk_pix) begin

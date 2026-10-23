@@ -89,7 +89,11 @@ module sun3_cached_fifo_bridge #(
    output            wb_we_o,
    input      [31:0] wb_dat_i,
    input             wb_ack_i,
-   input     [127:0] wb_line_i              // the whole line, valid with wb_ack_i
+   input     [127:0] wb_line_i,             // the whole line, valid with wb_ack_i
+   // Sun-3_MiSTer: nothing queued and nothing in flight, in WB_CLK -- the
+   // GX's engine waits for it, so that the CPU's posted frame-buffer writes
+   // land before it draws (sun3_cg6_engine.sv)
+   output            WB_IDLE
 );
 
    localparam RQW   = TAG_BITS + 1 + 30 + 32 + 4;
@@ -309,6 +313,7 @@ module sun3_cached_fifo_bridge #(
    wire start = ~busy & ~rq_empty & ~rs_full;
 
    assign rq_pop  = start;
+   assign WB_IDLE = ~busy & rq_empty;
    assign rs_push = busy & wb_ack_i & ~c_we;
    assign rs_in   = {c_tag, wb_line_i};
 
