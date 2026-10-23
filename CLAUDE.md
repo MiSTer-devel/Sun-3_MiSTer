@@ -93,5 +93,10 @@ are the PROM images, disks and tapes the tools make under `build/`.
 * **The ICM7170 model came with three bugs.** It turned the year at the end of
   November, never advanced the weekday, and a reset stopped it. Each is fixed,
   and `tb_mister_tod` / `mutate_tod.sh` guard them.
+* **Verilator takes SystemVerilog that Quartus 17 rejects**: a net of a
+  typedef'd type (`wire s18 x = ...`) and the streaming operators
+  (`{<<{...}}`) both passed every bench and failed the build. Run `flock
+  /tmp/quartus.lock quartus_map Sun-3 --analysis_and_elaboration` (a few
+  minutes) on new RTL before a full build.
 * **Main_MiSTer saves a core's OSD settings only from its System page**
   (*Save settings*); closing the OSD or its *Reset* saves nothing.
