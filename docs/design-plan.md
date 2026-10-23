@@ -179,6 +179,7 @@ SC0,IMGVHD,Pri. disk (ID 0);
 SC1,IMGVHD,Disk (ID 1);
 S2,QIC,Tape (ID 4);
 O[4:3],Tape volume,1,2,3;
+SC4,ISO,CD-ROM (ID 6);
 F0,ROM,Load ROM;
 -;
 O[11:9],Network interface,eth0,None,eth1,macvlan,tap0;
@@ -664,7 +665,9 @@ a terminal.
    * the Network bits (`[11:9]`);
    * the ID PROM's machine type (0x17);
    * the disks whose writes are buffered (slots 0-1);
-   * the CD slot (none: slot 2 is the tape).
+   * the CD slot (none: slot 2 is the tape). The CD-ROM, added later on
+     slot 4, is a flat `.iso` that Main serves through its generic block
+     path, so it needs no CD slot of Main's.
 
    `S3ETH001` names a 16-slot RX ring. Build from a `git archive` copy in
    WSL, never in the checkout.
@@ -764,8 +767,20 @@ whole core would reset and come up again).
   from the software that drives it, before any RTL:
   * a spec and C model checked against SunOS 4.1.1's cg6 pixrect;
   * then a model against X11's `Xsun` cg6 code.
-* A **CD-ROM target** (sr0, ID 6) through Main's `sun_cdrom`. SunOS 4.1.1 for
-  sun3 did ship on CD.
+* A **CD-ROM target** (sr0, ID 6). SunOS 4.1.1 for sun3 did ship on CD.
+  **Status (2026-10-22):** built (`SUN3_CDROM`, `rtl/sun3/sun3_cdrom.sv`,
+  OSD `SC4`, VD 4), a flat `.iso` through Main's generic block path, not
+  `sun_cdrom` (whose CUE/CHD translation stays the SPARCstation's). It
+  comes up in 512-byte blocks, as Sun's CD drives did and as SunOS 4.1's sr
+  driver (`FIVETWELVE`) and the PROM's disk driver expect, and changes to
+  2048 by MODE SELECT. `tb_cdrom` and `mutate_cdrom.sh` test it; in
+  `tb_emu` (`CDROM=`, built by `tb/verilator/mk_cd_iso.py`) both PROMs
+  boot a test CD's partition and run its boot block: Rev 3.0.1 as
+  `sd(0,30,1)` (TEST UNIT READY, START UNIT, the label, one READ(6) of 16
+  blocks) and Rev 1.9 as `sd(0,18,1)` (the label, then 16 one-block
+  reads), although sun3arc's table says 1.9 cannot boot a CD. To do on the board:
+  `mount -r -t hsfs /dev/sr0 /cdrom` under SunOS, and the 4.1.1 CD's own
+  boot, `b sd(0,30,4)` (sun3arc's install guide).
 * **1600x1280 hi-res bw2** (the J800 jumper), scaled to 1080p.
 * A **sun3x core** (3/80) would be a separate project. AP68030 is the
   candidate CPU (GPL, 68030 + MMU, 50 MHz, 17k ALMs; not OS-tested yet). Its

@@ -56,7 +56,7 @@ We chose it because:
 | Keyboard, mouse | Z8530 at OBIO 0x000000: Type-3 keyboard (later boards Type-4), Sun-3 mouse | `z8530_scc`. The keyboard and mouse are MiSTer's, through the Sun-2's model (identifies as Type 3, with its bell) |
 | Serial ttya/ttyb | Z8530 at OBIO 0x020000, 4.9152 MHz | `z8530_scc`. ttya on MiSTer's UART (`UART9600`) |
 | Ethernet | AMD Am7990 LANCE, OBIO 0x120000, level 3 | **Wish7990**. Its MII goes to a DDR3 mailbox served by Main's `support/sun` (magic `S3ETH001`) |
-| SCSI | NCR 5380 + Am9516 UDC + CSR, OBIO 0x140000, level 2 | Sun-3_FPGA `sun3_si.sv` + Wish5380. Targets: two disks, at ID 0 and ID 1, on MiSTer disk images, and **st0** (ID 4) an Emulex MT-02 QIC tape (from the Sun-2). SunOS numbers SCSI devices by target × 8 + LUN, so the disks are **sd0** and **sd2** (sd1 would be target 0's LUN 1), as sun3arc's install guide lists them ([references/sun3arc/install/install.phtml](references/sun3arc/install/install.phtml)). The PROM's unit number depends on its revision: Rev 1.9's disk driver takes target = unit >> 2 and LUN = unit & 3 (its tape driver shifts by 3), so it boots the second disk as `sd(0,4,0)`; Rev 3.0.1, and sun3arc's table, shift by 3: `sd(0,8,0)` |
+| SCSI | NCR 5380 + Am9516 UDC + CSR, OBIO 0x140000, level 2 | Sun-3_FPGA `sun3_si.sv` + Wish5380. Targets: two disks, at ID 0 and ID 1, on MiSTer disk images, and **st0** (ID 4) an Emulex MT-02 QIC tape (from the Sun-2). SunOS numbers SCSI devices by target × 8 + LUN, so the disks are **sd0** and **sd2** (sd1 would be target 0's LUN 1), as sun3arc's install guide lists them ([references/sun3arc/install/install.phtml](references/sun3arc/install/install.phtml)). The PROM's unit number depends on its revision: Rev 1.9's disk driver takes target = unit >> 2 and LUN = unit & 3 (its tape driver shifts by 3), so it boots the second disk as `sd(0,4,0)`; Rev 3.0.1, and sun3arc's table, shift by 3: `sd(0,8,0)`. **sr0** (ID 6, `SUN3_CDROM`, `sun3_cdrom.sv`) is a CD-ROM drive on a flat `.iso` (OSD slot 4): a SONY CDU-8012 to INQUIRY (type 5, removable), the drive SunOS 4.1's sr(4S) names. It comes up in 512-byte blocks, as Sun's CD drives did: SunOS 4.1's sr driver is built `FIVETWELVE` ("default to 512 bytes/sector", `sundev/srreg.h` 1.2 and `scsi/targets/srdef.h` 1.11, read from a SunOS 4.1.3 system), and the PROM boots a CD with its disk driver, Sun label and all, as `sd(0,30,N)` on Rev 3.0.1 (sun3arc: `sd(0,30,4)` for the 4.1.1 CD's sun3 partition). MODE SELECT with a block descriptor changes it to 2048 and back; no other size (no mode 2). Without a disc it answers NOT READY / 3A; a disc put in while the machine runs is one UNIT ATTENTION / 28 |
 | Mono video | bw2, 1152x900 (or 1600x1280 by jumper), obmem 0xFF000000, level 4 | bw2 at 1152x900, its memory on the SDRAM board. Shown 1:1 at 1080p, as on the Sun-2 |
 | Colour video | P4 **cg4** (501-1210): 8-bit colour + 1-bit overlay + 1-bit enable, Brooktree DACs, 1152x900 | **cg4**, its planes on the SDRAM board, its own scan-out. OSD "Colour board On/Off" (Phase 4) |
 | Accelerated colour | P4 **GX / cg6** (501-1374), console needs PROM ≥ 3.0 | **later** (Phase 8) |
@@ -123,8 +123,12 @@ The software is not in this repository. What the core was brought up with:
 * third-party software for SunOS: gcc 2.7.2.2 / 2.8.1 / 3.2.3, binutils, perl 5.8.8, OpenSSH, Mosaic, VNC and others.
 
 **Installation is from QIC tape** (`st0`), built by `tools/mktape` (from the
-Sun-2). Netbooting is not part of bring-up. A CD-ROM target is deferred:
-4.1.1 did ship on CD (`SunOS411.sun3.CDROM.xdrtoc`), but no CD is at hand.
+Sun-2). Netbooting is not part of bring-up. 4.1.1 also shipped on CD
+(`SunOS411.sun3.CDROM.xdrtoc`), and there is a CD-ROM drive (sr0, above) for
+an `.iso` of it, but no CD is at hand: the drive is tested with a CD made by
+`tb/verilator/mk_cd_iso.py`, whose partition both PROMs boot in `tb_emu`:
+Rev 3.0.1 as `sd(0,30,1)`, Rev 1.9 as `sd(0,18,1)` (its disk unit is
+target × 4), though sun3arc lists 1.9 as unable to boot a CD.
 
 ## Open questions on the hardware
 
