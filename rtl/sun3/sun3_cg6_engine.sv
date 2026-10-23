@@ -213,9 +213,16 @@ module sun3_cg6_engine #(
     // read these local registers, not sun3_cg6.sv's on the CPU's clock: the
     // full build failed to route with every use reaching back across the
     // chip to the register file (sun3_cg6's ex/ey).
+    // Each feeds the rectangle, line and polygon units' comparators at once;
+    // MAX_FANOUT lets the fitter duplicate them next to their consumers (with
+    // one copy each, vx1/vy1 alone still did not route).
+    (* altera_attribute = "-name MAX_FANOUT 12" *)
     reg signed [15:0] x0 = 16'sd0, y0 = 16'sd0, x1 = 16'sd0, y1 = 16'sd0, x2 = 16'sd0, y2 = 16'sd0;
+    (* altera_attribute = "-name MAX_FANOUT 12" *)
     reg signed [15:0] vx0 = 16'sd0, vy0 = 16'sd0, vx1 = 16'sd0, vy1 = 16'sd0;
+    (* altera_attribute = "-name MAX_FANOUT 12" *)
     reg signed [15:0] vx2 = 16'sd0, vy2 = 16'sd0, vx3 = 16'sd0, vy3 = 16'sd0;
+    (* altera_attribute = "-name MAX_FANOUT 12" *)
     reg signed [15:0] clipminx = 16'sd0, clipminy = 16'sd0, clipmaxx = 16'sd0, clipmaxy = 16'sd0;
     always @(posedge mclk)
         if (st == E_IDLE && pending) begin
