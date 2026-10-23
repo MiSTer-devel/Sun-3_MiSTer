@@ -167,42 +167,60 @@ Sun-2.
 
 ## OSD (Sun-3.sv's CONF_STR, every phase's items in)
 
+The computer cores' layout (HP9000-715_MiSTer's `docs/osd-standard.md`, as
+on the Sun-2): the media and Load ROM, the network, the pages at fixed
+numbers (P1 Machine, P2 Video, P3 Input, P4 Audio, P5 Advanced), then
+"Apply and reset".
+
 ```
 Sun-3;UART9600;
 -;
-SC0,IMGVHD,SCSI disk ID 0 (sd0);
-SC1,IMGVHD,SCSI disk ID 1 (sd2);
-S2,QIC,Tape (st0);
+SC0,IMGVHD,Pri. disk (ID 0);
+SC1,IMGVHD,Disk (ID 1);
+S2,QIC,Tape (ID 4);
 O[4:3],Tape volume,1,2,3;
-SC3,NVR,EEPROM;
+F0,ROM,Load ROM;
+-;
+O[11:9],Network interface,eth0,None,eth1,macvlan,tap0;
 -;
 P1,Machine;
 P2,Video;
 P3,Input;
+P4,Audio;
+P5,Advanced;
 -;
 h0-,Changes pending;
 R[0],Apply and reset;
 
 P1O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;
-P1O[15],Diag switch,Normal,Diag;
-P1O[16],Clock,MiSTer's time,28 years back;
-P1O[11:9],Network,eth0,Off,eth1,macvlan,tap0;
+P1O[12],Colour board,On,Off;
+P1-;
+P1T[17],Stop-A (abort);
 
-P2O[2:1],Aspect ratio,Original,Full Screen,4:3;
+P2O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];
 P2O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;
-P2O[12],Colour board,On,Off;
 
-P3O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;
+P3O[18],Swap Alt/Win keys,No,Yes;
+
+P4O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;
+
+P5O[15],Diag switch,Normal,Diag;
+P5O[16],Clock,MiSTer's time,28 years back;
+P5-;
+P5SC3,NVR,EEPROM image;
 
 v,1;
 ```
 
-Three rules for the status bits:
-* The Network bits are what Main's core table names, `[11:9]` as on the Sun-2.
+Four rules for the status bits:
+* The Network interface bits are what Main's core table names, `[11:9]` as
+  on the Sun-2.
 * A value of 0 is always the default.
-* What a board would only change powered off -- the colour board, the CPU
-  clock, the diag switch -- is taken while the machine is in reset: a change
-  made while it runs waits for the next reset.
+* Media, the network, Input and the Stop-A button act at once. Every other
+  setting is latched into `cfg` in a machine reset, and "Changes pending"
+  (menumask bit 0) shows while one differs from what runs.
+* No row's bits move when it moves between pages (saved settings stay
+  valid); `v,N` changes when a value list changes meaning.
 
 ## Phases
 
