@@ -119,8 +119,12 @@ struct cg6 {
 	int32_t pend_x, pend_y;		/* a vertex's coordinates so far */
 	int pend;			/* which: 1 x, 2 y */
 
-	/* TEC */
+	/* TEC: a register file.  The data registers (0x100..0x1FC) read and
+	   write a second bank while VDC's type (15:13) is 5, INTRNL1: the
+	   kernel's cg6_cntxsave reads all 64 with VDC 0x8000 and again with
+	   0xA000 (docs/cg6.md, "The TEC") */
 	uint32_t tec[0x1000 / 4];
+	uint32_t tec_data1[64];
 
 	/* the model's own: busy emulation and statistics */
 	int busy_polls, busy;

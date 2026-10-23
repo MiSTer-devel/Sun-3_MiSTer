@@ -624,6 +624,15 @@ int cg6_irq(const struct cg6 *g)
 	return g->thc_int && (g->thc_misc & THC_MISC_INTEN);
 }
 
+/* ---- the TEC: stored, with the data registers' second bank ---- */
+
+static uint32_t *tec_reg(struct cg6 *g, uint32_t o)
+{
+	if (o >= 0x100 && o < 0x200 && (g->tec[2] >> 13 & 7) == 5)
+		return &g->tec_data1[(o - 0x100) >> 2];
+	return &g->tec[o >> 2];
+}
+
 /* ---- the Bt458 (docs/cg6.md, "The DAC"): one byte, on bits 31:24 ---- */
 
 static uint8_t dac_read(struct cg6 *g, int reg)
@@ -734,7 +743,7 @@ uint32_t cg6_read(struct cg6 *g, uint32_t off, int size)
 	if (a >= CG6_FBC && a < CG6_FBC + 0x1000)
 		w = fbc_read(g, a - CG6_FBC);
 	else if (a >= CG6_TEC && a < CG6_TEC + 0x1000)
-		w = g->tec[(a - CG6_TEC) >> 2];
+		w = *tec_reg(g, a - CG6_TEC);
 	else if (a == CG6_FHC)
 		w = 0x60000000u | (uint32_t)g->fhc_rev << 20 | g->fhc;
 	else if (a >= CG6_THC && a < CG6_THC + 0x1000)
@@ -770,7 +779,7 @@ void cg6_write(struct cg6 *g, uint32_t off, int size, uint32_t v)
 	if (a >= CG6_FBC && a < CG6_FBC + 0x1000)
 		fbc_write(g, a - CG6_FBC, w);
 	else if (a >= CG6_TEC && a < CG6_TEC + 0x1000)
-		g->tec[(a - CG6_TEC) >> 2] = w;
+		*tec_reg(g, a - CG6_TEC) = w;
 	else if (a == CG6_FHC)
 		g->fhc = w & 0xfffff;
 	else if (a >= CG6_THC && a < CG6_THC + 0x1000)
