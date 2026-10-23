@@ -43,6 +43,25 @@ both ways.
     at Wishbone word `{6'h3F, PA[25:2]}`, the top of the space;
   * `sun3_cg4_scanout.sv` (new) draws them, through the colour map, into
     the same raster as `fb_scanout.sv`.
+* **The GX** (`SUN3_CG6`; docs/cg6.md), the P4 slot's other board, fitted
+  when `cg4_present` and the new `cg6_present` say so:
+  * `sun3_fpga.v` matches its pages (the Bt458 at 0xFF200000, the DHC, the
+    ALT, the FHC and THC at 0xFF300000, the ROM at 0xFF380000, the FBC and
+    TEC at 0xFF700000) for the new `sun3_cg6.sv`, and its frame buffer at
+    0xFF800000 (the cg4's colour plane) for the bridge; the cg4's own
+    decode is off meanwhile. Its register cycles are left out of the bus
+    timeout, since an FBC cycle waits while the drawing engine works;
+  * the Bt458 is `sun3_cg4.sv`'s, its data on D31:24 and one colour-map
+    component a cycle (`lanes` 0001, the byte copied to every lane);
+  * the THC's retrace interrupt is the P4 interrupt into `sun3_vint.v`;
+  * the drawing engine, `sun3_cg6_engine.sv` (new), runs on `wb_clk_i`
+    and is a client of its own of the SDRAM adapter (`sun3_top.v` passes
+    its port through);
+  * `sun3_cached_fifo_bridge.v` has a `WB_IDLE` output (nothing queued or
+    in flight), which the engine waits for before it draws, so that the
+    CPU's posted frame-buffer writes land first;
+  * `sun3_cg4_scanout.sv` has a `colour_only` input: the colour plane's 72
+    bursts a line alone, and no overlay.
 * **`sun3_fpga.v`: the on-board video's resolution register** at obmem
   0xFF1C0000 (`MATCH_VIDSENSE`), which upstream left to time out. It reads
   0x80 in every byte (bit 7 set: 1152x900) and ignores writes. Rev 3.0.1

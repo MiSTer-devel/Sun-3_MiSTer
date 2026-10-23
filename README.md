@@ -144,7 +144,7 @@ page:
 
 | page | rows |
 |---|---|
-| Machine | *CPU clock* (20, 25, 33 MHz), *Colour board* (On, Off), *Stop-A (abort)* |
+| Machine | *CPU clock* (20, 25, 33 MHz), *Colour board* (On, Off), *Colour board type* (cg4, GX; shown while the board is On), *Stop-A (abort)* |
 | Video | *Aspect ratio*, *Scale* |
 | Input | *Swap Alt/Win keys* |
 | Audio | *Keyboard bell* (Normal, Loud, Quiet, Off) |
@@ -216,6 +216,11 @@ colours from 16.7 million, with an overlay plane. The OSD's *Colour board*
 `Model Sun-3/60C/G` and draws its console in the overlay. *Off* is a 3/60 with
 only the on-board mono bw2 (`Model Sun-3/60M`). Change it, then reset. The
 colour board costs the CPU no measurable speed.
+
+*Colour board type* **GX** puts Sun's accelerated colour board (the cg6) in
+the slot instead (docs/cg6.md). So far it carries the Rev 3.0.1 PROM's
+console, drawn by its own engine; SunOS's `cgsix` driver on it is the next
+stage and untested, and Rev 1.9 has no console on it.
 
 ## The CPU clock
 

@@ -710,3 +710,133 @@ does.
   engine and the CPU share the rest, so fills run at roughly 20-40
   Mpixel/s. That is fine for SunView. If not, move the frame buffer to DDR3,
   as design-plan.md's cg4 fallback says.
+
+## Stage 1: in the core
+
+**Status (2026-10-23, Verilator only; not yet built in Quartus or run on the
+board):** Rev 3.0.1's console on the GX. The OSD's *Colour board type*
+(`P1O[19]`, shown while *Colour board* is On) is **GX**, and the banner
+reads `Sun Workstation, Model Sun-3/60C/G`, drawn by the engine.
+
+### What is built
+
+* `SUN3_CG6` in `Sun-3.qsf` (`rtl/sun3/sun3_config.vh`). It needs
+  `SUN3_CG4`, whose Bt458, colour plane and scan-out it shares, and
+  `SUN3_WB_CACHE`.
+* **`rtl/sun3/sun3_cg6.sv`**, on the CPU's clock:
+  * the FHC: ID 0x60, revision 1, 19:0 stored (the P4 probe's inverted-ID
+    write keeps the ID);
+  * the THC's misc: vsync is the raster's vertical blank, the retrace
+    interrupt pending from its start, enable AND pending onto the P4
+    interrupt into `sun3_vint.v`, INT written 1 clears it, video on;
+  * the FBC registers of *The FBC* that the PROM and libpixrect write,
+    each reading back, MISC's and RASTEROP's fields kept when written 0;
+  * the vertex queue as the model has it (both coordinates, the raster
+    offset, relative vertices, the point-then-polygon rule, x0..x3 landing,
+    a line's end kept);
+  * DRAWSTATUS (a rectangle, or a point), BLITSTATUS and FONT start the
+    engine. While it works, a command read is EXCEPTION | FULL | BUSY,
+    STATUS is BUSY | FULL, and every other FBC cycle waits for it;
+  * the TEC, the ROM, the DHC and the ALT read 0 (the ROM's 0 means no
+    colour logo: the PROM draws its mono one).
+* **`rtl/sun3/sun3_cg6_engine.sv`**, on `clk_mem`: rectangles, font rows
+  (colour1 and colour8, with the autoincrement applied when it answers) and
+  blits, through the whole raster-op unit but the pattern (the truth table,
+  the plane mask, the pixel mask by screen x, the clip window, the 1 MiB).
+  It works a burst (16 pixels) at a time: the bytes to write, their sources,
+  the destination burst read only when the op or the plane mask needs it,
+  then the words with something to write. A blit reads each source row's
+  span into a 128-burst line buffer (an M10K) and takes each destination
+  burst out of it through a two-step funnel, so a copy may overlap either
+  way along a row; rows go bottom-up when it moves down.
+* **`rtl/sun3_mister_sdram.sv`**: a fourth client port, `ge_*`: a burst
+  read or a 32-bit word written with byte selects, at an SDRAM word.
+* **`rtl/sun3/sun3_cg4_scanout.sv`**: `colour_only`, 72 bursts a line and no
+  overlay.
+* **`rtl/sun3/sun3_fpga.v`**: the GX's decode (*The address map*), its
+  cycles out of the bus timeout, the Bt458 on D31:24, the THC's interrupt
+  into `sun3_vint.v`, the EEPROM's console byte 0x20 for either board.
+* **`Sun-3.sv`**: the OSD bit, latched in reset as the board is, the port
+  into the adapter, the scan-out colour only.
+
+### Where it differs from the plan above
+
+* **Writes are 16 bits at a time.** The SDRAM controller is built with
+  `NO_WRITE_BURST` (single-access writes), so a burst written is up to eight
+  writes; only reads are bursts. A full-screen fill with no destination
+  read, beside the colour scan-out, takes 75 ms (`tb_cg6`): 14 Mpixel/s,
+  under the 20-40 of *Risks*. The PROM clears the screen once, but its
+  scroll (a 960x726 blit) costs about as much again, so a line feed at the
+  bottom of the console takes a tenth of a second or more. Burst writes in
+  the controller (BL8 with DQM, eight times fewer commands) are the fix,
+  for stage 2 or 3.
+* **No font FIFO.** A FONT write waits while the engine draws the row
+  before it, as every other FBC cycle does (the register file holds DSACK).
+  A row is one or two word writes, about a microsecond, and the PROM's text
+  is no slower than on the cg4. Stage 3, with libpixrect's text, may want
+  the FIFO.
+* **No snapshot.** The engine reads the register file's outputs directly:
+  they cannot change while it works, since every cycle that could change
+  them waits. Only the start toggle crosses clocks through flops.
+* **Coherency through the bridge's idle flag.** The register cycles do not
+  go through the memory bridge, so a command could start with the CPU's
+  frame-buffer writes still in its queue. The engine waits for the bridge's
+  `WB_IDLE` (nothing queued, nothing in flight) first.
+* **Priority.** The engine is below even a polite scan-out (the adapter's
+  `pick_cs` is as it was), and takes turns with the CPU.
+* **More than stage 1 asked for, because it was cheap**: the plane and
+  pixel masks, colour8, the raster offset, relative vertices and points
+  (stage 3 in the plan), and the THC's interrupt into `sun3_vint.v` (stage
+  2). The pattern (RASTEROP's field 3 draws ones), lines, triangles and
+  quadrilaterals (queued, drawn as nothing), the THC's timing and cursor,
+  the TEC, z, the colour vertex registers and the indexed registers' own
+  values (read 0) are not.
+* **The model had a bug**: `merge_fields` looked only at even bits, so of
+  MISC's fields only the blit field was kept when written 0. Fixed
+  (tools/cg6model), and libpixrect still passes.
+
+### How it is checked
+
+* **`tb_cg6`** (`make -C tb/verilator tb_cg6`, in the default list): the RTL,
+  the Bt458, the adapter and controller on the chip model, and the
+  colour-only scan-out, replaying the model's traces (harness `-G`:
+  `test_prom`'s sequence and 400 direct tests; and, when libpixrect is in
+  `build/dist/`, 150 of its fill, copy, text, stencil and point tests,
+  `-K`). Every pixel of the frame buffer is compared at the end, and every
+  register and frame-buffer read on the way. Then the THC, the FHC, the busy
+  engine, the Bt458 and a whole frame of the scan-out, directed. `+lockstep`
+  runs the model beside it through DPI and stops at the first command that
+  differs. 1,025 checks pass.
+* **`mutate_cg6.sh`**: 37 mutants of the two files, all caught.
+* **`tb_mister_sdram`** drives the new port (byte selects, back to back,
+  turns with a streaming CPU, below the scan-out); `tb_cg4_scanout` has two
+  colour-only frames. Both mutation scripts have the new paths.
+* **`tb_emu`** with `ROM=build/rom/sun3_60_v3.0.1_fast.bin` and
+  `+status=80000`: the banner on the GX, its `Model Sun-3/60C/G` line
+  whole in the frame at 1,175 ms simulated, the rest by about 1.35 s (the
+  cg4's is up by about 1.1 s: the PROM waits 15 vsyncs on the THC first, a
+  quarter of a second). With the cg4
+  (`+status=0`) and with the board off (`+status=1000`) the banners are as
+  they were.
+
+### Area (a guess; no fit yet)
+
+| block | ALMs | M10K |
+|---|---|---|
+| register file, read-back mux, vertex queue | 800-1,000 | |
+| engine: control, masks, font shifter | 400-500 | |
+| engine: burst registers, raster op, funnel | 600-800 | 4 (the line buffer) |
+| adapter port, scan-out mode, decode | 100-150 | |
+| **total** | **1,900-2,450** | **4** |
+
+`sy * 1152` is a constant multiply, shifts and adds (perhaps a DSP).
+
+### What stage 2 needs
+
+* SunOS's `cgsix` driver: the THC's timing and cursor registers stored and
+  read back, the cursor in the scan-out (32x32x2, the overlay colours), the
+  TEC's registers stored, z and the colour vertex registers and the indexed
+  registers' values read back (`cg6_cntxsave`);
+* the retrace interrupt through a colour-map load (`tb_vint` running the
+  THC's sequence);
+* SunOS 4.1.1 on the board: `cgsix0 at obmem 0xff000000 pri 4`.

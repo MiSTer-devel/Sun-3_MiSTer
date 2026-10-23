@@ -151,11 +151,13 @@ Everything visible on screen lives in bank 3, away from the CPU's banks.
 The CPU reaches memory through Sun-3_FPGA's cached FIFO bridge (8 KiB read
 cache, posted writes). Frame buffer cycles are never cached.
 
-The SDRAM adapter has three clients:
+The SDRAM adapter has four clients:
 * the CPU bridge;
 * the bw2 scan-out, which is small and keeps its absolute priority;
 * the cg4 scan-out, which takes turns with the CPU and gets priority only when
-  its line buffer is about to run dry (the Sun-2's `cs_urgent` scheme).
+  its line buffer is about to run dry (the Sun-2's `cs_urgent` scheme);
+* the GX's drawing engine (docs/cg6.md), below the scan-outs and taking
+  turns with the CPU.
 
 The cg4 scan-out is about 78 MB/s at 60 Hz: 62 for the colour plane and 16
 for overlay and enable. That is measured in Phase 4. **Fallback** if the CPU
@@ -195,6 +197,7 @@ R[0],Apply and reset;
 
 P1O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;
 P1O[12],Colour board,On,Off;
+H1P1O[19],Colour board type,cg4,GX;
 P1-;
 P1T[17],Stop-A (abort);
 
@@ -213,13 +216,16 @@ P5SC3,NVR,EEPROM image;
 v,1;
 ```
 
-Four rules for the status bits:
+Five rules for the status bits:
 * The Network interface bits are what Main's core table names, `[11:9]` as
   on the Sun-2.
 * A value of 0 is always the default.
 * Media, the network, Input and the Stop-A button act at once. Every other
   setting is latched into `cfg` in a machine reset, and "Changes pending"
   (menumask bit 0) shows while one differs from what runs.
+* *Colour board type* (`status[19]`, 0 the cg4) is shown only while the
+  board is On (menumask bit 1 is *Colour board* Off); it is latched in reset
+  with it.
 * No row's bits move when it moves between pages (saved settings stay
   valid); `v,N` changes when a value list changes meaning.
 
@@ -767,6 +773,11 @@ whole core would reset and come up again).
   from the software that drives it, before any RTL:
   * a spec and C model checked against SunOS 4.1.1's cg6 pixrect;
   * then a model against X11's `Xsun` cg6 code.
+
+  **Status (2026-10-23, Verilator only):** stage 1 built (`SUN3_CG6`,
+  `rtl/sun3/sun3_cg6.sv` and `sun3_cg6_engine.sv`, OSD *Colour board
+  type* `P1O[19]`): Rev 3.0.1's console on the GX, `Sun-3/60C/G`. docs/cg6.md,
+  "Stage 1: in the core".
 * A **CD-ROM target** (sr0, ID 6). SunOS 4.1.1 for sun3 did ship on CD.
   **Status (2026-10-22):** built (`SUN3_CDROM`, `rtl/sun3/sun3_cdrom.sv`,
   OSD `SC4`, VD 4), a flat `.iso` through Main's generic block path, not
