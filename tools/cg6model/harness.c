@@ -47,6 +47,7 @@
  * its frame buffer before and after (gen_run, below), for tb/verilator's
  * tb_cg6.
  */
+#include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -1698,12 +1699,150 @@ static void g_store(void)
 			uint32_t v = rnd();
 			if (b == 2 && o == 8)		/* VDC itself: a bank */
 				v = (rn(2) ? 0x8000u : 0xa000u) | (v & 0x1fff);
+			if (b == 2 && o == 0)		/* MV: never autoload here (g_tec does) */
+				v &= ~0x4000u;
 			cg6_write(&G, base + o, 4, v);
 			g_written[b][bank][o >> 2] = 1;
 		}
 		cg6_read(&G, base + o, 4);
 		if (b == 1 && o == 0x8fc)
 			cg6_write(&G, base + o, 4, 0xffe0ffe0);	/* the cursor off the screen again */
+	}
+}
+
+/*
+ * The TEC (docs/cg6.md, "The TEC"): the data registers written and read in
+ * every type, the vertex registers of every kind through MV's every shape,
+ * autoload into every primitive (then drawn), COMMAND1's products.  The
+ * board's own vertices stay within 16 bits, as the RTL keeps them; the rest
+ * is anything, specials and saturation included.
+ */
+static uint32_t g_f2u(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
+
+static uint32_t g_float(int sane)
+{
+	static const uint32_t sp[] = { 0, 0x80000000, 0x00000001, 0x807fffff, 0x7f800000, 0xff800000,
+		0x7fc00000, 0x7f7fffff, 0x00800000, 0x3f800000, 0xbf800000, 0x4effffff, 0xcf000000 };
+
+	if (!sane && rn(6) == 0)
+		return rn(2) ? rnd() : sp[rn(sizeof sp / sizeof sp[0])];
+	return g_f2u((float)((rn(2) ? -1.0 : 1.0) * (rnd() / 4294967296.0 + 0.5) *
+			     (double)(1u << rn(sane ? 8 : 24)) / (sane ? 64.0 : 256.0)));
+}
+
+/* a value for a register in type t (0 integer, 1 fixed, else IEEE single) */
+static uint32_t g_tval(int t, int sane)
+{
+	static const uint32_t ed[] = { 0, 1, 0xffffffff, 0x7fffffff, 0x80000000, 0x00ffffff,
+		0x01000001, 0x01000003, 0xfefffffd, 0x00010000, 0xffff0000, 0x7fff8000 };
+
+	if (t >= 2)
+		return g_float(sane);
+	if (sane)
+		return (uint32_t)((rn(2000) - 1000) * (t ? 65536 : 1) + (t ? (int32_t)rn(65536) : 0));
+	if (rn(4) == 0)
+		return ed[rn(sizeof ed / sizeof ed[0])];
+	return rnd() >> rn(32);
+}
+
+static void g_vdc(int t)
+{
+	cg6_write(&G, CG6_TEC + 8, 4, (uint32_t)t << 13 | (rnd() & 0x10ff & ~0x1000u));
+}
+
+static void g_tec(void)
+{
+	int kind = rn(4), auto_ = rn(3) == 0, rows4 = rn(3) == 0, cols = 1 + rn(4), idx = 8 + rn(56);
+
+	if (auto_ && cols < 2)
+		cols = 2;	/* autoload's y is the second column's */
+	int t = rn(5) == 0 ? 4 : rn(3);
+
+	/* data registers: written, read back in another type */
+	g_vdc(t);
+	for (int i = 0, n = rn(6); i < n; i++) {
+		int r = rn(64);
+		cg6_write(&G, CG6_TEC + 0x100 + 4 * r, 4, g_tval(t, 0));
+		if (rn(2)) g_vdc(rn(5) == 0 ? 4 : rn(3));
+		cg6_read(&G, CG6_TEC + 0x100 + 4 * r, 4);
+	}
+	if (kind == 3) {	/* COMMAND1: C = A . B, any shape, anywhere */
+		uint32_t c = (uint32_t)rn(4) << 30 | (uint32_t)rn(4) << 28 | (uint32_t)rn(64) << 16 |
+			     (uint32_t)rn(64) << 8 | rn(64) | (rnd() & 0x0fc0c0c0);
+		int ci = c & 63;
+		if (rn(2)) {	/* fresh, sane operands */
+			g_vdc(2);
+			for (int i = 0; i < 4; i++)
+				cg6_write(&G, CG6_TEC + 0x100 + 4 * (((c >> 16) + i) & 63), 4, g_float(1));
+			for (int i = 0; i < 16; i++)
+				cg6_write(&G, CG6_TEC + 0x100 + 4 * (((c >> 8) + i) & 63), 4, g_float(1));
+		}
+		cg6_write(&G, CG6_TEC + 0x010, 4, c);
+		cg6_read(&G, CG6_TEC + 0x010, 4);
+		g_vdc(rn(5) == 0 ? 4 : rn(3));
+		for (int j = 0; j < 4; j++)
+			cg6_read(&G, CG6_TEC + 0x100 + 4 * ((ci + j) & 63), 4);
+		return;
+	}
+	/* MV: its shape; with autoload a sane matrix, sane points */
+	if (auto_) {
+		double a = rnd() / 4294967296.0 * 6.2832, s = 0.5 + rn(3) * 0.5;
+		float m[16];
+		int rows = rows4 ? 4 : 3;
+		for (int i = 0; i < 16; i++)
+			m[i] = (float)((rn(4) ? 0 : 1) * (rn(9) - 4) / 8.0);
+		m[0] = (float)(s * cos(a)); m[1] = (float)(-s * sin(a)); m[rows - 1] = (float)(rn(800) + 100.5);
+		m[rows] = (float)(s * sin(a)); m[rows + 1] = (float)(s * cos(a)); m[2 * rows - 1] = (float)(rn(600) + 100.25);
+		g_vdc(2);
+		for (int i = 0; i < rows * cols; i++)
+			cg6_write(&G, CG6_TEC + 0x100 + 4 * ((idx + i) & 63), 4, g_f2u(m[i]));
+		g_state();
+	} else if (rn(2)) {
+		g_vdc(rn(3));
+		for (int i = 0; i < 16; i++)
+			cg6_write(&G, CG6_TEC + 0x100 + 4 * ((idx + i) & 63), 4, g_tval(G.tec[2] >> 13 & 7, rn(2)));
+	}
+	cg6_write(&G, CG6_TEC + 0x000, 4, (uint32_t)auto_ << 14 | (uint32_t)rn(2) << 13 | (uint32_t)rn(2) << 12 |
+		  (uint32_t)rows4 << 10 | (uint32_t)(cols - 1) << 8 | idx | (rnd() & 0xffff00c0 & ~0x8000u));
+	for (int v = 0, nvx = 1 + rn(auto_ ? 6 : 3); v < nvx; v++) {
+		int k = rn(3), obj = rn(5), rel = v && rn(3) == 0;
+		uint32_t base = 0x800 + 0x200 * k + 0x40 * obj + (rel ? 0x10 : 0);
+		int vt = k;
+		if (auto_ && obj != 1 && obj != 4 && rn(2)) obj = 3;	/* quads, mostly */
+		base = 0x800 + 0x200 * k + 0x40 * obj + (rel ? 0x10 : 0);
+		if (auto_ || rn(3) == 0)	/* w: 1 when it draws */
+			cg6_write(&G, CG6_TEC + base + 12, 4, auto_ ? (vt == 2 ? g_f2u(1.0f) : vt ? 0x10000 : 1) : g_tval(vt, 0));
+		if (rn(3) == 0) cg6_write(&G, CG6_TEC + base + 8, 4, g_tval(vt, auto_));
+		if (auto_) {
+			double x = rel ? rn(81) - 40 + rn(256) / 256.0 : rn(900) - 100 + rn(256) / 256.0;
+			double y = rel ? rn(61) - 30 + rn(256) / 256.0 : rn(700) - 100 + rn(256) / 256.0;
+			uint32_t vx = vt == 2 ? g_f2u((float)x) : vt ? (uint32_t)(int32_t)(x * 65536) : (uint32_t)(int32_t)x;
+			uint32_t vy = vt == 2 ? g_f2u((float)y) : vt ? (uint32_t)(int32_t)(y * 65536) : (uint32_t)(int32_t)y;
+			cg6_write(&G, CG6_TEC + base + 4, 4, vy);
+			cg6_write(&G, CG6_TEC + base, 4, vx);
+			if (rn(2)) {
+				g_go(FBC_DRAWSTATUS);
+				if (rn(2)) g_wait();
+			}
+		} else {
+			cg6_write(&G, CG6_TEC + base + 4, 4, g_tval(vt, rn(2)));
+			cg6_write(&G, CG6_TEC + base, 4, g_tval(vt, rn(2)));
+		}
+		if (rn(2))
+			cg6_read(&G, CG6_TEC + base + 4 * rn(4), 4);
+	}
+	g_vdc(rn(5) == 0 ? 4 : rn(3));
+	for (int i = 0; i < 8; i++)
+		if (rn(2))
+			cg6_read(&G, CG6_TEC + 0x100 + 4 * i, 4);
+	gr(FBC_MISC);
+	for (int i = 0; i < 4; i++)
+		if (rn(3) == 0)
+			gr(FBC_X0 + 0x10 * i + 4 * rn(2));
+	cg6_write(&G, CG6_TEC + 0x000, 4, G.tec[0] & ~0x4000u);	/* autoload off again */
+	if (auto_) {
+		g_go(FBC_DRAWSTATUS);	/* and whatever is queued drawn, so the next starts afresh */
+		g_wait();
 	}
 }
 
@@ -1741,24 +1880,37 @@ static void gen_run(long n)
 	   zeros, which an RTL bench's memory has too */
 	memset(G.fb + CG6_W * CG6_H, 0, CG6_FBSIZE - CG6_W * CG6_H);
 	gen_open("gen");
+	/* the TEC's data registers, both banks, as cg6_cntxrestore leaves them:
+	   an RTL's RAM is not cleared by a reset */
+	for (int b = 0; b < 2; b++) {
+		cg6_write(&G, CG6_TEC + 8, 4, b ? 0xa000 : 0x8000);
+		for (int i = 0; i < 64; i++) {
+			cg6_write(&G, CG6_TEC + 0x100 + 4 * i, 4, b ? rnd() : g_float(1));
+			g_written[2][b][0x40 + i] = 1;
+		}
+	}
 	for (long i = 0; i < n; i++) {
-		switch (rn(12)) {
+		switch (rn(14)) {
 		case 0: case 1: g_rect(); break;
 		case 2: case 3: g_font(); break;
 		case 4: case 5: g_blit(); break;
 		case 6: g_cpu(); break;
 		case 7: case 8: g_line(); break;
 		case 9: case 10: g_poly(); break;
+		case 12: case 13: g_tec(); break;
 		default: g_regs(); break;
 		}
 	}
 	for (long i = 0; i < n / 10; i++)	/* (after the rest: their traces stay as they were) */
 		g_poly4();
+	for (long i = 0; i < n / 2; i++)	/* (and the TEC's, more of them) */
+		g_tec();
 	g_wait();
 	gen_close();
-	printf("-G: %ld tests; engine: %lu points %lu lines %lu tris %lu quads %lu rects %lu blits %lu font, %lu pixels\n", n,
+	printf("-G: %ld tests; engine: %lu points %lu lines %lu tris %lu quads %lu rects %lu blits %lu font, %lu pixels; "
+	       "TEC: %lu vertices, %lu autoloaded, %lu commands\n", n,
 	       G.ndraw[PRIM_POINT], G.ndraw[PRIM_LINE], G.ndraw[PRIM_TRI], G.ndraw[PRIM_QUAD],
-	       G.ndraw[PRIM_RECT], G.nblit, G.nfont, G.npix);
+	       G.ndraw[PRIM_RECT], G.nblit, G.nfont, G.npix, G.ntec_vertex, G.ntec_auto, G.ntec_cmd);
 }
 
 static void test_prom(void)

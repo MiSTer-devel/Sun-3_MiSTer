@@ -528,13 +528,13 @@ task automatic next_vblank;
 endtask
 
 // ---- the sequence ----------------------------------------------------------------
-string tr [0:3];
-bit    have [0:3];
+string tr [0:4];
+bit    have [0:4];
 bit [31:0] q, q2;
 longint t0;
 initial begin
     $display("tb_cg6: sun3_cg6 and its engine against tools/cg6model's traces");
-    for (int i = 0; i < 4; i++) have[i] = $value$plusargs($sformatf("t%0d=%%s", i), tr[i]);
+    for (int i = 0; i < 5; i++) have[i] = $value$plusargs($sformatf("t%0d=%%s", i), tr[i]);
     repeat (20) @(posedge mclk);
     prst  = 0;
     minit = 0;
@@ -546,7 +546,7 @@ initial begin
     @(posedge clk);
     rst = 0;
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 5; i++)
         if (have[i]) replay(tr[i], i);
     check(have[0], "a trace was given (+t0=)");
 
@@ -668,9 +668,44 @@ initial begin
         check(nb == 0, $sformatf("a relative vertex: %0d pixels wrong", nb));
     end
 
+    // ---- the TEC: a line through MV (x' = 2x + 10, y' = 2y + 20), autoloaded
+    // into the FBC's line registers, then drawn: (5.5, 7.25) .. (55.5, 7.25)
+    // is (21, 34) .. (121, 34); data 4 and 5 read back as 16.16; and how long
+    // a vertex takes, from its x's write to the DRAWSTATUS read's answer
+    begin
+        int nb = 0;
+        longint tv;
+        wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h77);
+        wr32(24'h7000C0, 0); wr32(24'h7000C4, 0);
+        wr32(24'h7000E0, 0); wr32(24'h7000E4, 0); wr32(24'h7000F0, 1151); wr32(24'h7000F4, 899);
+        wr32(24'h70010C, 32'hFF); wr32(24'h700110, 32'hFFFFFFFF);
+        wr32(24'h701008, 32'h00004000);                     // float
+        wr32(24'h701188, 32'h40000000); wr32(24'h70118C, 32'h00000000); wr32(24'h701190, 32'h41200000);
+        wr32(24'h701194, 32'h00000000); wr32(24'h701198, 32'h40000000); wr32(24'h70119C, 32'h41A00000);
+        wr32(24'h701000, 32'h00004122);                     // autoload, 3 x 2 at 0x22
+        wr32(24'h701C44, 32'h40E80000); wr32(24'h701C40, 32'h40B00000);
+        wr32(24'h701C44, 32'h40E80000);
+        tv = $time;
+        wr32(24'h701C40, 32'h425E0000);
+        rd32(24'h700014, q);
+        tv = ($time - tv) / 40000;
+        wait_idle();
+        while (!mem_idle) @(posedge mclk);
+        for (int x = 18; x < 125; x++)
+            for (int y = 32; y < 37; y++)
+                nb += ((fb_peek(y * FBW + x) == 8'h77) != (y == 34 && x >= 21 && x <= 121));
+        check(nb == 0, $sformatf("a TEC line: %0d pixels wrong", nb));
+        wr32(24'h701008, 32'h00002000);                     // fixed
+        rd32(24'h701110, q); check(q == 32'h00790000, $sformatf("the TEC's x result %08x", q));
+        rd32(24'h701114, q); check(q == 32'h00228000, $sformatf("the TEC's y result %08x", q));
+        wr32(24'h701000, 32'h00000122);
+        $display("tb_cg6: a 2D vertex through the TEC to the FBC: %0d CPU clocks, x's write to DRAWSTATUS's answer", tv);
+    end
+
     // ---- the TEC's data registers, as cg6_cntxsave and cg6_cntxrestore
     // use them: 64 with VDC 0x8000, 64 with 0xA000, read back in both; and
-    // with VDC's type 0 (integer) the first bank's
+    // with VDC's type 0 (integer) the first bank's, converted to IEEE single
+    // (read raw with 0x8000), and 1.5 as 16.16 (type 1)
     begin
         int nb = 0;
         wr32(24'h701008, 32'h00008000);
@@ -683,8 +718,13 @@ initial begin
         for (int i = 0; i < 64; i++) begin rd32(24'h701100 + 24'(4 * i), q); nb += (q != 32'h22220000 + i); end
         wr32(24'h701008, 32'h00000000);
         wr32(24'h701100, 32'h33330000);
-        wr32(24'h701008, 32'h00008000);
         rd32(24'h701100, q); nb += (q != 32'h33330000);
+        wr32(24'h701008, 32'h00008000);
+        rd32(24'h701100, q); nb += (q != 32'h4E4CCC00);
+        wr32(24'h701008, 32'h00002000);
+        wr32(24'h701104, 32'h00018000);
+        wr32(24'h701008, 32'h00008000);
+        rd32(24'h701104, q); nb += (q != 32'h3FC00000);
         wr32(24'h701008, 32'h0000A000);
         rd32(24'h701100, q); nb += (q != 32'h22220000);
         rd32(24'h701008, q); nb += (q != 32'h0000A000);

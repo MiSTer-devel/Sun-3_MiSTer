@@ -1,7 +1,7 @@
 #!/bin/bash
 # Mutation check for tb_cg6: each line puts a bug into a copy of sun3_cg6.sv,
-# sun3_cg6_engine.sv or (the cursor) sun3_cg4_scanout.sv, and the bench must
-# fail.  Run `make -C tb/verilator
+# sun3_cg6_engine.sv, sun3_cg6_tec.sv or (the cursor) sun3_cg4_scanout.sv,
+# and the bench must fail.  Run `make -C tb/verilator
 # tb_cg6' first: it makes the traces (obj_tb_cg6/t_*), which this replays.
 #
 #     [JOBS=n] tb/verilator/mutate_cg6.sh [name-filter]
@@ -16,6 +16,7 @@ mkdir -p $W
 TRACES="+t0=$T/t_prom +t1=$T/t_gen"
 [ -f $T/t_lp.txt ] && TRACES="$TRACES +t2=$T/t_lp"
 [ -f $T/t_lp68k.txt ] && TRACES="$TRACES +t3=$T/t_lp68k"
+[ -f $T/t_xn.txt ] && TRACES="$TRACES +t4=$T/t_xn"
 # JOBS=n runs n mutants at once, each in its own directory; tb_cg6 stops at
 # its first failure (+failfast)
 JOBS=${JOBS:-1}
@@ -24,7 +25,7 @@ one() {
   d="$1"; name="$2"
   verilator --binary --timing -I$RTL/sun3 -Wno-fatal -Wno-WIDTH -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC -Wno-UNSIGNED -Wno-CMPCONST \
     -Wno-DECLFILENAME -Wno-UNUSED -Wno-PINCONNECTEMPTY --top-module tb_cg6 --Mdir $d/obj -o tb \
-    tb_cg6.sv $d/cg6.sv $d/engine.sv $RTL/sun3/sun3_cg4.sv $d/scanout.sv $RTL/sun3/video_timing.sv \
+    tb_cg6.sv $d/cg6.sv $d/engine.sv $d/tec.sv $RTL/sun3/sun3_cg4.sv $d/scanout.sv $RTL/sun3/video_timing.sv \
     sdram_model.sv altddio_out_stub.v $RTL/sdram.sv $RTL/sun3_mister_sdram.sv $(pwd)/tb_cg6_model.cpp >$d/build.log 2>&1 \
     || { echo "$name: BUILD FAILED"; return; }
   out=$(timeout 3600 $d/obj/tb $TRACES +failfast 2>&1)
@@ -41,10 +42,11 @@ run() {
   rm -rf $d; mkdir -p $d
   cp $RTL/sun3/sun3_cg6.sv $d/cg6.sv
   cp $RTL/sun3/sun3_cg6_engine.sv $d/engine.sv
+  cp $RTL/sun3/sun3_cg6_tec.sv $d/tec.sv
   cp $RTL/sun3/sun3_cg4_scanout.sv $d/scanout.sv
   sed -i "$@" $d/$file
   if cmp -s $RTL/sun3/sun3_cg6.sv $d/cg6.sv && cmp -s $RTL/sun3/sun3_cg6_engine.sv $d/engine.sv &&
-     cmp -s $RTL/sun3/sun3_cg4_scanout.sv $d/scanout.sv; then
+     cmp -s $RTL/sun3/sun3_cg6_tec.sv $d/tec.sv && cmp -s $RTL/sun3/sun3_cg4_scanout.sv $d/scanout.sv; then
     echo "$name: MUTATION DID NOT APPLY"; return
   fi
   one $d "$name" &
@@ -54,6 +56,7 @@ FILTER="$1"
 E=engine.sv
 R=cg6.sv
 S=scanout.sv
+X=tec.sv
 # ---- the engine: the raster-op unit
 run "f and b swapped in the truth table"  $E -e "s/rasterop\[{1'b0, fcolor\[i\], bcolor\[i\], 2'b00} +: 4\]/rasterop[{1'b0, bcolor[i], fcolor[i], 2'b00} +: 4]/"
 run "the plane mask ignored"              $E -e "s/nib\[i\] = pmask\[i\] ? /nib[i] = 1'b1 ? /"
@@ -147,5 +150,41 @@ run "the cursor's A and B swapped"        $S -e "s/col2     <= cin1 ? {cur_b\[cb
 run "the cursor a pixel to the right"     $S -e "s/wire signed \[16:0\] cdx = \$signed({6'd0, col}) - /wire signed [16:0] cdx = \$signed({6'd0, col}) - 17'sd1 - /"
 run "the cursor 33 rows"                  $S -e "s/(cdy >= 0) \&\& (cdy < 17'sd32);/(cdy >= 0) \&\& (cdy <= 17'sd32);/"
 run "the cursor under the colour"         $S -e "s/ol3  <= (col2 != 2'd0) ? col2 : ol2;/ol3  <= ol2;/"
+# ---- the TEC (sun3_cg6_tec.sv, and its place in the register file)
+run "TEC: to integer toward zero"         $X -e "s/f2i = ~{1'b0, ip} + {31'h0, ~frac};/f2i = ~{1'b0, ip} + 32'h1;/"
+run "TEC: to fixed a bit short"           $X -e "s/(fixed ? 9'd16 : 9'd0)/(fixed ? 9'd15 : 9'd0)/"
+run "TEC: to integer not saturated"       $X -e "s/else if (v\[30:23\] == 8'hFF || e >= 9'd158)/else if (v[30:23] == 8'hFF || e >= 9'd159)/"
+run "TEC: from fixed a bit out"           $X -e "s/? 10'sd142 : 10'sd158;/? 10'sd143 : 10'sd158;/"
+run "TEC: ties rounded up"                $X -e "s/wire        r_inc  = n_m\[11\] \& ((|n_m\[10:0\]) | n_m\[12\]);/wire        r_inc  = n_m[11];/"
+run "TEC: rounding truncates"             $X -e "s/wire        r_inc  = n_m\[11\] \& ((|n_m\[10:0\]) | n_m\[12\]);/wire        r_inc  = 1'b0;/"
+run "TEC: overflow not infinity"          $X -e "s/(r_e >= 11'sd255) ? {pk_s, 8'hFF, 23'h0}/(r_e > 11'sd255) ? {pk_s, 8'hFF, 23'h0}/"
+run "TEC: a product's sticky lost"        $X -e "s/pk_m  <= {mup\[47:13\], mup\[12\] | (|mup\[11:0\])};/pk_m  <= {mup[47:13], mup[12]};/"
+run "TEC: a denormal factor not zero"     $X -e "s/mu_z <= (vin\[k\[1:0\]\]\[30:23\] == 8'd0) || (dq\[30:23\] == 8'd0);/mu_z <= (vin[k[1:0]][30:23] == 8'd0);/"
+run "TEC: an addend's sticky lost"        $X -e "s/(al_sh | {26'h0, al_st})/al_sh/"
+run "TEC: the larger by exponent alone"   $X -e "s/wire        al_swap = fb\[30:0\] > fa\[30:0\];/wire        al_swap = fb[30:23] > fa[30:23];/"
+run "TEC: a difference's sign the first's" $X -e "s/ad_s   <= al_big\[31\];/ad_s   <= fa[31];/"
+run "TEC: infinity plus anything"         $X -e "s/if (fa\[30:23\] == 8'hFF)       ad_by <= {fa\[31\], 8'hFF, 23'h0};/if (1'b0) ad_by <= 32'h0;/"
+run "TEC: a relative vertex translated"   $X -e "s/else        vin\[2\] <= c_rel ? 32'h0 : mv\[13\] ? dq : F_ONE;/else        vin[2] <= mv[13] ? dq : F_ONE;/"
+run "TEC: a relative vertex not added"    $X -e "s/end else if (!op_cmd \&\& c_rel)/end else if (1'b0)/"
+run "TEC: four rows taken as three"       $X -e "s/nk     <= mv\[10\] ? 3'd4 : 3'd3;/nk     <= 3'd3;/"
+run "TEC: MV's h ignored"                 $X -e "s/else        vin\[2\] <= c_rel ? 32'h0 : mv\[13\] ? dq : F_ONE;/else        vin[2] <= c_rel ? 32'h0 : F_ONE;/"
+run "TEC: MV's z ignored"                 $X -e "s/if (mv\[10\]) vin\[2\] <= mv\[12\] ? dq : 32'h0;/if (mv[10]) vin[2] <= dq;/"
+run "TEC: MV's columns one short"         $X -e "s/nj     <= {1'b0, mv\[9:8\]} + 3'd1;/nj     <= {1'b0, mv[9:8]};/"
+run "TEC: autoload's y from data 4"       $X -e "s/S_AUTO1: ra = 6'd5;/S_AUTO1: ra = 6'd4;/"
+run "TEC: autoload always a point"        $X -e "s/agrp <= c_adr\[8:6\];/agrp <= 3'd0;/"
+run "TEC: autoload read while written"    $X -e "s/                    st <= S_AUTO0;/                    st <= S_AUTO1;/"
+run "TEC: a fixed vertex as an integer"   $X -e "s/pk_e  <= ((adr\[11\] ? (adr\[10:9\] == 2'd1)/pk_e  <= ((adr[11] ? (adr[10:9] == 2'd0)/"
+run "TEC: a float vertex converted"       $X -e "s/pk_bv <= (adr\[11\] ? (adr\[10:9\] == 2'd2)/pk_bv <= (adr[11] ? 1'b0/"
+run "TEC: fixed reads not converted"      $X -e "s/(vtype == 3'd1) ? f2i(dq, 1'b1) : dq;/dq;/"
+run "TEC: integer writes not converted"   $X -e "s/: (vtype > 3'd1)) || (wdata == 32'h0);/: (vtype != 3'd1)) || (wdata == 32'h0);/"
+run "TEC: the second bank's writes in the first" $X -e "s/(((adr\[11:8\] == 4'h1) \&\& (vtype != 3'd5)) || w_vtx)/((adr[11:8] == 4'h1) || w_vtx)/"
+run "TEC: a command's A its first only"   $X -e "s/S_AL:    ra = (3'(k + 3'd1) < nk) ? 6'(aa + 6'(k) + 6'd1) : bb;/S_AL:    ra = (3'(k + 3'd1) < nk) ? aa : bb;/"
+run "TEC: a command's n ignored"          $X -e "s/nj     <= {1'b0, wdata\[29:28\]} + 3'd1;/nj     <= 3'd2;/"
+run "TEC: a command's m as n"             $X -e "s/nk     <= {1'b0, wdata\[31:30\]} + 3'd1;/nk     <= {1'b0, wdata[29:28]} + 3'd1;/"
+run "TEC: autoload without the raster offset" $R -e "s/qx\[anv\[1:0\]\] <= tec_ax + offx;/qx[anv[1:0]] <= tec_ax;/" -e "s/xr\[anv\[1:0\]\] <= tec_ax + offx;/xr[anv[1:0]] <= tec_ax;/"
+run "TEC: autoload a new queue after a point" $R -e "s/wire        anewq  = (prim != tec_agrp) \& ~(prim == P_POINT \& (tec_agrp == P_TRI | tec_agrp == P_QUAD));/wire        anewq  = (prim != tec_agrp);/"
+run "TEC: FBC cycles not held for it"     $R -e "s/wire        tstall = (sel_fbc | sel_tec) \& tec_busy;/wire        tstall = sel_tec \& tec_busy;/"
+run "TEC: MISC's index not the queue's"   $R -e "s/12'h004: fbc_q = {10'h0, misc\[21:7\], 1'b0, nv\[1:0\], misc\[3:0\]};/12'h004: fbc_q = {10'h0, misc};/"
+run "TEC: a read answered before the TEC" $R -e "s/if (!tec_busy) begin                \/\/ the TEC's answer/if (1'b1) begin/"
 wait
 rm -rf $W
