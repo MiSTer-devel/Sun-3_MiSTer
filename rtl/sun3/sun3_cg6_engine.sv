@@ -127,17 +127,21 @@ module sun3_cg6_engine #(
     // The clip window, and the frame buffer: x 0..1151, rows 0..910 (the
     // 1 MiB ends 256 pixels into row 910).
     typedef logic signed [17:0] s18;
+    // bit i of the result is bit 15-i of k ({<<{k}}, which Quartus 17 lacks)
+    function automatic [15:0] rev16(input [15:0] k);
+        for (int i = 0; i < 16; i++) rev16[i] = k[15 - i];
+    endfunction
     function automatic s18 smax(input s18 a, input s18 b); return (a > b) ? a : b; endfunction
     function automatic s18 smin(input s18 a, input s18 b); return (a < b) ? a : b; endfunction
 
-    wire s18 cx0 = smax(s18'(clipminx), 18'sd0);
-    wire s18 cx1 = smin(s18'(clipmaxx), 18'sd1151);
-    wire s18 cy0 = smax(s18'(clipminy), 18'sd0);
-    wire s18 cy1 = smin(s18'(clipmaxy), 18'sd910);
+    wire signed [17:0] cx0 = smax(s18'(clipminx), 18'sd0);
+    wire signed [17:0] cx1 = smin(s18'(clipmaxx), 18'sd1151);
+    wire signed [17:0] cy0 = smax(s18'(clipminy), 18'sd0);
+    wire signed [17:0] cy1 = smin(s18'(clipmaxy), 18'sd910);
 
-    wire s18 bw   = s18'(x1) - s18'(x0) + 18'sd1;          // a blit's (and the font's) width
-    wire s18 bh   = s18'(y1) - s18'(y0) + 18'sd1;
-    wire s18 fend = s18'(x0) + smin(bw - 18'sd1, colour8 ? 18'sd3 : 18'sd31);
+    wire signed [17:0] bw   = s18'(x1) - s18'(x0) + 18'sd1;          // a blit's (and the font's) width
+    wire signed [17:0] bh   = s18'(y1) - s18'(y0) + 18'sd1;
+    wire signed [17:0] fend = s18'(x0) + smin(bw - 18'sd1, colour8 ? 18'sd3 : 18'sd31);
 
     s18  e_xa, e_xb, e_ya, e_yb;
     logic e_ok;
@@ -367,7 +371,7 @@ module sun3_cg6_engine #(
 
             E_LINE: begin                   // a burst: what it writes, and its source
                 en    <= range16(ln, 13'(xa), 13'(xbr)) &
-                         {<<{ln[0] ? xmask[15:0] : xmask[31:16]}};
+                         rev16(ln[0] ? xmask[15:0] : xmask[31:16]);
                 sb    <= (cmd == C_FONT) ? s_font : {128{s_draw}};
                 lw    <= lword;
                 lb_ra <= bidx;
