@@ -186,7 +186,10 @@ run "TEC: a command's m as n"             $X -e "s/nk     <= {1'b0, wdata\[31:30
 run "TEC: autoload without the raster offset" $R -e "s/qx\[anv\[1:0\]\] <= tec_ax + offx;/qx[anv[1:0]] <= tec_ax;/" -e "s/xr\[anv\[1:0\]\] <= tec_ax + offx;/xr[anv[1:0]] <= tec_ax;/"
 run "TEC: autoload a new queue after a point" $R -e "s/wire        anewq  = (prim != tec_agrp) \& ~(prim == P_POINT \& (tec_agrp == P_LINE | tec_agrp == P_TRI | tec_agrp == P_QUAD));/wire        anewq  = (prim != tec_agrp);/"
 run "TEC: FBC cycles not held for it"     $R -e "s/wire        tstall = (sel_fbc | sel_tec) \& tec_busy;/wire        tstall = sel_tec \& tec_busy;/"
-run "TEC: MISC's index not the queue's"   $R -e "s/12'h004: fbc_q = {10'h0, misc\[21:7\], 1'b0, nv\[1:0\], misc\[3:0\]};/12'h004: fbc_q = {10'h0, misc};/"
+run "MISC's vertical blank as written"   $R -e "s/12'h004: fbc_q = {10'h0, misc\[21:20\], misc_vb, misc\[18:7\]/12'h004: fbc_q = {10'h0, misc[21:20], misc[19], misc[18:7]/"
+run "MISC's vertical blank not cleared"   $R -e "s/if (wdata\[19\]) misc_vb <= 1'b0;/if (1'b0) misc_vb <= 1'b0;/"
+run "MISC's vertical blank never set"     $R -e "s/if (!rst \&\& rt_rise) misc_vb <= 1'b1;/if (1'b0) misc_vb <= 1'b1;/"
+run "TEC: MISC's index not the queue's"   $R -e "s/12'h004: fbc_q = {10'h0, misc\[21:20\], misc_vb, misc\[18:7\], 1'b0, nv\[1:0\], misc\[3:0\]};/12'h004: fbc_q = {10'h0, misc[21:20], misc_vb, misc[18:0]};/"
 run "TEC: a read answered before the TEC" $R -e "s/if (!tec_busy) begin                \/\/ the TEC's answer/if (1'b1) begin/"
 wait
 rm -rf $W

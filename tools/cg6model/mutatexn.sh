@@ -27,8 +27,9 @@ mutations=(
 	'(int32_t)tec_f2i(d[5], 0) + g->offy@@(int32_t)tec_f2i(d[5], 0)@@autoload through the raster offset'
 	'int base = bi + j * m;@@int base = bi + j * n;@@a command'"'"'s B column by column'
 	'a[k] = d[(ai + k) & 63];@@a[k] = d[(ai + 2 * k) & 63];@@a command'"'"'s A in a row'
-	'(uint32_t)(g->nv & 3) << 4;@@(uint32_t)((g->nv - 1) & 3) << 4;@@MISC'"'"'s index the next slot'
+	'(uint32_t)(g->nv & 3) << 4 |@@(uint32_t)((g->nv - 1) & 3) << 4 |@@MISC'"'"'s index the next slot'
 	'f_pack(s, ea + eb - 127,@@f_pack(s, ea + eb - 126,@@the product'"'"'s exponent'
+	'(g->misc_vblank ? MISC_VBLANK : 0);@@(g->misc & MISC_VBLANK);@@MISC'"'"'s vertical blank, not as written'
 )
 
 caught=0; total=0

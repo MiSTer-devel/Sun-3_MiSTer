@@ -35,7 +35,10 @@
  *           and TEC quad vertices autoloaded, the fan's restart read back
  *           from the FBC's MISC index and x/y registers;
  *   hol     _sh_lg_hol_2U: outlines, a TEC point then TEC line vertices,
- *           closed by an FBC line back to the first.
+ *           closed by an FBC line back to the first;
+ *   cmap    _install_cmap: a screen's colour map, straight into the Bt458
+ *           at a vertical blank (FBC MISC bit 19, which the harness's
+ *           raster sets every third MISC read).
  *
  * and compares the results with an exact reference (doubles), and with
  * xnews's software where it has one.  For the drawing tests a second model
@@ -58,7 +61,8 @@
 #define RET_ADDR	0x0f00
 #define CRASH_ADDR	0x0f10
 #define VBASE		0x70000000u	/* FBC, then the TEC at +0x1000 */
-#define V_END		(VBASE + 0x2000)
+#define V_DAC		(VBASE + 0x2000)	/* the Bt458 */
+#define V_END		(VBASE + 0x2010)
 
 /* xnews 2.0 (the SHA-256 above): its two _point_transform share a name */
 #define A_POINT_TEC	0x9e0a
@@ -67,7 +71,7 @@
 static uint8_t *ram;
 static struct cg6 G, R;		/* the board; the reference */
 static FILE *trace;
-static int verbose, check, kinds = 31;	/* -k: 1 point, 2 path, 4 vec, 8 area, 16 hol */
+static int verbose, check, kinds = 63;	/* -k: 1 point, 2 path, 4 vec, 8 area, 16 hol, 32 cmap */
 static unsigned long icount, nboard;
 static volatile int returned;
 
@@ -174,10 +178,21 @@ static void tracefn(void *arg, int wr, uint32_t off, int size, uint32_t v)
 		fprintf(trace, "%c%d %06x %08x\n", wr ? 'w' : 'r', size, off, v);
 }
 
+static unsigned long nmisc_rd;
+
+static uint32_t board_off(uint32_t a)
+{
+	return a >= V_DAC ? CG6_DAC + (a - V_DAC) : CG6_FBC + (a - VBASE);
+}
+
 static uint32_t mem_rd(uint32_t a, int size)
 {
 	if (board(a)) {
-		uint32_t off = CG6_FBC + (a - VBASE), v = cg6_read(&G, off, size);
+		uint32_t off = board_off(a), v;
+		/* the raster: a vertical blank begins every few MISC reads */
+		if (off == CG6_FBC + 4 && ++nmisc_rd % 3 == 0)
+			cg6_vsync(&G, !G.vsync);
+		v = cg6_read(&G, off, size);
 		if (mirror == 1 && off < CG6_TEC)
 			cg6_read(&R, off, size);
 		return v;
@@ -190,7 +205,7 @@ static uint32_t mem_rd(uint32_t a, int size)
 static void mem_wr(uint32_t a, int size, uint32_t v)
 {
 	if (board(a)) {
-		uint32_t off = CG6_FBC + (a - VBASE);
+		uint32_t off = board_off(a);
 		cg6_write(&G, off, size, v);
 		if (mirror) {
 			if (off < CG6_TEC) {
@@ -975,6 +990,47 @@ static void test_hol(void)
 	draw_check("hol_2U");
 }
 
+/* the colour map loaded straight into the Bt458, as xnews does it for a
+   screen (_install_cmap 0x977c, the screen's fd -1): MISC's vertical
+   blank cleared, then waited for, then the entries */
+static unsigned long ncmap, ncmap_bad;
+
+static void test_cmap(void)
+{
+	uint32_t CM, OBJ, SCR, rgb, g1, g2, code;
+	int lg = 8, start = rn(200), n = 1 + rn(56);
+
+	{
+		CM = alloc(0x40); OBJ = alloc(0x40); SCR = alloc(0x100); rgb = alloc(3 << lg);
+		g1 = alloc(0x40); g2 = alloc(0x40); code = alloc(0x10);
+		wr16(code, 0x7001);		/* moveq #1, d0; rts: the lock is had */
+		wr16(code + 2, 0x4e75);
+		wr32(g2 + 0x14, code);
+		wr32(g1 + 0x24, g2);
+		wr32(0x12f21e, g1);
+		wr32(OBJ + 0x3c, SCR);
+		wr32(SCR + 0x24, 0xffffffff);
+		wr32(SCR + 0x60, VBASE);
+		wr32(SCR + 0x64, V_DAC);
+		wr16(SCR + 0x56, 0);
+	}
+	wr16(CM + 0x8, start);
+	wr32(CM + 0xa, OBJ);
+	wr16(CM + 0xe, n);
+	wr8(CM + 0x14, lg);
+	wr32(CM + 0x16, rgb);
+	for (int i = 0; i < 3 << lg; i++)
+		wr8(rgb + i, rnd());
+	call(0x977c, 1, CM);		/* one of four _install_cmap */
+	for (int i = 0; i < n; i++) {
+		int e = (start + i) & 255;
+		ncmap++;
+		if (G.cmap[e][0] != ram[rgb + i] || G.cmap[e][1] != ram[rgb + (1 << lg) + i] ||
+		    G.cmap[e][2] != ram[rgb + (2 << lg) + i])
+			ncmap_bad++;
+	}
+}
+
 /* ---- -T: the TEC's arithmetic against the host's (IEEE single) ---- */
 static int tec_selftest(void)
 {
@@ -1051,14 +1107,15 @@ int main(int argc, char **argv)
 	KV = alloc(0x100);
 	init_cg6();
 	for (long i = 0; i < n; i++) {
-		int k = rn(5);
+		int k = rn(20) == 0 ? 5 : rn(5);
 		if (!(kinds >> k & 1)) { i--; continue; }
 		switch (k) {
 		case 0: test_point(); break;
 		case 1: test_path(); break;
 		case 2: test_vec(); break;
 		case 3: test_area(); break;
-		default: test_hol(); break;
+		case 4: test_hol(); break;
+		default: test_cmap(); break;
 		}
 		heap = HEAP_BASE + 0x1000;	/* GS, KV, FBS, CANVAS stay */
 	}
@@ -1077,6 +1134,7 @@ int main(int argc, char **argv)
 	for (int i = 0; i < 2; i++) agree_print(&pa_tec_sw[i]);
 	printf("  path elements %lu: %lu of another kind; %lu left fixed by xnews's TEC path where its software "
 	       "makes them float; %lu points and elements beyond 16.16's range, not counted\n", pa_elems, pa_types_bad, pa_fixfloat, pa_range);
+	printf("  colour maps: %lu entries loaded through MISC's vertical blank, %lu wrong\n", ncmap, ncmap_bad);
 	printf("  drawing: %lu autoloaded vertices, %lu not the exact one rounded down; "
 	       "%lu tests, %lu with pixels that differ (%lu pixels)\n",
 	       nvert, nvert_bad, ndraw_tests, ndraw_bad, ndraw_pix);
@@ -1092,6 +1150,8 @@ int main(int argc, char **argv)
 			bad++, printf("-c: integer results not the exact ones\n");
 		if (nvert_bad > nvert / 1000 || !nvert)
 			bad++, printf("-c: autoloaded vertices not the exact ones\n");
+		if (ncmap_bad || !ncmap)
+			bad++, printf("-c: colour maps not loaded\n");
 		if (pa_types_bad)
 			bad++, printf("-c: path elements of another kind\n");
 		if (ndraw_bad > ndraw_tests / 200 || !ndraw_tests)
