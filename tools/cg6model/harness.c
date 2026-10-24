@@ -1428,6 +1428,8 @@ static void g_vertex(int p, int32_t x, int32_t y)
 	else { gw(base + rel, x); gw(base + rel + 4, y); }
 }
 
+static void g_again(void);
+
 static void g_rect(void)
 {
 	int32_t x0 = g_coord(CG6_W, 1), y0 = g_coord(CG6_H, 1), x1, y1;
@@ -1453,6 +1455,7 @@ static void g_rect(void)
 	g_go(FBC_DRAWSTATUS);
 	if (rn(4))
 		g_wait();
+	g_again();
 	/* more rectangles on the same rows, by IPOINTABSX and ITRIABSX alone,
 	   as xnews fills a region's band (sometimes one alone, or interrupted
 	   by another coordinate: then nothing, or the queue's own) */
@@ -1484,6 +1487,20 @@ static int32_t g_lcoord(int lim)
 	case 2: return rn(3 * lim) - lim;
 	case 3: return rn(2) ? 32767 - rn(30000) : -32768 + rn(30000);
 	default: return rn(lim);
+	}
+}
+
+/* the same primitive again, once per clip rectangle, its vertices written
+   once: xnews draws its shapes so (_shape_ras, _vectors_ras) */
+static void g_again(void)
+{
+	for (int i = 0, n = 1 + rn(3); rn(3) == 0 && i < n; i++) {
+		int32_t x0 = rn(CG6_W), y0 = rn(CG6_H);
+		gw(FBC_CLIPMINX, x0); gw(FBC_CLIPMINY, y0);
+		gw(FBC_CLIPMAXX, x0 + rn(400)); gw(FBC_CLIPMAXY, y0 + rn(300));
+		g_go(FBC_DRAWSTATUS);
+		if (rn(2))
+			g_wait();
 	}
 }
 
@@ -1530,6 +1547,8 @@ static void g_line(void)
 		g_go(FBC_DRAWSTATUS);
 		if (rn(3) == 0)
 			g_wait();
+		if (rn(4) == 0)
+			g_again();
 	}
 	if (rn(4))
 		g_wait();
@@ -1560,6 +1579,7 @@ static void g_poly(void)
 	g_go(FBC_DRAWSTATUS);
 	if (rn(4))
 		g_wait();
+	g_again();
 }
 
 /* quadrilaterals that random ones on the screen seldom are: rows that

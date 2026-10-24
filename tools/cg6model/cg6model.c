@@ -356,6 +356,11 @@ static void draw(struct cg6 *g)
 		g->dstat = clip_class(g, px, py, 2);
 		g->ndraw[PRIM_RECT]++;
 		draw_rect(g, g->rnx0, g->ry0, g->rnx1, g->ry1);
+		g->redo = 1;
+		g->lprim = PRIM_RECT;
+		g->lk = 2;
+		g->lvx[0] = g->rnx0; g->lvy[0] = g->ry0;
+		g->lvx[1] = g->rnx1; g->lvy[1] = g->ry1;
 		g->x[0] = g->rnx0; g->y[0] = g->ry0;
 		g->x[1] = g->rnx1; g->y[1] = g->ry1;
 		g->rnew = 0;
@@ -365,6 +370,29 @@ static void draw(struct cg6 *g)
 	}
 	g->rnew = 0;
 	g->rkeep = 0;
+	if (g->redo) {
+		/*
+		 * Nothing queued since the last command: the same primitive again,
+		 * on the clip as it is now.  xnews draws a shape once per clip
+		 * rectangle so, its vertices written once (_shape_ras 0x7ed8,
+		 * _vectors_ras 0x8ae8): olwm's frames, exposed areas.
+		 */
+		g->dstat = clip_class(g, g->lvx, g->lvy, g->lk);
+		g->ndraw[g->lprim]++;
+		switch (g->lprim) {
+		case PRIM_POINT: plot(g, g->lvx[0], g->lvy[0], pattern_src(g, g->lvx[0], g->lvy[0])); break;
+		case PRIM_LINE: draw_line(g, g->lvx[0], g->lvy[0], g->lvx[1], g->lvy[1]); break;
+		case PRIM_RECT:
+			draw_rect(g, g->lvx[0], g->lvy[0], g->lvx[1], g->lvy[1]);
+			g->rkeep = 1;
+			g->ry0 = sat16(g->lvy[0]);
+			g->ry1 = sat16(g->lvy[1]);
+			break;
+		default: draw_poly(g, g->lvx, g->lvy, g->lk); break;
+		}
+		g->pend = 0;
+		return;
+	}
 	if (g->prim == PRIM_NONE)
 		goto done;
 	k = need(g->prim);
@@ -375,6 +403,13 @@ static void draw(struct cg6 *g)
 	vx = &g->vx[n - k];
 	vy = &g->vy[n - k];
 	g->dstat = clip_class(g, vx, vy, k);
+	g->redo = 1;			/* the next DRAWSTATUS, with nothing new, draws it again */
+	g->lprim = g->prim;
+	g->lk = k;
+	for (int j = 0; j < k; j++) {
+		g->lvx[j] = vx[j];
+		g->lvy[j] = vy[j];
+	}
 	g->ndraw[g->prim]++;
 	switch (g->prim) {
 	case PRIM_POINT:
@@ -416,6 +451,7 @@ done:
 static void queue_prim(struct cg6 *g, int prim)
 {
 	if (g->prim != prim) {
+		g->redo = 0;
 		/*
 		 * A new kind of primitive starts afresh, but for a point
 		 * followed by line, triangle or quadrilateral vertices: the
@@ -435,6 +471,7 @@ static void queue_prim(struct cg6 *g, int prim)
 static void queue_push(struct cg6 *g, int32_t x, int32_t y)
 {
 	g->rkeep = 0;			/* a new vertex: no rectangle to redraw */
+	g->redo = 0;
 	if (g->nv < 64) {
 		g->vx[g->nv] = x;
 		g->vy[g->nv] = y;

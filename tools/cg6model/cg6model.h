@@ -142,6 +142,9 @@ struct cg6 {
 	/* the last rectangle drawn, for lone IPOINTABSX/ITRIABSX writes to
 	   redraw on its rows (xnews's region fill): its rows, the new x's */
 	int rkeep, rnew;
+	/* the last primitive drawn, for a DRAWSTATUS with nothing new queued */
+	int redo, lprim, lk;
+	int32_t lvx[4], lvy[4];
 	int32_t ry0, ry1, rnx0, rnx1;
 	unsigned long ntec_vertex, ntec_auto, ntec_cmd;
 	/* a hook for the harness: every register access */
