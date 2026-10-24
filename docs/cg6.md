@@ -1561,12 +1561,24 @@ IEEE single as it is, not whatever wider form a real TEC has inside.
 
 ### On the board
 
+**Runs (2026-10-24, master `84c4321`, 33 MHz):** `openwin` comes up on
+the GX. The OpenWindows 2 splash, olwm's frames, the cmdtool and the File
+Manager draw as on the cg4 (OPEN LOOK's rounded buttons are NeWS paths
+through the TEC). `ico` (X11 lines) spins in its own window; `psh
+roundclock` (NeWS fills and arcs) and `psh spiral` draw correctly. The fit:
+33,052 ALMs (79%), `cpu_clk` +1.910 ns, `clk_mem` +0.471 ns. One thing
+seen: closing `ico` left a black strip below the File Manager unrepainted
+(likely the slower one-redraw-per-clip-rectangle path, DRAWSTATUS's
+"visible" bit returned 0; not looked at yet). Still to try: the rest of the
+NeWS and X demos listed below, side by side with the cg4.
+
 **First try (2026-10-23, `ba663a5`): nothing is drawn.** `openwin` leaves
 the screen untouched; `xnews` runs (state R, minutes of CPU) with no
 system calls, in a byte-wise software raster-op loop at PC 0x0e47fc in
 the static code of `cg6CpSI.o` (a `gcore`), on buffers in its own heap.
-Being looked at: what sends xnews's GX code to that software path, and
-where its bounds come from.
+The cause: xnews's `_install_cmap` waits for MISC bit 19, the vertical
+blank, which the core never set (fixed in `d0ff29e`). The gcore's PC was
+misread; its registers are `_install_cmap`'s.
 
 The test plan:
 
