@@ -73,6 +73,9 @@
 #define FBC_S_EXCEPTION	0x80000000u
 #define FBC_S_FULL	0x20000000u
 #define FBC_S_BUSY	0x10000000u
+#define FBC_S_HIDDEN	0x4u		/* DRAWSTATUS's clip test; BLITSTATUS's << 8 (dst), << 11 (src) */
+#define FBC_S_INTERSECT	0x2u
+#define FBC_S_VISIBLE	0x1u
 
 /* THC misc (Solaris <sys/cg6thc.h>) */
 #define THC_MISC_REV_SHIFT 16
@@ -135,6 +138,11 @@ struct cg6 {
 	int busy_polls, busy;
 	unsigned long ndraw[PRIM_NONE], nblit, nfont, npix;
 	unsigned long nfull;		/* commands refused while busy */
+	uint32_t dstat;			/* the last command's clip bits */
+	/* the last rectangle drawn, for lone IPOINTABSX/ITRIABSX writes to
+	   redraw on its rows (xnews's region fill): its rows, the new x's */
+	int rkeep, rnew;
+	int32_t ry0, ry1, rnx0, rnx1;
 	unsigned long ntec_vertex, ntec_auto, ntec_cmd;
 	/* a hook for the harness: every register access */
 	void (*trace)(void *, int wr, uint32_t off, int size, uint32_t v);

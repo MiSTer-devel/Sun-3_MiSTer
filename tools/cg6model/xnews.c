@@ -36,6 +36,9 @@
  *           from the FBC's MISC index and x/y registers;
  *   hol     _sh_lg_hol_2U: outlines, a TEC point then TEC line vertices,
  *           closed by an FBC line back to the first;
+ *   region  _sh_cg6_FLRS8pg: a region filled a band at a time, as xnews
+ *           repairs an exposure (a band's later rectangles by IPOINTABSX
+ *           and ITRIABSX alone);
  *   cmap    _install_cmap: a screen's colour map, straight into the Bt458
  *           at a vertical blank (FBC MISC bit 19, which the harness's
  *           raster sets every third MISC read).
@@ -71,7 +74,7 @@
 static uint8_t *ram;
 static struct cg6 G, R;		/* the board; the reference */
 static FILE *trace;
-static int verbose, check, kinds = 63;	/* -k: 1 point, 2 path, 4 vec, 8 area, 16 hol, 32 cmap */
+static int verbose, check, kinds = 127;	/* -k: 1 point, 2 path, 4 vec, 8 area, 16 hol, 32 cmap, 64 region */
 static unsigned long icount, nboard;
 static volatile int returned;
 
@@ -100,7 +103,8 @@ static double u2d(uint64_t u) { double d; memcpy(&d, &u, 8); return d; }
 
 /* ---- the reference's mirror of the board's cycles (the drawing tests) ---- */
 static int mirror;			/* the drawing tests: 1 R follows G's FBC cycles, its
-					   TEC vertices exact; 2 the vertices checked only */
+					   TEC vertices exact; 2 the vertices checked only;
+					   3 R takes G's FBC writes but the vertices' */
 static int tec_x_kind, tec_y_kind;	/* the last Y written: its kind */
 static double tec_y, cur_x, cur_y;	/* the exact point, the exact last result */
 static unsigned long nvert, nvert_bad;
@@ -209,7 +213,7 @@ static void mem_wr(uint32_t a, int size, uint32_t v)
 		cg6_write(&G, off, size, v);
 		if (mirror) {
 			if (off < CG6_TEC) {
-				if (mirror == 1)
+				if (mirror == 1 || (mirror == 3 && !(off >= CG6_FBC + 0x800 && off < CG6_FBC + 0x940)))
 					cg6_write(&R, off, size, v);
 			}
 			else if (size == 4)
@@ -1031,6 +1035,78 @@ static void test_cmap(void)
 	}
 }
 
+/* a region filled as xnews repairs exposures: _sh_cg6_FLRS8pg, a band at a
+   time, each band's first rectangle whole (IRECT y x y x) and the rest by
+   IPOINTABSX and ITRIABSX alone; the reference draws every rectangle
+   whole, on the clip FLRS sets */
+static unsigned long nregion, nregion_bad, nregion_rects;
+
+static void test_region(void)
+{
+	uint32_t CV = alloc(0x80), RG = alloc(0x20), W = alloc(2 * 400);
+	int nw = 0, y = rn(200), cx = rn(4) ? 0 : rn(300), cy = rn(4) ? 0 : rn(200);
+	int bands = 1 + rn(8), fcol = rn(256);
+	unsigned long bad = 0;
+	uint16_t words[400];
+
+	for (int b = 0; b < bands && nw < 360; b++) {
+		int h = 1 + rn(rn(3) ? 20 : 120), x = rn(100), nr = 1 + rn(rn(2) ? 2 : 6);
+		if (b) words[nw++] = 0x8001;
+		words[nw++] = y;
+		words[nw++] = y + h;
+		for (int r = 0; r < nr && x < 1100; r++) {
+			int w = 1 + rn(200);
+			words[nw++] = x;
+			words[nw++] = x + w;
+			x += w + 2 + rn(60);
+		}
+		y += h + rn(3) * (1 + rn(20));
+	}
+	words[nw++] = 0x8001;
+	words[nw++] = 0x8000;
+	for (int i = 0; i < nw; i++)
+		wr16(W + 2 * i, words[i]);
+	wr8(RG + 1, 0x20);			/* not inline: the words at +0xc */
+	wr32(RG + 0xc, W);
+	wr32(CV + 0x3c, FBS);
+	wr16(CV + 0x10, cx); wr16(CV + 0x12, cy);
+	wr16(CV + 0x14, CG6_W - cx); wr16(CV + 0x16, CG6_H - cy);
+	wr16(FBS + 0x1c, CG6_W); wr16(FBS + 0x1e, CG6_H);
+	wr8(0x139a54, 0);			/* no cursor to take down */
+	mirror = 3;
+	fbc_w(0x108, 0xa980ff00);
+	fbc_w(0x100, fcol);
+	fbc_w(0x10c, 0xff);
+	fbc_w(0x110, 0xffffffff);
+	call(sym("_sh_cg6_FLRS8pg"), 3, CV, 0, RG);
+	mirror = 0;
+	/* the reference: every rectangle whole, inclusive, as the first of a
+	   band is drawn */
+	for (int i = 0; words[i] != 0x8000; ) {
+		int y0 = (int16_t)words[i], y1 = (int16_t)words[i + 1];
+		i += 2;
+		while (words[i] != 0x8001) {
+			cg6_write(&R, CG6_FBC + 0x904, 4, y0);
+			cg6_write(&R, CG6_FBC + 0x900, 4, (int16_t)words[i]);
+			cg6_write(&R, CG6_FBC + 0x904, 4, y1);
+			cg6_write(&R, CG6_FBC + 0x900, 4, (int16_t)words[i + 1]);
+			cg6_read(&R, CG6_FBC + FBC_DRAWSTATUS, 4);
+			nregion_rects++;
+			i += 2;
+		}
+		i++;
+	}
+	nregion++;
+	for (int i = 0; i < CG6_W * CG6_H; i++)
+		bad += G.fb[i] != R.fb[i];
+	if (bad) {
+		nregion_bad++;
+		if (verbose)
+			printf("  region: %lu pixels differ\n", bad);
+		memcpy(R.fb, G.fb, sizeof R.fb);
+	}
+}
+
 /* ---- -T: the TEC's arithmetic against the host's (IEEE single) ---- */
 static int tec_selftest(void)
 {
@@ -1107,7 +1183,7 @@ int main(int argc, char **argv)
 	KV = alloc(0x100);
 	init_cg6();
 	for (long i = 0; i < n; i++) {
-		int k = rn(20) == 0 ? 5 : rn(5);
+		int k = rn(20) == 0 ? 5 : rn(8) == 0 ? 6 : rn(5);
 		if (!(kinds >> k & 1)) { i--; continue; }
 		switch (k) {
 		case 0: test_point(); break;
@@ -1115,7 +1191,8 @@ int main(int argc, char **argv)
 		case 2: test_vec(); break;
 		case 3: test_area(); break;
 		case 4: test_hol(); break;
-		default: test_cmap(); break;
+		case 5: test_cmap(); break;
+		default: test_region(); break;
 		}
 		heap = HEAP_BASE + 0x1000;	/* GS, KV, FBS, CANVAS stay */
 	}
@@ -1134,6 +1211,8 @@ int main(int argc, char **argv)
 	for (int i = 0; i < 2; i++) agree_print(&pa_tec_sw[i]);
 	printf("  path elements %lu: %lu of another kind; %lu left fixed by xnews's TEC path where its software "
 	       "makes them float; %lu points and elements beyond 16.16's range, not counted\n", pa_elems, pa_types_bad, pa_fixfloat, pa_range);
+	printf("  regions (_sh_cg6_FLRS8pg): %lu filled, %lu rectangles, %lu not as the reference\n",
+	       nregion, nregion_rects, nregion_bad);
 	printf("  colour maps: %lu entries loaded through MISC's vertical blank, %lu wrong\n", ncmap, ncmap_bad);
 	printf("  drawing: %lu autoloaded vertices, %lu not the exact one rounded down; "
 	       "%lu tests, %lu with pixels that differ (%lu pixels)\n",
@@ -1150,6 +1229,8 @@ int main(int argc, char **argv)
 			bad++, printf("-c: integer results not the exact ones\n");
 		if (nvert_bad > nvert / 1000 || !nvert)
 			bad++, printf("-c: autoloaded vertices not the exact ones\n");
+		if (nregion_bad || !nregion)
+			bad++, printf("-c: regions not filled\n");
 		if (ncmap_bad || !ncmap)
 			bad++, printf("-c: colour maps not loaded\n");
 		if (pa_types_bad)

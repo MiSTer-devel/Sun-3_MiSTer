@@ -289,6 +289,55 @@ module sun3_cg6 #(
     wire        dgo    = (prim != P_NONE) && (dpoly ? (nv >= 7'd2) : (nv >= 7'(kmax)));
     wire [1:0]  dbase  = 2'(nv - 7'(dk));       // the ring's first of them
 
+    // after a rectangle, IPOINTABSX and ITRIABSX alone give it new left and
+    // right x's, and DRAWSTATUS draws it again on its rows: xnews fills a
+    // region a band at a time so (_sh_cg6_FLRS8pg); any other coordinate,
+    // or a vertex queued, cancels it
+    reg         rkeep = 1'b0;
+    reg  [1:0]  rnew = 2'b00;
+    reg  signed [15:0] rnx0 = 16'sh0, rnx1 = 16'sh0, rry0 = 16'sh0, rry1 = 16'sh0;
+    wire        redraw = rkeep && (rnew == 2'b11) && (nv == 7'd0);
+
+    // the clip bits a command reads back: its points against the clip
+    // window, 16 bits as the engine takes them.  DRAWSTATUS 2:0 (hidden,
+    // intersect, visible) for the vertices it draws; BLITSTATUS 13:11 for
+    // the source x0,y0..x1,y1, 10:8 for the destination x2,y2..x3,y3.
+    // xnews skips a line's other clip rectangles when it is visible.
+    wire        blitrd = (off == 12'h018);
+    reg  signed [15:0] cpx [0:3];
+    reg  signed [15:0] cpy [0:3];
+    reg  [3:0]  c_in, c_l, c_r, c_t, c_b;
+    wire signed [15:0] ccx0 = sat16(clipminx), ccy0 = sat16(clipminy);
+    wire signed [15:0] ccx1 = sat16(clipmaxx), ccy1 = sat16(clipmaxy);
+    always @(*) begin
+        for (int j = 0; j < 4; j++) begin
+            cpx[j] = blitrd ? sat16(xr[j]) : sat16(qx[2'(dbase + 2'(j))]);
+            cpy[j] = blitrd ? sat16(yr[j]) : sat16(qy[2'(dbase + 2'(j))]);
+            if (!blitrd && redraw) begin
+                cpx[j] = j[0] ? rnx1 : rnx0;
+                cpy[j] = j[0] ? rry1 : rry0;
+            end
+            c_in[j] = (cpx[j] >= ccx0) && (cpx[j] <= ccx1) && (cpy[j] >= ccy0) && (cpy[j] <= ccy1);
+            c_l[j]  = cpx[j] < ccx0;
+            c_r[j]  = cpx[j] > ccx1;
+            c_t[j]  = cpy[j] < ccy0;
+            c_b[j]  = cpy[j] > ccy1;
+        end
+    end
+    function automatic [2:0] cclass(input [3:0] m, input [3:0] in, input [3:0] l, input [3:0] r,
+                                    input [3:0] t, input [3:0] b);
+        if (&(in | ~m))
+            cclass = 3'b001;
+        else if (&(l | ~m) || &(r | ~m) || &(t | ~m) || &(b | ~m))
+            cclass = 3'b100;
+        else
+            cclass = 3'b010;
+    endfunction
+    wire [3:0]  dmask  = (dk >= 3'd4) ? 4'b1111 : (dk == 3'd3) ? 4'b0111 : (dk == 3'd2) ? 4'b0011 : 4'b0001;
+    wire [2:0]  dcls   = redraw ? cclass(4'b0011, c_in, c_l, c_r, c_t, c_b) :
+                         dgo ? cclass(dmask, c_in, c_l, c_r, c_t, c_b) : 3'b000;
+    wire [5:0]  bcls   = {cclass(4'b0011, c_in, c_l, c_r, c_t, c_b), cclass(4'b1100, c_in, c_l, c_r, c_t, c_b)};
+
     // FBC reads (but the store's)
     reg  [31:0] fbc_q;
     always @(*) begin
@@ -374,6 +423,8 @@ module sun3_cg6 #(
             thc_curxy <= 32'h0;
             tec_vdc   <= 3'd0;
             tec_rdw   <= 1'b0;
+            rkeep     <= 1'b0;
+            rnew      <= 2'b00;
         end else if (now) begin
             if (tec_rdw) begin
                 if (!tec_busy) begin                // the TEC's answer
@@ -424,9 +475,27 @@ module sun3_cg6 #(
                         else begin
                             rdata <= 32'h0;
                             if (off == 12'h018) begin       // BLITSTATUS: the blit
+                                rdata <= {18'h0, bcls, 8'h0};
                                 cmd       <= C_BLIT;
                                 start_tgl <= ~start_tgl;
+                            end else if (redraw) begin      // DRAWSTATUS: the last rectangle again
+                                rdata     <= {29'h0, dcls};
+                                cmd       <= C_RECT;
+                                start_tgl <= ~start_tgl;
+                                ek        <= 3'd2;
+                                ex[0] <= rnx0; ey[0] <= rry0;
+                                ex[1] <= rnx1; ey[1] <= rry1;
+                                xr[0] <= 32'(rnx0); yr[0] <= 32'(rry0);
+                                xr[1] <= 32'(rnx1); yr[1] <= 32'(rry1);
+                                rnew <= 2'b00;
+                                prim <= P_NONE;
+                                pend <= 2'b00;
                             end else begin                  // DRAWSTATUS: the queue's primitive
+                                rdata <= {29'h0, dcls};
+                                rnew  <= 2'b00;
+                                rkeep <= dgo && (prim == P_RECT);
+                                rry0  <= sat16(qy[dbase]);
+                                rry1  <= sat16(qy[2'(dbase + 2'd1)]);
                                 if (dgo) begin
                                     cmd       <= (prim == P_LINE) ? C_LINE : dpoly ? C_POLY : C_RECT;
                                     start_tgl <= ~start_tgl;
@@ -463,8 +532,12 @@ module sun3_cg6 #(
                         prim <= vgrp;
                         nv   <= nv_v;
                         pend <= pend_v;
+                        if (off[11:0] == 12'h800) begin rnx0 <= sat16(vsum); rnew[0] <= 1'b1; end
+                        else if (off[11:0] == 12'h880) begin rnx1 <= sat16(vsum); rnew[1] <= 1'b1; end
+                        else if (vcoord) rkeep <= 1'b0;
                         if (vcoord) begin
                             if (pend_n == 2'b11) begin
+                                rkeep <= 1'b0;              // a vertex queued
                                 pend <= 2'b00;
                                 if (nv_v < 7'd64) begin
                                     qx[nv_v[1:0]] <= cx_n;
@@ -518,6 +591,7 @@ module sun3_cg6 #(
         // offset added), into the queue as a CPU's would go; no FBC or TEC
         // cycle is taken meanwhile
         if (!rst && tec_av) begin
+            rkeep <= 1'b0;
             prim <= tec_agrp;
             pend <= 2'b00;
             nv   <= anv;

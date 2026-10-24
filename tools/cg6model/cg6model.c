@@ -307,6 +307,34 @@ static void draw_poly(struct cg6 *g, const int32_t *vx, const int32_t *vy, int n
 	}
 }
 
+/*
+ * DRAWSTATUS's and BLITSTATUS's clip bits (docs/cg6.md, "Status and
+ * timing"): the points a command uses against the clip window, each
+ * coordinate saturated to 16 bits as the engine takes it.  Visible: every
+ * point inside; hidden: every point beyond the same edge; intersect: else.
+ * xnews takes visible to mean nothing of the primitive lies outside this
+ * clip rectangle, and skips its other clip rectangles.
+ */
+static int32_t sat16(int32_t v) { return v < -32768 ? -32768 : v > 32767 ? 32767 : v; }
+
+static uint32_t clip_class(const struct cg6 *g, const int32_t *px, const int32_t *py, int n)
+{
+	int32_t x0 = sat16(g->clipminx), y0 = sat16(g->clipminy), x1 = sat16(g->clipmaxx), y1 = sat16(g->clipmaxy);
+	int in = 1, l = 1, r = 1, t = 1, b = 1;
+
+	for (int i = 0; i < n; i++) {
+		int32_t x = sat16(px[i]), y = sat16(py[i]);
+		in &= x >= x0 && x <= x1 && y >= y0 && y <= y1;
+		l &= x < x0;
+		r &= x > x1;
+		t &= y < y0;
+		b &= y > y1;
+	}
+	if (in)
+		return FBC_S_VISIBLE;
+	return l || r || t || b ? FBC_S_HIDDEN : FBC_S_INTERSECT;
+}
+
 static int need(int prim)
 {
 	static const int n[] = { 1, 2, 3, 4, 2 };
@@ -323,6 +351,20 @@ static void draw(struct cg6 *g)
 	int n = g->nv, k, keep = 0;
 	int32_t *vx, *vy;
 
+	if (g->rkeep && g->rnew == 3 && n == 0) {	/* the last rectangle, new x's */
+		int32_t px[2] = { g->rnx0, g->rnx1 }, py[2] = { g->ry0, g->ry1 };
+		g->dstat = clip_class(g, px, py, 2);
+		g->ndraw[PRIM_RECT]++;
+		draw_rect(g, g->rnx0, g->ry0, g->rnx1, g->ry1);
+		g->x[0] = g->rnx0; g->y[0] = g->ry0;
+		g->x[1] = g->rnx1; g->y[1] = g->ry1;
+		g->rnew = 0;
+		g->prim = PRIM_NONE;
+		g->pend = 0;
+		return;
+	}
+	g->rnew = 0;
+	g->rkeep = 0;
 	if (g->prim == PRIM_NONE)
 		goto done;
 	k = need(g->prim);
@@ -332,6 +374,7 @@ static void draw(struct cg6 *g)
 		goto done;
 	vx = &g->vx[n - k];
 	vy = &g->vy[n - k];
+	g->dstat = clip_class(g, vx, vy, k);
 	g->ndraw[g->prim]++;
 	switch (g->prim) {
 	case PRIM_POINT:
@@ -343,6 +386,9 @@ static void draw(struct cg6 *g)
 		break;
 	case PRIM_RECT:
 		draw_rect(g, vx[0], vy[0], vx[1], vy[1]);
+		g->rkeep = 1;
+		g->ry0 = sat16(vy[0]);
+		g->ry1 = sat16(vy[1]);
 		break;
 	default:
 		draw_poly(g, vx, vy, k);	/* two vertices draw nothing */
@@ -388,6 +434,7 @@ static void queue_prim(struct cg6 *g, int prim)
 /* a whole vertex onto the queue, in the raster's coordinates */
 static void queue_push(struct cg6 *g, int32_t x, int32_t y)
 {
+	g->rkeep = 0;			/* a new vertex: no rectangle to redraw */
 	if (g->nv < 64) {
 		g->vx[g->nv] = x;
 		g->vy[g->nv] = y;
@@ -406,6 +453,16 @@ static void vertex(struct cg6 *g, uint32_t o, uint32_t v)
 	g->vreg[(o - FBC_IPOINT) >> 2] = v;
 	if (prim > PRIM_RECT)
 		return;
+	/*
+	 * After a rectangle, IPOINTABSX and ITRIABSX alone give it new left
+	 * and right x's (the point is the first vertex, the triangle's the
+	 * next), and DRAWSTATUS draws it again on the same rows: xnews fills a
+	 * region a band at a time so (_sh_cg6_FLRS8pg 0x27686..0x2769c).  Any
+	 * other coordinate cancels the rectangle (docs/cg6.md, "Vertices").
+	 */
+	if (o == FBC_IPOINT + 0x00) { g->rnx0 = sat16(sv + g->offx); g->rnew |= 1; }
+	else if (o == FBC_IPOINT + 0x80) { g->rnx1 = sat16(sv + g->offx); g->rnew |= 2; }
+	else if (reg == 0x00 || reg == 0x04 || reg == 0x10 || reg == 0x14) g->rkeep = 0;
 	queue_prim(g, prim);
 	lx = g->nv ? g->vx[g->nv - 1] : g->x[0];
 	ly = g->nv ? g->vy[g->nv - 1] : g->y[0];
@@ -498,12 +555,15 @@ static uint32_t command(struct cg6 *g, int is_blit)
 		g->nfull++;
 		return FBC_S_EXCEPTION | FBC_S_FULL | FBC_S_BUSY;
 	}
-	if (is_blit)
+	g->dstat = 0;
+	if (is_blit) {
+		/* the source x0,y0 .. x1,y1 (13:11), the destination x2,y2 .. x3,y3 (10:8) */
+		g->dstat = clip_class(g, &g->x[0], &g->y[0], 2) << 11 | clip_class(g, &g->x[2], &g->y[2], 2) << 8;
 		blit(g);
-	else
+	} else
 		draw(g);
 	g->busy = g->busy_polls;
-	return 0;
+	return g->dstat;
 }
 
 static uint32_t fbc_read(struct cg6 *g, uint32_t o)

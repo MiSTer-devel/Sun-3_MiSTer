@@ -429,7 +429,7 @@ task automatic replay(input string pfx, input int ti);
                 if (lockstep && lock_font && nacc >= lock_from && off == 24'h70001C) lock_compare(pfx, nacc, line);
             end else if (off == 24'h700014 || off == 24'h700018) begin
                 do begin bus(0, off, size, 0, q); nfull += q[29]; end while (q[31] && q[29]);
-                check(q == 0, $sformatf("%s: a command read %08x when taken", pfx, q));
+                check(q == v, $sformatf("%s: a command read %08x when taken, the model %08x", pfx, q, v));
                 if (lockstep && nacc >= lock_from) lock_compare(pfx, nacc, line);
             end else if (off == 24'h700010) begin
                 do begin bus(0, off, size, 0, q); nbusy += q[28]; end while (q[28] && !v[28]);
@@ -634,7 +634,7 @@ initial begin
     wr32(24'h700904, 0); wr32(24'h700900, 0);
     wr32(24'h700904, FBH - 1); wr32(24'h700900, FBW - 1);
     rd32(24'h700014, q);
-    check(q == 0, $sformatf("DRAWSTATUS takes the rectangle: %08x", q));
+    check((q & ~32'h7) == 0, $sformatf("DRAWSTATUS takes the rectangle: %08x", q));
     rd32(24'h700014, q);
     check(q == 32'hB0000000, $sformatf("DRAWSTATUS while busy: %08x (EXCEPTION | FULL | BUSY)", q));
     rd32(24'h700018, q);
@@ -656,6 +656,33 @@ initial begin
         check(nb == 0, $sformatf("the fill drew with the colour before the write: %0d pixels not", nb));
     end
     check(fb_peek(0) == 8'h5A && fb_peek(NPIX - 1) == 8'h5A, "the fill's corners");
+
+    // ---- the clip bits: against the window (100,100)-(199,199), a command
+    // reads visible (every point inside), hidden (every point past one edge)
+    // or intersect; a blit its source in 13:11 and destination in 10:8
+    begin
+        wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h21);
+        wr32(24'h7000C0, 0); wr32(24'h7000C4, 0);
+        wr32(24'h7000E0, 100); wr32(24'h7000E4, 100); wr32(24'h7000F0, 199); wr32(24'h7000F4, 199);
+        wr32(24'h700904, 120); wr32(24'h700900, 120); wr32(24'h700904, 150); wr32(24'h700900, 150);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h1, $sformatf("a rectangle inside: %08x, visible", q));
+        wr32(24'h700904, 120); wr32(24'h700900, 50); wr32(24'h700904, 150); wr32(24'h700900, 150);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h2, $sformatf("a rectangle across the left edge: %08x, intersect", q));
+        wr32(24'h700904, 120); wr32(24'h700900, 300); wr32(24'h700904, 150); wr32(24'h700900, 400);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h4, $sformatf("a rectangle right of it: %08x, hidden", q));
+        wr32(24'h700904, 50); wr32(24'h700900, 50); wr32(24'h700904, 300); wr32(24'h700900, 300);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h2, $sformatf("a rectangle over it: %08x, intersect", q));
+        wr32(24'h700844, 120); wr32(24'h700840, 120); wr32(24'h700844, 300); wr32(24'h700840, 150);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h2, $sformatf("a line out of it: %08x, intersect", q));
+        wr32(24'h700844, 150); wr32(24'h700840, 199);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h2, $sformatf("a line from (150,300) back in: %08x, intersect", q));
+        wr32(24'h700804, 150); wr32(24'h700800, 99);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h4, $sformatf("a point just left of it: %08x, hidden", q));
+        wr32(24'h700080, 120); wr32(24'h700084, 120); wr32(24'h700090, 130); wr32(24'h700094, 130);
+        wr32(24'h7000A0, 300); wr32(24'h7000A4, 300); wr32(24'h7000B0, 310); wr32(24'h7000B4, 310);
+        rd32(24'h700018, q); wait_idle(); check(q == 32'h00000C00, $sformatf("a blit from inside to below: %08x", q));
+        wr32(24'h7000E0, 0); wr32(24'h7000E4, 0); wr32(24'h7000F0, FBW - 1); wr32(24'h7000F4, FBH - 1);
+    end
 
     // ---- a relative vertex is relative to the last one: (100,100), then
     // (400,300), then (+5,+3) -- the rectangle (400,300)-(405,303)

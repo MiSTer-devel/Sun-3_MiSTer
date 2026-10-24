@@ -1453,6 +1453,23 @@ static void g_rect(void)
 	g_go(FBC_DRAWSTATUS);
 	if (rn(4))
 		g_wait();
+	/* more rectangles on the same rows, by IPOINTABSX and ITRIABSX alone,
+	   as xnews fills a region's band (sometimes one alone, or interrupted
+	   by another coordinate: then nothing, or the queue's own) */
+	if (rn(3) == 0)
+		for (int i = 0, n = 1 + rn(5); i < n; i++) {
+			int32_t a = rn(CG6_W), b = a + rn(rn(4) ? 100 : 600) - 10;
+			switch (rn(8)) {
+			case 0: gw(FBC_IPOINT + 0x80, b); break;
+			case 1: gw(FBC_IPOINT + 0x00, a); break;
+			case 2: gw(FBC_IPOINT + 0x00, a); gw(FBC_IPOINT + 0x84, rn(CG6_H)); gw(FBC_IPOINT + 0x80, b); break;
+			case 3: gw(FBC_IPOINT + 0x80, b); gw(FBC_IPOINT + 0x00, a); break;
+			default: gw(FBC_IPOINT + 0x00, a); gw(FBC_IPOINT + 0x80, b); break;
+			}
+			g_go(FBC_DRAWSTATUS);
+			if (rn(3) == 0)
+				g_wait();
+		}
 }
 
 /*

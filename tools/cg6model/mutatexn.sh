@@ -30,6 +30,7 @@ mutations=(
 	'(uint32_t)(g->nv & 3) << 4 |@@(uint32_t)((g->nv - 1) & 3) << 4 |@@MISC'"'"'s index the next slot'
 	'f_pack(s, ea + eb - 127,@@f_pack(s, ea + eb - 126,@@the product'"'"'s exponent'
 	'(g->misc_vblank ? MISC_VBLANK : 0);@@(g->misc & MISC_VBLANK);@@MISC'"'"'s vertical blank, not as written'
+	'if (g->rkeep && g->rnew == 3 && n == 0) {@@if (0) {@@a rectangle redrawn by its lone x'"'"'s (region fills)'
 )
 
 caught=0; total=0
