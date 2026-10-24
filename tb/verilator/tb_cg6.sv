@@ -684,6 +684,30 @@ initial begin
         wr32(24'h7000E0, 0); wr32(24'h7000E4, 0); wr32(24'h7000F0, FBW - 1); wr32(24'h7000F4, FBH - 1);
     end
 
+    // ---- a region's band as xnews fills it (_sh_cg6_FLRS8pg): a rectangle
+    // (10,500)-(20,514), then (40,..)-(50,..) and (70,..)-(80,..) by
+    // IPOINTABSX and ITRIABSX alone, on the same 15 rows; then one x and a
+    // y between: nothing more
+    begin
+        int nb = 0;
+        wr32(24'h700100, 32'h66);
+        wr32(24'h700904, 500); wr32(24'h700900, 10); wr32(24'h700904, 514); wr32(24'h700900, 20);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700800, 40); wr32(24'h700880, 50);
+        rd32(24'h700014, q); wait_idle();
+        check(q == 32'h1, $sformatf("a band's second rectangle: %08x, visible", q));
+        wr32(24'h700800, 70); wr32(24'h700880, 80);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700800, 100); wr32(24'h700884, 600); wr32(24'h700880, 110);
+        rd32(24'h700014, q); wait_idle();
+        while (!mem_idle) @(posedge mclk);
+        for (int y = 498; y < 517; y++)
+            for (int x = 5; x < 115; x++)
+                nb += ((fb_peek(y * FBW + x) == 8'h66) != (y >= 500 && y <= 514 &&
+                       ((x >= 10 && x <= 20) || (x >= 40 && x <= 50) || (x >= 70 && x <= 80))));
+        check(nb == 0, $sformatf("a band of three rectangles by their x's alone: %0d pixels wrong", nb));
+    end
+
     // ---- a relative vertex is relative to the last one: (100,100), then
     // (400,300), then (+5,+3) -- the rectangle (400,300)-(405,303)
     wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h3C);
