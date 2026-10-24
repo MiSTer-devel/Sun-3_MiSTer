@@ -1,10 +1,11 @@
 # Sun-3 for MiSTer
 
 A Sun-3/60C workstation for the MiSTer FPGA platform. This is a 68020 Sun with
-Sun's own MMU, an MC68881, 24 MiB of memory, the on-board bw2 and the P4 cg4
-colour frame buffer. It also has the LANCE Ethernet, the on-board SCSI with
-disk and QIC tape, the Sun keyboard and mouse, and the ICM7170 clock. It runs
-Sun's own boot PROM and SunOS.
+Sun's own MMU, an MC68881, 24 MiB of memory, the on-board bw2 and a P4 colour
+board: the cg4, or the accelerated GX (cg6). It also has the LANCE Ethernet,
+the on-board SCSI with two disks, a QIC tape and a CD-ROM drive, the Sun
+keyboard and mouse, and the ICM7170 clock. It runs Sun's own boot PROM,
+SunOS and NetBSD.
 
 **Status: early, but it boots SunOS.** On a MiSTer the boot PROM (Rev
 3.0.1; Rev 1.9 runs too) comes up on the colour board's console or the mono
@@ -12,9 +13,16 @@ one, takes the keyboard, and keeps its settings in an EEPROM file. SunOS 4.1.1 i
 a 1 GB disk image and boots from it multi-user, and takes 4.1.1_U1, the Y2K
 patch and Sun's later patches
 ([docs/install-sunos.md](docs/install-sunos.md)). A second disk works,
-SunView and OpenWindows 2.0 run in mono and in colour with the mouse, the
-Ethernet works (see *The network*), and the CPU runs at 20, 25 or 33 MHz
-(see *The CPU clock*).
+SunView and OpenWindows 2.0 run in mono and in colour with the mouse, on
+the cg4 or the GX, the Ethernet works (see *The network*), and the CPU runs
+at 20, 25 or 33 MHz (see *The CPU clock*). SunOS reads CD-ROM images, and
+NetBSD 11.0 installs from its CD image and runs (see *NetBSD*).
+
+New in `Sun-3_20261024.rbf`:
+* the **GX** (cg6), Sun's accelerated colour board, as a choice for the P4
+  slot (see *Colour*);
+* a **CD-ROM drive** at SCSI ID 6 (see *The CD-ROM*);
+* the tape drive now works under NetBSD as well as SunOS.
 
 * [docs/hardware.md](docs/hardware.md): the machine, as locked with the
   owner. It covers the inventory, the address map and the media.
@@ -43,8 +51,9 @@ The network and the ID PROM are served by Main_MiSTer's Sun family support
 
 ## What you will need
 
-* **the core**, from [`releases/`](releases/): `Sun-3_20261022.rbf`, for
-  `_Computer/` (or `_Unstable/`);
+* **the core**, from [`releases/`](releases/): `Sun-3_20261024.rbf`, for
+  `_Computer/` (or `_Unstable/`). The previous core, `Sun-3_20261022.rbf`,
+  is kept there too; it has no GX and no CD-ROM;
 * a DE10-Nano with an **SDRAM board of 32 MB or more**;
 * the boot PROM, Sun's Rev 3.0.1 for the 3/60, patched for this machine,
   at `games/Sun-3/boot0.rom`: `releases/boot0.rom` (see *The boot PROM*);
@@ -135,9 +144,10 @@ Right Alt. It acts at once.
 The menu follows the layout of the other MiSTer workstation cores. On the top
 page:
 
-* *Pri. disk (ID 0)*, *Disk (ID 1)*, *Tape (ID 4)* and *Tape volume*: the
-  media, which change at once. The disks and the EEPROM image are remembered
-  and mounted again at the next start; the tape is not;
+* *Pri. disk (ID 0)*, *Disk (ID 1)*, *Tape (ID 4)*, *Tape volume* and
+  *CD-ROM (ID 6)*: the media, which change at once. The disks, the CD-ROM
+  image and the EEPROM image are remembered and mounted again at the next
+  start; the tape is not;
 * *Load ROM*: another boot PROM for this session (see *The boot PROM*);
 * *Network interface* (see *The network*);
 * the pages below, and *Apply and reset*.
@@ -217,13 +227,14 @@ colours from 16.7 million, with an overlay plane. The OSD's *Colour board*
 only the on-board mono bw2 (`Model Sun-3/60M`). Change it, then reset. The
 colour board costs the CPU no measurable speed.
 
-*Colour board type* **GX** puts Sun's accelerated colour board (the cg6) in
-the slot instead (docs/cg6.md). It carries the Rev 3.0.1 PROM's console,
-drawn by its own engine, and SunOS 4.1.1's `cgsix0` boots on it. Its engine
-also draws lines, polygons and patterns and it has the hardware cursor, for
-SunView, so far tried only in simulation. OpenWindows 2.0's NeWS graphics
-need the board's transform engine, which is not built: run OpenWindows on
-the cg4. Rev 1.9 has no console on the GX.
+*Colour board type* **GX** puts Sun's accelerated colour board, the cg6,
+in the slot instead: 1152×900 in 256 colours, with a drawing engine that
+fills, copies, draws lines, polygons and text by itself, a transform engine
+for OpenWindows, and a hardware cursor. SunOS 4.1.1 finds it as `cgsix0`.
+SunView and OpenWindows 2.0 both run on it, and colour SunView scrolls text
+faster on the GX than mono SunView does on the bw2. The PROM's banner still
+says `Sun-3/60C/G`. The GX needs the Rev 3.0.1 PROM: Rev 1.9 has no console
+on it. docs/cg6.md describes the board.
 
 ## The CPU clock
 
@@ -330,7 +341,22 @@ the File Manager. Click in a window to type into it. The **right** button
 over the background opens the Workspace menu; its *Exit...* asks to confirm
 and returns to the console. X demos are in `/usr/openwin/demo`; the NeWS ones
 there (`colorwheel`, `fish`) run with `psh`, from a shell inside OpenWindows.
-It has been run with the colour board On; with it Off it is untested.
+It runs on the cg4 and on the GX; with the colour board Off it is
+untested.
+
+## The CD-ROM
+
+*CD-ROM (ID 6)* in the OSD takes an `.iso` image (2048-byte sectors). The
+drive is a Sony CDU-8012, one of the drives SunOS 4.1 knows, read only.
+Under SunOS it is `sr0`:
+
+    mkdir /cdrom
+    mount -r -t hsfs /dev/sr0 /cdrom
+
+The PROM boots a Sun CD through its disk driver, as `b sd(0,30,N)` with N
+the partition (sun3arc's install guide gives `b sd(0,30,4)` for the SunOS
+4.1.1 CD). NetBSD finds the drive as `cd0` and installs from it (see
+*NetBSD*). BIN, CUE and CHD images are not taken.
 
 ## The network
 
@@ -396,8 +422,9 @@ FTP both ways with equal sums, and had no errors on `le0` under load.
 * **Every setting but the media, *Network interface* and *Input* changes
   only in a reset** (*Apply and reset*), and the OSD keeps them for the next start only after *Save
   settings*.
-* **Not tried yet**: NFS, telnet and FTP from the Sun to another machine,
-  and NetBSD. Parts of the cg4 that SunOS never uses are not modelled: the
+* **On the GX, OpenWindows can leave part of a closed window on the
+  screen** until something is drawn over it.
+* **Not tried yet**: NFS, telnet and FTP from the Sun to another machine. Parts of the cg4 that SunOS never uses are not modelled: the
   P4 register's first-half-of-retrace bit, its interrupt-pending bit
   latching while its enable is off, and the Bt458's blink and command bit 6.
 

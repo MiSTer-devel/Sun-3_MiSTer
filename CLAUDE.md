@@ -15,7 +15,8 @@ danifunker/Main_MiSTer).
 
 * **Work on `master`.** Ask before pushing.
 * **`releases/` holds only what goes on a MiSTer**: the core
-  (`Sun-3_YYYYMMDD.rbf`, the bitstream tested on the board) and `boot0.rom`
+  (`Sun-3_YYYYMMDD.rbf`, the bitstream tested on the board; earlier ones are
+  kept, never deleted, and no README goes there) and `boot0.rom`
   (the patched Rev 3.0.1 PROM, `make -C tools`). The README's "What you will need" says where each goes
   and what it was built from; keep the two in step.
 * **A plain checkout builds with Quartus 17.0.2 alone.**
