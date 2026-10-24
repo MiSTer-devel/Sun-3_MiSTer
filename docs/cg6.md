@@ -1607,6 +1607,14 @@ IEEE single as it is, not whatever wider form a real TEC has inside.
 
 ### On the board
 
+**Window frames and repaint fixed (2026-10-24, master `b50c283`, seed 3;
+`cpu_clk` +1.828 ns on GCLK9, `clk_mem` +0.202 ns, 33,509 ALMs):** with
+DRAWSTATUS drawing the last primitive again on each new clip window, olwm's
+frames draw whole (ico's title bar with "Ico", as on the cg4) and closing
+a window repaints what it uncovered, with no black strip. Still differing
+from the cg4: the File Manager's path pane, part of which is laid out
+differently after a window over it closes.
+
 **Runs (2026-10-24, master `84c4321`, 33 MHz):** `openwin` comes up on
 the GX. The OpenWindows 2 splash, olwm's frames, the cmdtool and the File
 Manager draw as on the cg4 (OPEN LOOK's rounded buttons are NeWS paths
