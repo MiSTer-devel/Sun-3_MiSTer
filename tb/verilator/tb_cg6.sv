@@ -704,7 +704,7 @@ initial begin
 
     // ---- the TEC's rounding where random operands seldom go: a product
     // whose sticky bit is in its lowest 12 (a tie without it), one that
-    // rounds to an exponent of 255 (infinity), infinity plus one; and an FBC
+    // rounds to an exponent of 255 (infinity), inf - inf (the first); and an FBC
     // point followed by
     // a line vertex: the point is the line's first
     begin
@@ -716,10 +716,10 @@ initial begin
         wr32(24'h7011C0, 32'h7F400000); wr32(24'h7011C4, 32'h3FC00000);
         wr32(24'h701010, 32'h00303132);
         rd32(24'h7011C8, q); check(q == 32'h7F800000, $sformatf("a product to infinity: %08x", q));
-        wr32(24'h7011C0, 32'h7F800000); wr32(24'h7011C4, 32'h3F800000);   // inf . 1 + 1 . 1
-        wr32(24'h7011C8, 32'h3F800000); wr32(24'h7011CC, 32'h3F800000);
+        wr32(24'h7011C0, 32'h7F800000); wr32(24'h7011C4, 32'h3F800000);   // inf . 1 + 1 . -inf
+        wr32(24'h7011C8, 32'h3F800000); wr32(24'h7011CC, 32'hFF800000);
         wr32(24'h701010, 32'h40303234);
-        rd32(24'h7011D0, q); check(q == 32'h7F800000, $sformatf("infinity plus one: %08x", q));
+        rd32(24'h7011D0, q); check(q == 32'h7F800000, $sformatf("infinity minus infinity: %08x, not the first", q));
         wr32(24'h700100, 32'h55);
         wr32(24'h700804, 600); wr32(24'h700800, 200);
         wr32(24'h700844, 600); wr32(24'h700840, 300);
