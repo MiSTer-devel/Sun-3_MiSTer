@@ -1388,6 +1388,21 @@ Stage 1's fit was 29,962 ALMs (71%); this makes 31.8-32.5k (76-78%).
 
 ### On the board
 
+**Done (2026-10-23, 192.168.99.143, master `ba663a5`, 33 MHz):** the
+boot attaches `cgsix0 at obmem 0xff000000 pri 4`; `sunview` comes up in
+colour with the gray pattern desktop, coloured icons and shelltools; the
+hardware cursor shows and moves smoothly, its colours following the
+window under it (purple over `spheresdemo`, black on the desktop), as
+SunView sets them; 2,000 lines of `/etc/termcap` in a shelltool take
+15.0 s (the mono bw2's was 16.5 s at 33 MHz); `bouncedemo` and
+`spheresdemo` draw correctly, the latter in its own colour map. The full
+build that got there needed the engine's command inputs copied on mclk,
+its extents and line set-up registered, and two more register stages for
+100 MHz (ba663a5, d7064cb, 9d9bdd0): 33,128 ALMs, 79%, `cpu_clk`
++1.568 ns, `clk_mem` +0.372 ns.
+
+The test plan was:
+
 With *Colour board type* GX, SunOS 4.1.1_U1 installed:
 1. The boot: `cgsix0 at obmem 0xff000000 pri 4`, the console as before.
 2. `sunview` from the console login. The gray desktop (a replrop: the
@@ -1527,6 +1542,15 @@ IEEE single as it is, not whatever wider form a real TEC has inside.
 | **total** | **800-1,150** | **1** | **1** |
 
 ### On the board
+
+**First try (2026-10-23, `ba663a5`): nothing is drawn.** `openwin` leaves
+the screen untouched; `xnews` runs (state R, minutes of CPU) with no
+system calls, in a byte-wise software raster-op loop at PC 0x0e47fc in
+the static code of `cg6CpSI.o` (a `gcore`), on buffers in its own heap.
+Being looked at: what sends xnews's GX code to that software path, and
+where its bounds come from.
+
+The test plan:
 
 With *Colour board type* GX and SunOS 4.1.1_U1, `openwin` from the
 console login:
