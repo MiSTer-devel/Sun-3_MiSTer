@@ -155,14 +155,20 @@ module sun3_cg6_engine #(
     function automatic s22 lmax(input s22 a, input s22 b); return (a > b) ? a : b; endfunction
     function automatic s22 lmin(input s22 a, input s22 b); return (a < b) ? a : b; endfunction
 
-    wire signed [17:0] cx0 = smax(s18'(clipminx), 18'sd0);
-    wire signed [17:0] cx1 = smin(s18'(clipmaxx), 18'sd1151);
-    wire signed [17:0] cy0 = smax(s18'(clipminy), 18'sd0);
-    wire signed [17:0] cy1 = smin(s18'(clipmaxy), 18'sd910);
-
-    wire signed [17:0] bw   = s18'(x1) - s18'(x0) + 18'sd1;          // a blit's (and the font's) width
-    wire signed [17:0] bh   = s18'(y1) - s18'(y0) + 18'sd1;
-    wire signed [17:0] fend = s18'(x0) + smin(bw - 18'sd1, colour8 ? 18'sd3 : 18'sd31);
+    // Registered from the command's copied inputs, a stage before the extents
+    // below: in one clock, x1 -> bw -> fend/x2+bw -> min with the clip window
+    // missed 100 MHz by 1.7 ns.  E_DRAIN waits a clock more for them.
+    reg  signed [17:0] cx0 = 18'sd0, cx1 = 18'sd0, cy0 = 18'sd0, cy1 = 18'sd0;
+    reg  signed [17:0] bw = 18'sd0, bh = 18'sd0, fend = 18'sd0;
+    always @(posedge mclk) begin
+        cx0  <= smax(s18'(clipminx), 18'sd0);
+        cx1  <= smin(s18'(clipmaxx), 18'sd1151);
+        cy0  <= smax(s18'(clipminy), 18'sd0);
+        cy1  <= smin(s18'(clipmaxy), 18'sd910);
+        bw   <= s18'(x1) - s18'(x0) + 18'sd1;                     // a blit's (and the font's) width
+        bh   <= s18'(y1) - s18'(y0) + 18'sd1;
+        fend <= s18'(x0) + smin(s18'(x1) - s18'(x0), colour8 ? 18'sd3 : 18'sd31);
+    end
 
     s18  c_xa, c_xb, c_ya, c_yb;
     logic c_ok;
@@ -216,6 +222,7 @@ module sun3_cg6_engine #(
                      E_PS1  = 6'd30, E_PS2   = 6'd31, E_PS3   = 6'd32, E_PNEXT = 6'd33,
                      E_PST1 = 6'd34, E_PST2  = 6'd35;
     reg  [5:0]  st = E_IDLE;
+    reg         dwait = 1'b0;           // E_DRAIN's first clock
 
     // The command's coordinates and clip window, copied on mclk when a command
     // is taken (E_IDLE, `pending'; they are held still from start_tgl to
@@ -462,10 +469,15 @@ module sun3_cg6_engine #(
             done_tgl <= 1'b0;
         end else case (st)
             E_IDLE:
-                if (pending && !ge_req) st <= E_DRAIN;
+                if (pending && !ge_req) begin
+                    st     <= E_DRAIN;
+                    dwait  <= 1'b1;
+                end
 
-            E_DRAIN:                        // the CPU's posted writes first
-                if (mem_idle) st <= E_SETUP;
+            E_DRAIN: begin                  // the CPU's posted writes first,
+                dwait <= 1'b0;              // and a clock for cx0..fend, then e_*
+                if (mem_idle && !dwait) st <= E_SETUP;
+            end
 
             E_SETUP: begin
                 xa <= 11'(e_xa);
