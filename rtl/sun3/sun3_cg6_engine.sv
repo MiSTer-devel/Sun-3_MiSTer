@@ -260,6 +260,7 @@ module sun3_cg6_engine #(
     reg  [25:0] lw = 26'd0;                 // the burst's SDRAM word (8-aligned)
     reg  signed [17:0] fsh = 18'sd0;        // the font: 16 * ln - x0
     reg  [15:0] prot = 16'h0;               // the pattern's row, turned by its x alignment
+    reg  [15:0] prow_r = 16'h0;             // ... the row, a clock before (E_ROW, then E_ROW2)
 
     // a blit's source, per row
     reg  signed [17:0] sy = 18'sd0;         // the source row
@@ -334,7 +335,7 @@ module sun3_cg6_engine #(
     wire [3:0]   prw  = 4'(cy[3:0] + pattalign[3:0]);
     wire [31:0]  pwd  = pattern[255 - 32 * prw[3:1] -: 32];
     wire [15:0]  prow = prw[0] ? pwd[15:0] : pwd[31:16];
-    wire [31:0]  prr  = {prow, prow} << pattalign[7:4];
+    wire [31:0]  prr  = {prow_r, prow_r} << pattalign[7:4];   // from E_ROW's row: 100 MHz
     reg  [127:0] s_pat;
     always @(*)
         for (int b = 0; b < 16; b++)
@@ -446,7 +447,11 @@ module sun3_cg6_engine #(
     wire [17:0] dv_rs = {dv_r[16:0], dv_n[17]};             // the divider's next partial remainder
     wire        dv_ge = (dv_rs >= 18'(p_dy));
     // the edge's numbers once divided
-    wire signed [21:0] p_adx = (p_dx < 0) ? -p_dx : p_dx;
+    // |dx|, registered: p_dx is set in E_PE0 and the division takes 18 clocks
+    // before E_PE1 reads it (p_dx -> |dx| -> q*dy -> step*dy -> e_ka missed
+    // 100 MHz)
+    reg  signed [21:0] p_adx = 22'sd0;
+    always @(posedge mclk) p_adx <= (p_dx < 0) ? -p_dx : p_dx;
     wire signed [21:0] p_q   = s22'({1'b0, dv_q});
     wire signed [21:0] p_qdy = p_adx - s22'({1'b0, dv_r});  // q * dy
     wire signed [21:0] p_dys = (p_dx < 0) ? -p_qdy : p_qdy; // step * dy
@@ -505,13 +510,14 @@ module sun3_cg6_engine #(
                 lend <= xbr_n[10:4];
                 lrow <= {cy, 6'd0} + {3'd0, cy, 3'd0};
                 fsh  <= s18'({xa[10:4], 4'b0000}) - s18'(x0);
-                prot <= prr[31:16];
+                prow_r <= prow;
                 sy   <= sy_n;
                 va   <= clamp13(23'(s18'(x2)) - 23'(s18'(x0)));        // x + x0 - x2 >= 0
                 st   <= E_ROW2;
             end
 
             E_ROW2: begin                   // (a clock each, for the 100 MHz)
+                prot <= prr[31:16];
                 srow <= (sy >= 0) && (sy <= 18'sd910);
                 soff <= so_n;
                 st   <= E_ROW3;
