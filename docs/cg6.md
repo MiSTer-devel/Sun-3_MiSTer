@@ -224,6 +224,21 @@ The indexed registers queue vertices for DRAWSTATUS:
     (**verified** by running it: with a new queue at the line, the first
     edge of 41 outlines in 50 is missing). libpixrect never writes a line
     vertex after a point, so its tests do not change.
+* **DRAWSTATUS again, with nothing queued since, draws the same primitive
+  again**, on the clip window as it is then. OpenWindows 2.0's xnews draws
+  a filled rectangle or a line once per clip rectangle of the window's
+  visible region so: the vertices written once, then for each clip
+  rectangle the clip registers and a DRAWSTATUS (`_shape_ras` 0x7e66..
+  0x7f02, the X server's rectangle fill; `_vectors_ras` 0x8a78..0x8b16;
+  `_sh_lg_L2Dsg`). Consuming the queue, the core drew such a shape in the
+  first clip rectangle only (**verified** in xnews's code; the cure is to
+  be tried on the board). The board showed it (2026-10-24, the GX against
+  the cg4, same build): olwm's frame for `ico` was missing all
+  but its top border (the first clip rectangle), and after `ico` was
+  killed a strip of the exposed area stayed unpainted. A new vertex, or a
+  register of another primitive written, ends it; the next vertices begin
+  a new primitive as before (libpixrect's polygons of 2 or 3 vertices
+  depend on that: with the queue kept, 15 tests in 3,000 fail).
 * **A rectangle again, by its x's alone.** After a rectangle is drawn, an
   IPOINTABSX write and an ITRIABSX write (the point the first vertex, the
   triangle's the next), with no other coordinate written, give it new left
@@ -231,12 +246,11 @@ The indexed registers queue vertices for DRAWSTATUS:
   OpenWindows 2.0's xnews fills a region so, a band at a time: the band's
   first rectangle whole (IRECT y x y x), each further one by the two x's
   alone (`_sh_cg6_FLRS8pg` 0x27686..0x2769c; the only place it writes
-  ITRIABSX). xnews repairs exposed areas with it. **Verified** by running
-  it (`xnews68k`, *The TEC's check*): without the rule a band's every
-  rectangle but the first is left undrawn, which is what the board showed
-  (2026-10-24: after `ico` was killed, a strip beside the File Manager was
-  left unpainted). Any other coordinate written, or a vertex queued,
-  cancels it; a DRAWSTATUS then draws what the queue holds.
+  ITRIABSX). **Verified** by running it (`xnews68k`, *The TEC's check*):
+  without the rule a band's every rectangle but the first is left
+  undrawn. (It did not cure the board's strip; the rule above did, or is
+  expected to.) Any other coordinate written, or a vertex queued, cancels
+  it; a DRAWSTATUS then draws what the queue holds.
 * **DRAWSTATUS read** draws from the last vertices queued:
 
   | primitive | draws |

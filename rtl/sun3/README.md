@@ -67,6 +67,8 @@ both ways.
     blank (`_install_cmap` waits on it); DRAWSTATUS's and BLITSTATUS's clip
     bits (visible, intersect, hidden); a rectangle drawn again by lone
     IPOINTABSX/ITRIABSX writes (its region fill, `_sh_cg6_FLRS8pg`);
+    a DRAWSTATUS with nothing new queued drawing the last primitive again
+    (it draws a shape once per clip rectangle);
   * `sun3_cached_fifo_bridge.v` has a `WB_IDLE` output (nothing queued or
     in flight), which the engine waits for before it draws, so that the
     CPU's posted frame-buffer writes land first;
