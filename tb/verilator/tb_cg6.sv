@@ -686,8 +686,8 @@ initial begin
 
     // ---- a region's band as xnews fills it (_sh_cg6_FLRS8pg): a rectangle
     // (10,500)-(20,514), then (40,..)-(50,..) and (70,..)-(80,..) by
-    // IPOINTABSX and ITRIABSX alone, on the same 15 rows; then one x and a
-    // y between: nothing more
+    // IPOINTABSX and ITRIABSX alone, on the same 15 rows; then with a y
+    // between, or a lone y before: nothing more
     begin
         int nb = 0;
         wr32(24'h700100, 32'h66);
@@ -699,6 +699,10 @@ initial begin
         wr32(24'h700800, 70); wr32(24'h700880, 80);
         rd32(24'h700014, q); wait_idle();
         wr32(24'h700800, 100); wr32(24'h700884, 600); wr32(24'h700880, 110);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700904, 500); wr32(24'h700900, 10); wr32(24'h700904, 514); wr32(24'h700900, 20);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700904, 700); wr32(24'h700800, 90); wr32(24'h700880, 95);   // a lone y first
         rd32(24'h700014, q); wait_idle();
         while (!mem_idle) @(posedge mclk);
         for (int y = 498; y < 517; y++)
