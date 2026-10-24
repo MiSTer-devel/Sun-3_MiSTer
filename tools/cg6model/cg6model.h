@@ -99,6 +99,7 @@ struct cg6 {
 	uint32_t thc_misc;		/* bits written: video, syncen, curres, inten, cycles */
 	int thc_int;			/* the retrace interrupt pending */
 	int vsync;			/* the raster is in vertical sync */
+	int misc_vblank;		/* FBC MISC 19: a vertical blank since it was cleared */
 	uint32_t cursxy, cursa[32], cursb[32];
 
 	/* Bt458 */

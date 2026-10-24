@@ -305,6 +305,21 @@ The engine is asynchronous on a real board. Software follows two rules:
   the operation in software (cg6_rop, cg6_vector, cg6_polypoint: `mem_*` on
   the frame buffer).
 
+**MISC bit 19 is the vertical blank** (`l_fbc_misc_vblank`, "1 == VBLANK
+has occured"): set as a vertical blank begins, cleared by writing it 1.
+OpenWindows 2.0's xnews loads a screen's colour map straight into the
+Bt458 through its own mapping of the DAC (`_install_cmap` at 0x977c, the
+screen's fd -1, set by `_init_screen` 0xeff22): it waits for STATUS not
+busy, writes MISC = 0x80000 until bit 19 reads 0, then reads MISC until it
+reads 1, then writes the entries (**verified**, 0x97f8..0x981c). Stored as
+written, bit 19 never cleared and xnews wrote MISC for ever at start-up:
+the first board run of `openwin` spun there (its core's registers: a5 the
+FBC mapping, d5 the DAC's, d3 the screen, a4/a2/a3 a two-entry map's r g
+b, d0 a MISC value). The model sets it at `cg6_vsync`'s rising edge and
+the core at the raster's (`rt_rise`, as the THC's interrupt); tb_cg6
+leaves bit 19 out of its comparison of MISC reads with the model's, whose
+raster is not the bench's.
+
 So a command refused because the engine is busy must read 0xA0000000
 (EXCEPTION | FULL), plus BUSY. **Verified**: with FULL alone, 900 of 5,000
 tests fail as libpixrect falls back to software. The model never raises an
@@ -526,6 +541,9 @@ matrix, its frame buffer's TEC/FBC pointer and type cache, a path):
   same FBC cycles with each autoloaded vertex replaced; for fills and
   outlines, drawn from the shape itself), and the two frame buffers are
   compared.
+* `_install_cmap` (0x977c): a screen's colour map into the Bt458 at a
+  vertical blank (MISC bit 19; the harness's raster begins one every third
+  MISC read), the entries compared.
 
 Each result is compared with the exact one (doubles from the stored
 inputs) and with the software's. `-T` first checks the TEC's arithmetic
@@ -569,10 +587,10 @@ vertices, 82,900 of them autoloaded, and 41,323 commands.)
   leave it out. The fills' reference is drawn from the polygon, not from
   xnews's cycles, so that the fan's restart at MISC's index is checked.
 
-`make -C tools/cg6model mutatexn` breaks 14 of the model's TEC rules one at
+`make -C tools/cg6model mutatexn` breaks 15 of the model's rules one at
 a time (the rounding, the sticky bits, the fixed point, the matrix's and
 the command's layouts, relative vertices, autoload's rounding and offset,
-MISC's index), and `-T` or `-c` catches 14 of 14.
+MISC's index and vertical blank), and `-T` or `-c` catches 15 of 15.
 
 ## The THC
 

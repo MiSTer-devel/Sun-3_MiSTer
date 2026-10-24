@@ -422,7 +422,10 @@ task automatic replay(input string pfx, input int ti);
             end
             if (kind == "w") begin
                 bus(1, off, size, v, q);
+                // the DAC takes D31:24: a longword's top byte, a byte's own
+                // (xnews's _install_cmap writes it a byte at a time)
                 if (off[23:13] == 11'h100 && size == 4) shadow_dac(off, v);
+                if (off[23:13] == 11'h100 && size == 1) shadow_dac(off, {v[7:0], 24'h0});
                 if (lockstep && lock_font && nacc >= lock_from && off == 24'h70001C) lock_compare(pfx, nacc, line);
             end else if (off == 24'h700014 || off == 24'h700018) begin
                 do begin bus(0, off, size, 0, q); nfull += q[29]; end while (q[31] && q[29]);
@@ -443,6 +446,10 @@ task automatic replay(input string pfx, input int ti);
                     if (q != v) ndacbad++;
                 end else if (kept(off)) begin
                     nreg++;
+                    if (off == 24'h700004) begin    // MISC's vertical blank is the raster's
+                        q[19] = 1'b0;
+                        v[19] = 1'b0;
+                    end
                     if (q != v) begin
                         nregbad++;
                         if (nregbad <= 5) $display("FAIL  %s: register read %06x: %08x, the model %08x", pfx, off, q, v);
@@ -729,6 +736,24 @@ initial begin
         for (int x = 195; x < 306; x++)
             nb += ((fb_peek(600 * FBW + x) == 8'h55) != (x >= 200 && x <= 300));
         check(nb == 0, $sformatf("a point, then a line vertex: %0d pixels wrong", nb));
+    end
+
+    // ---- MISC 19, the vertical blank: cleared by a 1 written, set as the
+    // next begins, as xnews's _install_cmap (0x9802) waits for it before it
+    // loads the colour map (left set, it wrote MISC for ever)
+    begin
+        bit [31:0] m0, m1, m2;
+        next_vblank();
+        repeat (40) @(posedge clk);
+        wr32(24'h700004, 32'h00080000);
+        rd32(24'h700004, m0);
+        next_vblank();
+        repeat (40) @(posedge clk);
+        rd32(24'h700004, m1);
+        wr32(24'h700004, 32'h00080000);
+        rd32(24'h700004, m2);
+        check(!m0[19] && m1[19] && !m2[19],
+              $sformatf("MISC's vertical blank: %08x after a clear, %08x after a blank, %08x cleared again", m0, m1, m2));
     end
 
     // ---- the TEC's data registers, as cg6_cntxsave and cg6_cntxrestore

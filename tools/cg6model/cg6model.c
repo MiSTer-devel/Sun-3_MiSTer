@@ -49,6 +49,9 @@ static uint32_t merge_fields(uint32_t old, uint32_t v, uint32_t fields)
 #define ROP_FIELDS	(1u << 30 | 1u << 28 | 1u << 26 | 1u << 24 | 1u << 22)
 
 #define MISC_DATA(g)	((g)->misc >> 17 & 3)	/* 1 colour8, 2 colour1, 3 hrmono */
+/* MISC 19: a vertical blank has begun since 1 was last written to it
+   (docs/cg6.md, "Status and timing"); xnews's _install_cmap waits on it */
+#define MISC_VBLANK	0x80000u
 #define ROP_PLANE(g)	((g)->rasterop >> 30 & 3)
 #define ROP_PIXEL(g)	((g)->rasterop >> 28 & 3)
 #define ROP_PATT(g)	((g)->rasterop >> 26 & 3)
@@ -522,7 +525,8 @@ static uint32_t fbc_read(struct cg6 *g, uint32_t o)
 	case FBC_CONFIG: return 0x60000000u | (uint32_t)g->fhc_rev << 20 | g->fhc;
 	/* MISC's index (5:4) is the queue's: the slot the next vertex goes to
 	   (docs/cg6.md, "The TEC"); index_mod (6) reads 0 */
-	case FBC_MISC: return (g->misc & ~0x70u) | (uint32_t)(g->nv & 3) << 4;
+	case FBC_MISC: return (g->misc & ~0x80070u) | (uint32_t)(g->nv & 3) << 4 |
+			      (g->misc_vblank ? MISC_VBLANK : 0);
 	case FBC_CLIPCHECK: return g->clipcheck;
 	case FBC_STATUS: return status(g);
 	case FBC_DRAWSTATUS: return command(g, 0);
@@ -570,6 +574,8 @@ static void fbc_write(struct cg6 *g, uint32_t o, uint32_t v)
 	case FBC_CONFIG: g->fhc = v & 0xfffff; break;
 	case FBC_MISC:
 		g->misc = merge_fields(g->misc, v, MISC_FIELDS) & 0x3fffff;
+		if (v & MISC_VBLANK)		/* 1 written clears it */
+			g->misc_vblank = 0;
 		break;
 	case FBC_CLIPCHECK: g->clipcheck = v; break;
 	case FBC_STATUS: break;		/* bit 31 clears the pick accumulator */
@@ -629,8 +635,10 @@ static void thc_write(struct cg6 *g, uint32_t o, uint32_t v)
 
 void cg6_vsync(struct cg6 *g, int on)
 {
-	if (on && !g->vsync)
+	if (on && !g->vsync) {
 		g->thc_int = 1;
+		g->misc_vblank = 1;
+	}
 	g->vsync = on;
 }
 

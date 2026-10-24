@@ -36,7 +36,8 @@
 // quadrilateral.  z, the colour vertex registers and the indexed registers
 // read back what was written to them, from the register store.  MISC's
 // index (5:4) reads the queue's next slot (xnews reads the vertex before it
-// back from x0/y0..x3/y3).
+// back from x0/y0..x3/y3); its bit 19 is set as a vertical blank begins and
+// cleared by writing it 1 (xnews waits on it to load the colour map).
 //
 // **The register store** is an M10K of 1,024 words for everything that is
 // only stored: z and colour (FBC 0x088.., 0x08C..), the indexed registers
@@ -117,6 +118,7 @@ module sun3_cg6 #(
     // ---- the registers --------------------------------------------------------------
     reg  [19:0] fhc = 20'h0;
     reg  [21:0] misc = 22'h0;
+    reg         misc_vb = 1'b0;         // MISC 19: a vertical blank since 1 was written to it
     reg  [31:0] clipcheck = 32'h0, font = 32'h0;
     reg  [31:0] xr [0:3];
     reg  [31:0] yr [0:3];
@@ -298,7 +300,7 @@ module sun3_cg6 #(
             fbc_q = pattern[off[4:2]];
         else case (off)
             12'h000: fbc_q = {P4_ID, FHC_REV, fhc};
-            12'h004: fbc_q = {10'h0, misc[21:7], 1'b0, nv[1:0], misc[3:0]};
+            12'h004: fbc_q = {10'h0, misc[21:20], misc_vb, misc[18:7], 1'b0, nv[1:0], misc[3:0]};
             12'h008: fbc_q = clipcheck;
             12'h010: fbc_q = ebusy ? 32'h30000000 : 32'h0;  // BUSY, FULL
             12'h01C: fbc_q = font;
@@ -355,6 +357,7 @@ module sun3_cg6 #(
             busy_q    <= 1'b0;
             fhc       <= 20'h0;
             misc      <= 22'h0;
+            misc_vb   <= 1'b0;
             clipcheck <= 32'h0;
             font      <= 32'h0;
             for (int i = 0; i < 4; i++) begin xr[i] <= 32'h0; yr[i] <= 32'h0; end
@@ -477,7 +480,10 @@ module sun3_cg6 #(
                         end
                     end else case (off)
                         12'h000: fhc       <= wdata[19:0];
-                        12'h004: misc      <= 22'(keep0({10'h0, misc}, wdata, MISC_FIELDS));
+                        12'h004: begin
+                            misc <= 22'(keep0({10'h0, misc}, wdata, MISC_FIELDS));
+                            if (wdata[19]) misc_vb <= 1'b0;     // 1 written clears it
+                        end
                         12'h008: clipcheck <= wdata;
                         12'h01C: begin                      // a row of the font
                             font      <= wdata;
@@ -503,6 +509,10 @@ module sun3_cg6 #(
                 end
             end
         end
+
+        // MISC's vertical blank: set as one begins (after a clear in the
+        // same clock); xnews's _install_cmap clears it and waits for it
+        if (!rst && rt_rise) misc_vb <= 1'b1;
 
         // an autoloaded vertex from the TEC: whole, absolute (the raster
         // offset added), into the queue as a CPU's would go; no FBC or TEC
