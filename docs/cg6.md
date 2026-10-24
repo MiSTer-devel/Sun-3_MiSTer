@@ -1415,8 +1415,8 @@ With *Colour board type* GX, SunOS 4.1.1_U1 installed:
   2,000 lines of termcap` against the cg4; perhaps a destination-read
   burst buffer for line pixels (a line is a read-modify-write a pixel).
 * **Stage 4** (X11): MIT Xsun's `sunGX.c` (relative vertices and triangles
-  are built and in the `-G` traces, never yet driven by real code); then
-  the TEC's 2D affine subset for OpenWindows, from a board trace.
+  are built and in the `-G` traces, never yet driven by real code). The
+  TEC for OpenWindows 2.0 is built since (*The TEC in the core*).
 
 ## The TEC in the core
 
@@ -1497,15 +1497,21 @@ IEEE single as it is, not whatever wider form a real TEC has inside.
   registers of every kind and object, absolute and relative, through
   every MV shape (3 or 4 rows, 1..4 columns, h and z); autoload into
   every primitive, drawn; COMMAND1 for every m and n, anywhere in the 64
-  (504 vertices, 247 autoloaded, 66 commands at the default 400 tests);
+  (519 vertices, 272 autoloaded, 68 commands at the default 400 tests),
+  and lines that begin with an FBC point;
   * a directed TEC line through a scaling matrix, drawn, its results read
-  back in 16.16, and timed; and the two banks' test, with type 0's
-  conversion.
-* **`mutate_cg6.sh`**: MUTN mutants of the TEC and its place in the
+  back in 16.16, and timed; the rounding random operands seldom reach (a
+  product whose only sticky bit is in its low 12, one that rounds up to
+  infinity, inf - inf); an FBC point then a line vertex; and the two
+  banks' test, with type 0's conversion.
+* **`mutate_cg6.sh`**: 36 mutants of the TEC and its place in the
   register file (rounding, saturation, the sticky bits, the alignment,
   infinities, MV's fields, relative vertices, autoload, the command's
   fields, the types' conversions, the second bank, the stall, MISC's
-  index), MUTRES.
+  index) and one of the point-then-line rule, all caught
+  (`mutate_cg6.sh "TEC\|a point not"`). Four were caught only once the
+  directed cases above were added: the low sticky bits, overflow at
+  exactly 255, inf - inf, and a CPU's point before a line.
 
 ### Area (a guess; no fit yet)
 
