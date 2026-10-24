@@ -296,6 +296,11 @@ initial begin
     get_sense(16);
     check(sense[2] == 8'h80 && sense[8] == 8'h1c, "sense: Filemark, NO SENSE, Emulex 0x1C");
     check(sense[0] == 8'hF0 && info_of(sense) == 32'd61, "... valid, residue 61 blocks");
+    cmd(8'h01, 0, 0, 0, 0, 0);
+    read_blocks(64);
+    get_sense(18);
+    check(sense.size() == 16 && {sense[3], sense[4], sense[5], sense[6]} == 32'd61,
+          "the same read, NetBSD's sense (18 asked): the residue whole, 61, no PROM bit in byte 4");
     read_blocks(1);
     check(st_byte == 8'h00 && din.size() == 512 && block_is(din, 0, 1, 1, 0), "the next READ is file 1, past the mark");
     read_blocks(1);
