@@ -422,7 +422,10 @@ task automatic replay(input string pfx, input int ti);
             end
             if (kind == "w") begin
                 bus(1, off, size, v, q);
+                // the DAC takes D31:24: a longword's top byte, a byte's own
+                // (xnews's _install_cmap writes it a byte at a time)
                 if (off[23:13] == 11'h100 && size == 4) shadow_dac(off, v);
+                if (off[23:13] == 11'h100 && size == 1) shadow_dac(off, {v[7:0], 24'h0});
                 if (lockstep && lock_font && nacc >= lock_from && off == 24'h70001C) lock_compare(pfx, nacc, line);
             end else if (off == 24'h700014 || off == 24'h700018) begin
                 do begin bus(0, off, size, 0, q); nfull += q[29]; end while (q[31] && q[29]);
