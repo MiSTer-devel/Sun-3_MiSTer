@@ -712,6 +712,39 @@ initial begin
         check(nb == 0, $sformatf("a band of three rectangles by their x's alone: %0d pixels wrong", nb));
     end
 
+    // ---- a shape once per clip rectangle, its vertices written once, as
+    // xnews's _shape_ras and _vectors_ras draw: a rectangle (600,600)-
+    // (699,649) through three clip windows, each DRAWSTATUS drawing it
+    // again, and the visible bit for the one it lies wholly inside; then a
+    // line through two
+    begin
+        int nb = 0;
+        wr32(24'h700100, 32'h44);
+        wr32(24'h700904, 600); wr32(24'h700900, 600); wr32(24'h700904, 649); wr32(24'h700900, 699);
+        wr32(24'h7000E0, 600); wr32(24'h7000E4, 600); wr32(24'h7000F0, 619); wr32(24'h7000F4, 609);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h2, $sformatf("the shape in a first clip window: %08x", q));
+        wr32(24'h7000E0, 650); wr32(24'h7000E4, 620); wr32(24'h7000F0, 659); wr32(24'h7000F4, 629);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h2, $sformatf("again in a second: %08x", q));
+        wr32(24'h7000E0, 690); wr32(24'h7000E4, 640); wr32(24'h7000F0, 699); wr32(24'h7000F4, 649);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h7000E0, 0); wr32(24'h7000E4, 0); wr32(24'h7000F0, FBW - 1); wr32(24'h7000F4, FBH - 1);
+        rd32(24'h700014, q); wait_idle(); check(q == 32'h1, $sformatf("again, unclipped: %08x, visible", q));
+        wr32(24'h700100, 32'h45);
+        wr32(24'h7000E0, 600); wr32(24'h7000E4, 700); wr32(24'h7000F0, 649); wr32(24'h7000F4, 749);
+        wr32(24'h700844, 720); wr32(24'h700840, 600); wr32(24'h700844, 720); wr32(24'h700840, 699);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h7000E0, 680); wr32(24'h7000F0, 689);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h7000E0, 0); wr32(24'h7000E4, 0); wr32(24'h7000F0, FBW - 1); wr32(24'h7000F4, FBH - 1);
+        while (!mem_idle) @(posedge mclk);
+        for (int y = 595; y < 655; y++)
+            for (int x = 595; x < 705; x++)
+                nb += ((fb_peek(y * FBW + x) == 8'h44) != (x >= 600 && x <= 699 && y >= 600 && y <= 649));
+        for (int x = 595; x < 705; x++)
+            nb += ((fb_peek(720 * FBW + x) == 8'h45) != ((x >= 600 && x <= 649) || (x >= 680 && x <= 689)));
+        check(nb == 0, $sformatf("a rectangle and a line drawn again per clip window: %0d pixels wrong", nb));
+    end
+
     // ---- a relative vertex is relative to the last one: (100,100), then
     // (400,300), then (+5,+3) -- the rectangle (400,300)-(405,303)
     wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h3C);

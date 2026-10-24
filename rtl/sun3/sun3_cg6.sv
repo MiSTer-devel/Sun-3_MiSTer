@@ -297,6 +297,11 @@ module sun3_cg6 #(
     reg  [1:0]  rnew = 2'b00;
     reg  signed [15:0] rnx0 = 16'sh0, rnx1 = 16'sh0, rry0 = 16'sh0, rry1 = 16'sh0;
     wire        redraw = rkeep && (rnew == 2'b11) && (nv == 7'd0);
+    // nothing queued since the last command: a DRAWSTATUS draws the same
+    // again (ex/ey/ek, kept for the engine), on the clip as it is now;
+    // xnews draws a shape once per clip rectangle so
+    reg         redo = 1'b0, lrect = 1'b0;
+    reg  [2:0]  lcmd = C_RECT;
 
     // the clip bits a command reads back: its points against the clip
     // window, 16 bits as the engine takes them.  DRAWSTATUS 2:0 (hidden,
@@ -316,6 +321,9 @@ module sun3_cg6 #(
             if (!blitrd && redraw) begin
                 cpx[j] = j[0] ? rnx1 : rnx0;
                 cpy[j] = j[0] ? rry1 : rry0;
+            end else if (!blitrd && redo) begin
+                cpx[j] = ex[j];
+                cpy[j] = ey[j];
             end
             c_in[j] = (cpx[j] >= ccx0) && (cpx[j] <= ccx1) && (cpy[j] >= ccy0) && (cpy[j] <= ccy1);
             c_l[j]  = cpx[j] < ccx0;
@@ -334,7 +342,9 @@ module sun3_cg6 #(
             cclass = 3'b010;
     endfunction
     wire [3:0]  dmask  = (dk >= 3'd4) ? 4'b1111 : (dk == 3'd3) ? 4'b0111 : (dk == 3'd2) ? 4'b0011 : 4'b0001;
+    wire [3:0]  emask  = (ek >= 3'd4) ? 4'b1111 : (ek == 3'd3) ? 4'b0111 : (ek == 3'd2) ? 4'b0011 : 4'b0001;
     wire [2:0]  dcls   = redraw ? cclass(4'b0011, c_in, c_l, c_r, c_t, c_b) :
+                         redo ? cclass(emask, c_in, c_l, c_r, c_t, c_b) :
                          dgo ? cclass(dmask, c_in, c_l, c_r, c_t, c_b) : 3'b000;
     wire [5:0]  bcls   = {cclass(4'b0011, c_in, c_l, c_r, c_t, c_b), cclass(4'b1100, c_in, c_l, c_r, c_t, c_b)};
 
@@ -425,6 +435,7 @@ module sun3_cg6 #(
             tec_rdw   <= 1'b0;
             rkeep     <= 1'b0;
             rnew      <= 2'b00;
+            redo      <= 1'b0;
         end else if (now) begin
             if (tec_rdw) begin
                 if (!tec_busy) begin                // the TEC's answer
@@ -490,12 +501,27 @@ module sun3_cg6 #(
                                 rnew <= 2'b00;
                                 prim <= P_NONE;
                                 pend <= 2'b00;
+                                redo  <= 1'b1;
+                                lrect <= 1'b1;
+                                lcmd  <= C_RECT;
+                            end else if (redo) begin        // DRAWSTATUS: the last primitive again
+                                rdata     <= {29'h0, dcls};
+                                cmd       <= lcmd;
+                                start_tgl <= ~start_tgl;
+                                rnew  <= 2'b00;
+                                rkeep <= lrect;
+                                rry0  <= ey[0];
+                                rry1  <= ey[1];
+                                pend  <= 2'b00;
                             end else begin                  // DRAWSTATUS: the queue's primitive
                                 rdata <= {29'h0, dcls};
                                 rnew  <= 2'b00;
                                 rkeep <= dgo && (prim == P_RECT);
                                 rry0  <= sat16(qy[dbase]);
                                 rry1  <= sat16(qy[2'(dbase + 2'd1)]);
+                                redo  <= dgo;
+                                lrect <= (prim == P_RECT);
+                                lcmd  <= (prim == P_LINE) ? C_LINE : dpoly ? C_POLY : C_RECT;
                                 if (dgo) begin
                                     cmd       <= (prim == P_LINE) ? C_LINE : dpoly ? C_POLY : C_RECT;
                                     start_tgl <= ~start_tgl;
@@ -532,12 +558,14 @@ module sun3_cg6 #(
                         prim <= vgrp;
                         nv   <= nv_v;
                         pend <= pend_v;
+                        if (prim != vgrp) redo <= 1'b0;   // another kind of primitive
                         if (off[11:0] == 12'h800) begin rnx0 <= sat16(vsum); rnew[0] <= 1'b1; end
                         else if (off[11:0] == 12'h880) begin rnx1 <= sat16(vsum); rnew[1] <= 1'b1; end
                         else if (vcoord) rkeep <= 1'b0;
                         if (vcoord) begin
                             if (pend_n == 2'b11) begin
                                 rkeep <= 1'b0;              // a vertex queued
+                                redo  <= 1'b0;
                                 pend <= 2'b00;
                                 if (nv_v < 7'd64) begin
                                     qx[nv_v[1:0]] <= cx_n;
@@ -592,6 +620,7 @@ module sun3_cg6 #(
         // cycle is taken meanwhile
         if (!rst && tec_av) begin
             rkeep <= 1'b0;
+            redo  <= 1'b0;
             prim <= tec_agrp;
             pend <= 2'b00;
             nv   <= anv;
