@@ -164,32 +164,42 @@ module sun3_cg6_engine #(
     wire signed [17:0] bh   = s18'(y1) - s18'(y0) + 18'sd1;
     wire signed [17:0] fend = s18'(x0) + smin(bw - 18'sd1, colour8 ? 18'sd3 : 18'sd31);
 
-    s18  e_xa, e_xb, e_ya, e_yb;
-    logic e_ok;
+    s18  c_xa, c_xb, c_ya, c_yb;
+    logic c_ok;
     always @(*) begin
         case (cmd)
             C_BLIT: begin
-                e_ok = (bw > 0) && (bh > 0);
-                e_xa = smax(s18'(x2), cx0);
-                e_xb = smin(s18'(x2) + bw - 18'sd1, cx1);
-                e_ya = smax(s18'(y2), cy0);
-                e_yb = smin(s18'(y2) + bh - 18'sd1, cy1);
+                c_ok = (bw > 0) && (bh > 0);
+                c_xa = smax(s18'(x2), cx0);
+                c_xb = smin(s18'(x2) + bw - 18'sd1, cx1);
+                c_ya = smax(s18'(y2), cy0);
+                c_yb = smin(s18'(y2) + bh - 18'sd1, cy1);
             end
             C_FONT: begin
-                e_ok = (bw > 0);
-                e_xa = smax(s18'(x0), cx0);
-                e_xb = smin(fend, cx1);
-                e_ya = smax(s18'(y0), cy0);
-                e_yb = smin(s18'(y0), cy1);
+                c_ok = (bw > 0);
+                c_xa = smax(s18'(x0), cx0);
+                c_xb = smin(fend, cx1);
+                c_ya = smax(s18'(y0), cy0);
+                c_yb = smin(s18'(y0), cy1);
             end
             default: begin
-                e_ok = (vx1 >= vx0) && (vy1 >= vy0);
-                e_xa = smax(s18'(vx0), cx0);
-                e_xb = smin(s18'(vx1), cx1);
-                e_ya = smax(s18'(vy0), cy0);
-                e_yb = smin(s18'(vy1), cy1);
+                c_ok = (vx1 >= vx0) && (vy1 >= vy0);
+                c_xa = smax(s18'(vx0), cx0);
+                c_xb = smin(s18'(vx1), cx1);
+                c_ya = smax(s18'(vy0), cy0);
+                c_yb = smin(s18'(vy1), cy1);
             end
         endcase
+    end
+
+    // ... registered: the vertices fan out to the rectangle, line and polygon
+    // units at once, and the full build did not route with these read straight
+    // from them.  The command's inputs are copied on leaving E_IDLE, so these
+    // are right from E_SETUP on (E_DRAIN lies between).
+    logic e_ok = 1'b0;
+    logic signed [17:0] e_xa = 18'sd0, e_xb = 18'sd0, e_ya = 18'sd0, e_yb = 18'sd0;
+    always @(posedge mclk) begin
+        e_ok <= c_ok; e_xa <= c_xa; e_xb <= c_xb; e_ya <= c_ya; e_yb <= c_yb;
     end
 
 
@@ -370,10 +380,14 @@ module sun3_cg6_engine #(
     // Drawn from its left end; x-major (|dx| >= |dy|) a run of pixels a row,
     // otherwise a pixel a row.
     wire               l_sw  = (vx1 < vx0);
-    wire signed [17:0] l_xa  = l_sw ? s18'(vx1) : s18'(vx0);
-    wire signed [17:0] l_ya  = l_sw ? s18'(vy1) : s18'(vy0);
-    wire signed [17:0] l_dx  = (l_sw ? s18'(vx0) : s18'(vx1)) - l_xa;      // >= 0
-    wire signed [17:0] l_dy  = (l_sw ? s18'(vy0) : s18'(vy1)) - l_ya;
+    // registered, as the extents are: E_LSET comes after E_SETUP
+    reg  signed [17:0] l_xa = 18'sd0, l_ya = 18'sd0, l_dx = 18'sd0, l_dy = 18'sd0;
+    always @(posedge mclk) begin
+        l_xa <= l_sw ? s18'(vx1) : s18'(vx0);
+        l_ya <= l_sw ? s18'(vy1) : s18'(vy0);
+        l_dx <= l_sw ? s18'(vx0) - s18'(vx1) : s18'(vx1) - s18'(vx0);   // >= 0
+        l_dy <= l_sw ? s18'(vy0) - s18'(vy1) : s18'(vy1) - s18'(vy0);
+    end
     wire signed [17:0] l_ady = (l_dy < 0) ? -l_dy : l_dy;
     wire               l_maj = (l_dx >= l_ady);
 
