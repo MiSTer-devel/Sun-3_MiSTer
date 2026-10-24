@@ -17,7 +17,7 @@ trap 'rm -rf "$W"' EXIT
 if [ -n "${M68K:-}" ]; then
 	build=(-DM68K $M68K "$W/harness.c" "$W/cg6model.c" $MUOBJ -lm); img=lp68k
 else
-	build=("$W/harness.c" "$W/cg6model.c" "$W/sparc.c"); img=lp
+	build=("$W/harness.c" "$W/cg6model.c" "$W/sparc.c" -lm); img=lp
 fi
 
 # from @@ to @@ what: literal text in cg6model.c
@@ -27,7 +27,9 @@ mutations=(
 	'return g->pixelmask >> (31 - (i & 31)) & 1;@@return g->pixelmask >> (i & 31) & 1;@@the pixel mask bit order'
 	'int row = (y + ay) & 15, col = (x + ax) & 15;@@int row = (y - ay) & 15, col = (x - ax) & 15;@@the pattern alignment adds'
 	'if (x1 < x0) {@@if (0) {@@lines drawn left to right'
-	'keep = 1;@@keep = 0;@@a line keeps its end vertex'
+	'draw_line(g, vx[0], vy[0], vx[1], vy[1]);
+		keep = 1;@@draw_line(g, vx[0], vy[0], vx[1], vy[1]);
+		keep = 0;@@a line keeps its end vertex'
 	'if (g->pend != 3)@@if (!(g->pend & 1))@@a vertex needs both coordinates'
 	'e->x += e->step >> 1;@@e->x += e->step;@@the polygon edge half step'
 	'e->err += e->dy - e->dx;@@e->err += e->dy - e->dx + 1;@@the polygon edge DDA'
@@ -39,6 +41,7 @@ mutations=(
 	'*p = (cg6_rop8(g->rasterop, g->fcolor, g->bcolor, s, *p) & pm) | (*p & ~pm);@@*p = cg6_rop8(g->rasterop, g->fcolor, g->bcolor, s, *p);@@the plane mask'
 	'case 0x00: g->pend_x = sv + g->offx;@@case 0x00: g->pend_x = sv;@@the raster offset'
 	'if (on && !g->vsync)@@if (0)@@the retrace interrupt'
+	'if (ROP_POLYG(g) == 2) {@@if (1) {@@an overlapping rectangle without its last row and column'
 )
 
 caught=0; total=0

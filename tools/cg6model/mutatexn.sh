@@ -31,6 +31,7 @@ mutations=(
 	'f_pack(s, ea + eb - 127,@@f_pack(s, ea + eb - 126,@@the product'"'"'s exponent'
 	'(g->misc_vblank ? MISC_VBLANK : 0);@@(g->misc & MISC_VBLANK);@@MISC'"'"'s vertical blank, not as written'
 	'if (g->rkeep && g->rnew == 3 && n == 0) {@@if (0) {@@a rectangle redrawn by its lone x'"'"'s (region fills)'
+	'if (ROP_POLYG(g) == 2) {@@if (0) {@@a non-overlapping rectangle without its last row and column'
 )
 
 caught=0; total=0

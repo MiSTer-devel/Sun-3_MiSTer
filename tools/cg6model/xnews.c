@@ -1037,8 +1037,10 @@ static void test_cmap(void)
 
 /* a region filled as xnews repairs exposures: _sh_cg6_FLRS8pg, a band at a
    time, each band's first rectangle whole (IRECT y x y x) and the rest by
-   IPOINTABSX and ITRIABSX alone; the reference draws every rectangle
-   whole, on the clip FLRS sets */
+   IPOINTABSX and ITRIABSX alone, with non-overlapping polygons as
+   _sh_lg_fill_install sets them; the reference draws every rectangle
+   whole, inclusive of its last row and column with overlapping ones, on
+   the clip FLRS sets */
 static unsigned long nregion, nregion_bad, nregion_rects;
 
 static void test_region(void)
@@ -1074,22 +1076,23 @@ static void test_region(void)
 	wr16(FBS + 0x1c, CG6_W); wr16(FBS + 0x1e, CG6_H);
 	wr8(0x139a54, 0);			/* no cursor to take down */
 	mirror = 3;
-	fbc_w(0x108, 0xa980ff00);
+	fbc_w(0x108, 0xaa80ff00);
 	fbc_w(0x100, fcol);
 	fbc_w(0x10c, 0xff);
 	fbc_w(0x110, 0xffffffff);
 	call(sym("_sh_cg6_FLRS8pg"), 3, CV, 0, RG);
 	mirror = 0;
-	/* the reference: every rectangle whole, inclusive, as the first of a
-	   band is drawn */
+	/* the reference: every rectangle whole, a region's x2 and y2 its
+	   first column and row outside */
+	cg6_write(&R, CG6_FBC + 0x108, 4, 0xa980ff00);
 	for (int i = 0; words[i] != 0x8000; ) {
 		int y0 = (int16_t)words[i], y1 = (int16_t)words[i + 1];
 		i += 2;
 		while (words[i] != 0x8001) {
 			cg6_write(&R, CG6_FBC + 0x904, 4, y0);
 			cg6_write(&R, CG6_FBC + 0x900, 4, (int16_t)words[i]);
-			cg6_write(&R, CG6_FBC + 0x904, 4, y1);
-			cg6_write(&R, CG6_FBC + 0x900, 4, (int16_t)words[i + 1]);
+			cg6_write(&R, CG6_FBC + 0x904, 4, y1 - 1);
+			cg6_write(&R, CG6_FBC + 0x900, 4, (int16_t)words[i + 1] - 1);
 			cg6_read(&R, CG6_FBC + FBC_DRAWSTATUS, 4);
 			nregion_rects++;
 			i += 2;

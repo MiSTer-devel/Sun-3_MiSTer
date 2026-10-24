@@ -181,9 +181,11 @@ Every pixel the engine writes goes through one unit:
   * plane 31:30: 1 none, 2 all, 3 PLANEMASK;
   * pixel 29:28: 1 none, 2 all, 3 PIXELMASK;
   * pattern 27:26: s for drawing is 1 zeros, 2 ones, 3 the pattern;
-  * polygon 25:24 (overlap, non-overlap), attr 23:22, raster mode 17
-    (boolean / "linear"), plot/unplot 16: **stored, not modelled**. Sun's
-    code writes overlap or non-overlap, attr "supported", boolean, plot.
+  * polygon 25:24: 1 overlapping, 2 non-overlapping. A rectangle drawn
+    non-overlapping leaves out its right column and bottom row (*Vertices*);
+  * attr 23:22, raster mode 17 (boolean / "linear"), plot/unplot 16:
+    **stored, not modelled**. Sun's code writes attr "supported", boolean,
+    plot.
 * **The plane mask**: planes whose bit is 0 keep their value.
 * **The pixel mask**: pixel x is written only if PIXELMASK bit
   `31 - (x & 31)` is 1. That is screen-absolute alignment, the MSB leftmost
@@ -251,13 +253,25 @@ The indexed registers queue vertices for DRAWSTATUS:
   undrawn. (It did not cure the board's strip; the rule above did, or is
   expected to.) Any other coordinate written, or a vertex queued, cancels
   it; a DRAWSTATUS then draws what the queue holds.
+* **A rectangle's far corner depends on the polygon field.** libpixrect
+  fills overlapping (RASTEROP 0x098...) with the corner x + w - 1,
+  y + h - 1; OpenWindows 2.0's xnews fills non-overlapping (0xEA8...,
+  `_install_context`, `_sh_lg_fill_install`) with x + w, y + h, the X
+  rectangle's or region band's first column and row outside it
+  (`_shape_ras`, `_sh_cg6_FLRS8pg`), and so does sunGX.c (`POLY_N` and
+  `pBox->x2`; its spans and arcs, `POLY_O`, x + width - 1). Both are right
+  only if non-overlapping leaves the far column and row out (**verified**:
+  libpixrect fails 455 tests in 3,000 with every rectangle so; on the board,
+  with every rectangle inclusive, xnews drew `XFillRectangle(x, y, w, 1)`
+  as w + 1 by 2 pixels, a region's background spilled a pixel into the
+  window over it, and the File Manager's path pane lost its divider).
 * **DRAWSTATUS read** draws from the last vertices queued:
 
   | primitive | draws |
   |---|---|
   | point | the vertex |
   | line | from the second-last vertex to the last. **The end vertex stays queued**, so each further vertex draws on from it: `pr_polyline` writes one vertex and one DRAWSTATUS read per segment (**verified**) |
-  | rect | the rectangle between two vertices, inclusive |
+  | rect | the rectangle between two vertices, inclusive; non-overlapping (RASTEROP 25:24 = 2), without its last column and row |
   | tri, quad | the polygon of the queued vertices (2 to 4). Two vertices draw nothing, as in memory |
 
   Every primitive's s is the pattern's (0, 1 or the pattern bit).
@@ -766,7 +780,6 @@ The harness checks all of it.
 * pick mode (MISC draw = 2) and the accumulators;
 * z and the colour vertex registers (stored only);
 * "linear" raster mode;
-* the polygon overlap flag;
 * the clipcheck register's meaning (TEC clip results);
 * the THC's timing and cursor resolution;
 * the FHC's cache, test and endian bits;

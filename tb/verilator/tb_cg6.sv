@@ -168,9 +168,12 @@ typedef struct packed { bit we; bit [29:0] adr; bit [31:0] dat; bit [3:0] sel; }
 fbreq_t     fbq [$];
 reg  [31:0] fb_rd_q;
 bit         fb_rd_done = 0;
+int         fb_gap = 0, fb_wait = 0;    // mclks between requests: a slow bridge, its queue backed up
 always @(posedge mclk) begin
     mem_idle <= (fbq.size() == 0) && !wb_cyc;
-    if (wb_cyc) begin
+    if (fb_wait != 0)
+        fb_wait <= fb_wait - 1;
+    else if (wb_cyc) begin
         if (wb_ack) begin
             wb_cyc <= 1'b0;
             if (!wb_we) begin fb_rd_q <= wb_q; fb_rd_done <= 1'b1; end
@@ -178,6 +181,7 @@ always @(posedge mclk) begin
     end else if (fbq.size() != 0) begin
         fbreq_t r;
         r = fbq.pop_front();
+        fb_wait <= fb_gap;
         wb_cyc <= 1'b1;
         wb_we  <= r.we;
         wb_adr <= r.adr;
@@ -763,6 +767,38 @@ initial begin
         check(nb == 0, $sformatf("a relative vertex: %0d pixels wrong", nb));
     end
 
+    // ---- non-overlapping polygons (RASTEROP 25:24 = 2), as xnews fills: a
+    // rectangle stops short of its second vertex.  XFillRectangle(200, 400,
+    // 197, 1) as _shape_ras writes it, (200,400) and then (+197,+1): row 400,
+    // 200..396; (200,410)-(250,420): 200..249 on 410..419; a point, drawn;
+    // a band of (200,440)-(210,445) and then 220..230 by its x's alone;
+    // (260,450)-(260,455), nothing; then overlapping again
+    begin
+        int nb = 0;
+        wr32(24'h700108, 32'hAA80FF00); wr32(24'h700100, 32'h6D);
+        wr32(24'h700904, 400); wr32(24'h700900, 200);
+        wr32(24'h700914, 1);   wr32(24'h700910, 197);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700904, 410); wr32(24'h700900, 200); wr32(24'h700904, 420); wr32(24'h700900, 250);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700800, 300); wr32(24'h700804, 430);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700904, 440); wr32(24'h700900, 200); wr32(24'h700904, 445); wr32(24'h700900, 210);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700800, 220); wr32(24'h700880, 230);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700904, 450); wr32(24'h700900, 260); wr32(24'h700904, 455); wr32(24'h700900, 260);
+        rd32(24'h700014, q); wait_idle();
+        wr32(24'h700108, 32'hA980FF00);
+        while (!mem_idle) @(posedge mclk);
+        for (int y = 398; y < 458; y++)
+            for (int x = 195; x < 402; x++)
+                nb += ((fb_peek(y * FBW + x) == 8'h6D) != ((y == 400 && x >= 200 && x <= 396) ||
+                       (y >= 410 && y <= 419 && x >= 200 && x <= 249) || (y == 430 && x == 300) ||
+                       (y >= 440 && y <= 444 && ((x >= 200 && x <= 209) || (x >= 220 && x <= 229)))));
+        check(nb == 0, $sformatf("non-overlapping rectangles: %0d pixels wrong", nb));
+    end
+
     // ---- the TEC: a line through MV (x' = 2x + 10, y' = 2y + 20), autoloaded
     // into the FBC's line registers, then drawn: (5.5, 7.25) .. (55.5, 7.25)
     // is (21, 34) .. (121, 34); data 4 and 5 read back as 16.16; and how long
@@ -897,8 +933,10 @@ initial begin
     wr32(24'h7000D4, 0);
 
     // ---- the CPU's posted writes land before the engine draws: a copy set up
-    // first, 64 longwords written to its source, and the copy started at once
+    // first, 64 longwords written to its source, and the copy started at once,
+    // the bridge slow enough that they are still queued then
     wr32(24'h700108, 32'hA980CCCC);
+    fb_gap = 400;
     wr32(24'h700080, 0);   wr32(24'h700084, 10);          // source (0,10)-(255,10)
     wr32(24'h700090, 255); wr32(24'h700094, 10);
     wr32(24'h7000A0, 0);   wr32(24'h7000A4, 20);          // to (0,20)
@@ -906,9 +944,11 @@ initial begin
         bit [31:0] dq;
         bus(1, 24'h800000 + 24'(10 * FBW + 4 * i), 4, 32'hC0DE0000 | i, dq);
     end
+    check(!mem_idle, "the CPU's writes still queued when the copy starts");
     rd32(24'h700018, q);
     wait_idle();
     while (!mem_idle) @(posedge mclk);
+    fb_gap = 0;
     begin
         int nb = 0;
         for (int i = 0; i < 64; i++)

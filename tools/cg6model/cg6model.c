@@ -55,6 +55,7 @@ static uint32_t merge_fields(uint32_t old, uint32_t v, uint32_t fields)
 #define ROP_PLANE(g)	((g)->rasterop >> 30 & 3)
 #define ROP_PIXEL(g)	((g)->rasterop >> 28 & 3)
 #define ROP_PATT(g)	((g)->rasterop >> 26 & 3)
+#define ROP_POLYG(g)	((g)->rasterop >> 24 & 3)	/* 1 overlap, 2 non-overlap */
 
 static uint8_t planes(const struct cg6 *g)
 {
@@ -131,8 +132,18 @@ static void plot(struct cg6 *g, int32_t x, int32_t y, uint8_t s)
 
 /* ---- drawing (docs/cg6.md, "Drawing") ---- */
 
+/*
+ * A rectangle: inclusive of (x1, y1) for overlapping polygons, without its
+ * right column and bottom row for non-overlapping ones (docs/cg6.md,
+ * "Vertices": libpixrect writes x + w - 1 with overlap, xnews and sunGX.c
+ * x + w with non-overlap).
+ */
 static void draw_rect(struct cg6 *g, int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 {
+	if (ROP_POLYG(g) == 2) {
+		x1--;
+		y1--;
+	}
 	if (x1 < x0 || y1 < y0)
 		return;
 	if (x0 < g->clipminx) x0 = g->clipminx;

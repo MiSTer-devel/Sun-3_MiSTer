@@ -15,7 +15,8 @@
 // The commands (docs/cg6.md, "The FBC"):
 //
 //   rect   the rectangle between two vertices, inclusive (and a point, the
-//          rectangle of one)
+//          rectangle of one); without its last row and column when `nonovl'
+//          (RASTEROP's non-overlapping polygons)
 //   line   Bresenham between two vertices, both ends drawn, stepped from the
 //          left end, the error term from -(major/2)
 //   poly   a triangle or quadrilateral of 2..4 vertices, scan-converted as
@@ -79,6 +80,7 @@ module sun3_cg6_engine #(
     input  wire signed [15:0] i_x0, i_y0, i_x1, i_y1, i_x2, i_y2,      // a blit's and the font's
     input  wire signed [15:0] i_vx0, i_vy0, i_vx1, i_vy1, i_vx2, i_vy2, i_vx3, i_vy3,  // a drawing's vertices
     input  wire [2:0]   vk,             // ... how many, a polygon's
+    input  wire         nonovl,         // a rectangle stops short of (vx1, vy1)
     input  wire signed [15:0] i_clipminx, i_clipminy, i_clipmaxx, i_clipmaxy,
     input  wire [31:0]  font,
     input  wire         colour8,        // MISC's data field is colour8
@@ -160,6 +162,7 @@ module sun3_cg6_engine #(
     // missed 100 MHz by 1.7 ns.  E_DRAIN waits a clock more for them.
     reg  signed [17:0] cx0 = 18'sd0, cx1 = 18'sd0, cy0 = 18'sd0, cy1 = 18'sd0;
     reg  signed [17:0] bw = 18'sd0, bh = 18'sd0, fend = 18'sd0;
+    reg  signed [17:0] rx1 = 18'sd0, ry1 = 18'sd0;              // a rectangle's last column, row
     always @(posedge mclk) begin
         cx0  <= smax(s18'(clipminx), 18'sd0);
         cx1  <= smin(s18'(clipmaxx), 18'sd1151);
@@ -168,6 +171,8 @@ module sun3_cg6_engine #(
         bw   <= s18'(x1) - s18'(x0) + 18'sd1;                     // a blit's (and the font's) width
         bh   <= s18'(y1) - s18'(y0) + 18'sd1;
         fend <= s18'(x0) + smin(s18'(x1) - s18'(x0), colour8 ? 18'sd3 : 18'sd31);
+        rx1  <= s18'(vx1) - (nonovl ? 18'sd1 : 18'sd0);
+        ry1  <= s18'(vy1) - (nonovl ? 18'sd1 : 18'sd0);
     end
 
     s18  c_xa, c_xb, c_ya, c_yb;
@@ -189,11 +194,11 @@ module sun3_cg6_engine #(
                 c_yb = smin(s18'(y0), cy1);
             end
             default: begin
-                c_ok = (vx1 >= vx0) && (vy1 >= vy0);
+                c_ok = (rx1 >= s18'(vx0)) && (ry1 >= s18'(vy0));
                 c_xa = smax(s18'(vx0), cx0);
-                c_xb = smin(s18'(vx1), cx1);
+                c_xb = smin(rx1, cx1);
                 c_ya = smax(s18'(vy0), cy0);
-                c_yb = smin(s18'(vy1), cy1);
+                c_yb = smin(ry1, cy1);
             end
         endcase
     end

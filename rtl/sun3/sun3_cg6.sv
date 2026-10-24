@@ -672,6 +672,7 @@ module sun3_cg6 #(
         .i_vx2       (ex[2]), .i_vy2 (ey[2]),
         .i_vx3       (ex[3]), .i_vy3 (ey[3]),
         .vk        (ek),
+        .nonovl    (lrect && rasterop[25:24] == 2'd2),
         .i_clipminx  (sat16(clipminx)),
         .i_clipminy  (sat16(clipminy)),
         .i_clipmaxx  (sat16(clipmaxx)),
