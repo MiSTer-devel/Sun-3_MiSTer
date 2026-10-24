@@ -364,6 +364,37 @@ done:
  * then y for points (docs/cg6.md, "Vertices").  An absolute coordinate has
  * the raster offset added; a relative one is added to the last vertex's.
  */
+static void queue_prim(struct cg6 *g, int prim)
+{
+	if (g->prim != prim) {
+		/*
+		 * A new kind of primitive starts afresh, but for a point
+		 * followed by line, triangle or quadrilateral vertices: the
+		 * point is their first vertex.  cg6_polygon_2 draws a polygon of
+		 * 2 to 4 vertices as one point and 1 to 3 quad vertices; xnews's
+		 * outlines (_sh_lg_hol_2U) are a point, then line vertices, each
+		 * line drawn before the next vertex: the first from the point.
+		 */
+		if (!(g->prim == PRIM_POINT && (prim == PRIM_LINE || prim == PRIM_TRI || prim == PRIM_QUAD)))
+			g->nv = 0;
+		g->prim = prim;
+		g->pend = 0;
+	}
+}
+
+/* a whole vertex onto the queue, in the raster's coordinates */
+static void queue_push(struct cg6 *g, int32_t x, int32_t y)
+{
+	if (g->nv < 64) {
+		g->vx[g->nv] = x;
+		g->vy[g->nv] = y;
+		g->x[g->nv & 3] = x;
+		g->y[g->nv & 3] = y;
+		g->nv++;
+	}
+	g->pend = 0;
+}
+
 static void vertex(struct cg6 *g, uint32_t o, uint32_t v)
 {
 	int prim = (o - FBC_IPOINT) >> 6, reg = o & 0x3f;
@@ -372,18 +403,7 @@ static void vertex(struct cg6 *g, uint32_t o, uint32_t v)
 	g->vreg[(o - FBC_IPOINT) >> 2] = v;
 	if (prim > PRIM_RECT)
 		return;
-	if (g->prim != prim) {
-		/*
-		 * A new kind of primitive starts afresh, but for a point
-		 * followed by triangle or quadrilateral vertices: the point is
-		 * the polygon's first vertex (cg6_polygon_2 draws a polygon of
-		 * 2 to 4 vertices as one point and 1 to 3 quad vertices).
-		 */
-		if (!(g->prim == PRIM_POINT && (prim == PRIM_TRI || prim == PRIM_QUAD)))
-			g->nv = 0;
-		g->prim = prim;
-		g->pend = 0;
-	}
+	queue_prim(g, prim);
 	lx = g->nv ? g->vx[g->nv - 1] : g->x[0];
 	ly = g->nv ? g->vy[g->nv - 1] : g->y[0];
 	switch (reg) {
@@ -395,14 +415,7 @@ static void vertex(struct cg6 *g, uint32_t o, uint32_t v)
 	}
 	if (g->pend != 3)
 		return;
-	if (g->nv < 64) {
-		g->vx[g->nv] = g->pend_x;
-		g->vy[g->nv] = g->pend_y;
-		g->x[g->nv & 3] = g->pend_x;
-		g->y[g->nv & 3] = g->pend_y;
-		g->nv++;
-	}
-	g->pend = 0;
+	queue_push(g, g->pend_x, g->pend_y);
 }
 
 /* ---- the blitter (docs/cg6.md, "Blits") ---- */
@@ -507,7 +520,9 @@ static uint32_t fbc_read(struct cg6 *g, uint32_t o)
 		return g->pattern[(o - FBC_PATTERN) >> 2];
 	switch (o) {
 	case FBC_CONFIG: return 0x60000000u | (uint32_t)g->fhc_rev << 20 | g->fhc;
-	case FBC_MISC: return g->misc;
+	/* MISC's index (5:4) is the queue's: the slot the next vertex goes to
+	   (docs/cg6.md, "The TEC"); index_mod (6) reads 0 */
+	case FBC_MISC: return (g->misc & ~0x70u) | (uint32_t)(g->nv & 3) << 4;
 	case FBC_CLIPCHECK: return g->clipcheck;
 	case FBC_STATUS: return status(g);
 	case FBC_DRAWSTATUS: return command(g, 0);
@@ -624,13 +639,252 @@ int cg6_irq(const struct cg6 *g)
 	return g->thc_int && (g->thc_misc & THC_MISC_INTEN);
 }
 
-/* ---- the TEC: stored, with the data registers' second bank ---- */
+/*
+ * ---- the TEC (docs/cg6.md, "The TEC") ----
+ *
+ * Its arithmetic is IEEE single, as the RTL does it (and so not quite
+ * IEEE): round to nearest even; a denormal operand is zero and a result
+ * too small for a normal is zero, its sign kept; an exponent of 255 is
+ * infinity whatever its fraction (there are no NaNs: inf - inf is the first
+ * operand, inf * 0 is zero); a result too large is infinity.  Conversions
+ * to integer and 16.16 fixed round toward minus infinity and saturate.
+ */
+#define F_SIGN(v)	((v) & 0x80000000u)
+#define F_EXP(v)	((int)((v) >> 23 & 0xff))
+#define F_ONE		0x3f800000u
 
-static uint32_t *tec_reg(struct cg6 *g, uint32_t o)
+/* sign, exponent and 24-bit significand to a float, the significand
+   holding `extra' bits below its 24 (guard and sticky folded in): rounded */
+static uint32_t f_pack(uint32_t s, int e, uint64_t m, int extra)
 {
-	if (o >= 0x100 && o < 0x200 && (g->tec[2] >> 13 & 7) == 5)
-		return &g->tec_data1[(o - 0x100) >> 2];
-	return &g->tec[o >> 2];
+	uint64_t half, rest;
+
+	if (m == 0)
+		return s;
+	/* normalise to bit 23 + extra */
+	while (m >> (24 + extra)) {
+		m = m >> 1 | (m & 1);
+		e++;
+	}
+	while (!(m >> (23 + extra))) {
+		m <<= 1;
+		e--;
+	}
+	half = 1ull << (extra - 1);
+	rest = m & ((1ull << extra) - 1);
+	m >>= extra;
+	if (rest > half || (rest == half && (m & 1)))
+		m++;
+	if (m >> 24) {
+		m >>= 1;
+		e++;
+	}
+	if (e >= 255)
+		return s | 0x7f800000u;
+	if (e <= 0)
+		return s;
+	return s | (uint32_t)e << 23 | (uint32_t)(m & 0x7fffff);
+}
+
+uint32_t tec_fmul(uint32_t a, uint32_t b)
+{
+	uint32_t s = F_SIGN(a ^ b);
+	int ea = F_EXP(a), eb = F_EXP(b);
+
+	if (ea == 0 || eb == 0)
+		return s;
+	if (ea == 255 || eb == 255)
+		return s | 0x7f800000u;
+	/* 24 x 24 bits: the product's 48, 23 of them below the result's 24..25 */
+	return f_pack(s, ea + eb - 127,
+		      (uint64_t)((a & 0x7fffff) | 0x800000) * ((b & 0x7fffff) | 0x800000), 23);
+}
+
+uint32_t tec_fadd(uint32_t a, uint32_t b)
+{
+	int ea = F_EXP(a), eb = F_EXP(b), d;
+	uint64_t ma, mb, m;
+	uint32_t s;
+
+	if (ea == 255)
+		return F_SIGN(a) | 0x7f800000u;
+	if (eb == 255)
+		return F_SIGN(b) | 0x7f800000u;
+	if (eb == 0)			/* b zero: a, or a zero signed as IEEE's */
+		return ea ? a : F_SIGN(a) & F_SIGN(b);
+	if (ea == 0)
+		return b;
+	/* a the larger in magnitude */
+	if ((b & 0x7fffffff) > (a & 0x7fffffff)) {
+		uint32_t t = a; a = b; b = t;
+		ea = F_EXP(a); eb = F_EXP(b);
+	}
+	/* 3 bits below the significand: guard, round, sticky */
+	ma = (uint64_t)((a & 0x7fffff) | 0x800000) << 3;
+	mb = (uint64_t)((b & 0x7fffff) | 0x800000) << 3;
+	d = ea - eb;
+	if (d > 27)
+		mb = 1;			/* only the sticky bit */
+	else if (d)
+		mb = mb >> d | ((mb & ((1ull << d) - 1)) != 0);
+	s = F_SIGN(a);
+	m = F_SIGN(a ^ b) ? ma - mb : ma + mb;
+	if (m == 0)
+		return 0;
+	return f_pack(s, ea, m, 3);
+}
+
+/* integer to float: exact up to 24 bits, rounded beyond */
+uint32_t tec_i2f(uint32_t v, int fbits)
+{
+	uint32_t s = v & 0x80000000u;
+	uint64_t m = s ? (uint64_t)(~v + 1u) : v;
+	int e = 127 + 23 + 8 - fbits;		/* the significand's point after bit 31 */
+
+	if (m == 0)
+		return 0;
+	/* m as 24 + 8 bits: f_pack normalises and rounds */
+	return f_pack(s, e, m, 8);
+}
+
+/* float to integer (fbits 0) or 16.16 (fbits 16), toward minus infinity */
+uint32_t tec_f2i(uint32_t v, int fbits)
+{
+	int e = F_EXP(v) + fbits, sh;
+	uint32_t s = F_SIGN(v);
+	uint64_t m, ip;
+	int frac;
+
+	if (F_EXP(v) == 0)
+		return 0;
+	if (F_EXP(v) == 255 || e >= 127 + 31)
+		return s ? 0x80000000u : 0x7fffffffu;
+	if (e < 127)			/* |v| < 1 unit */
+		return s ? 0xffffffffu : 0;
+	m = (v & 0x7fffff) | 0x800000;
+	sh = 150 - e;			/* bits of m below the unit */
+	if (sh > 0) {
+		ip = m >> sh;
+		frac = (m & ((1ull << sh) - 1)) != 0;
+	} else {
+		ip = m << -sh;
+		frac = 0;
+	}
+	if (s)
+		return (uint32_t)-(int64_t)(ip + frac);
+	return (uint32_t)ip;
+}
+
+/* the data registers as software sees them: VDC's type (15:13) converts */
+#define TEC_TYPE(g)	((g)->tec[2] >> 13 & 7)
+
+static uint32_t tec_in(uint32_t v, int type)
+{
+	switch (type) {
+	case 0: return tec_i2f(v, 0);
+	case 1: return tec_i2f(v, 16);
+	default: return v;		/* 2 IEEE single; 3, 4, 6, 7 the register as it is */
+	}
+}
+
+static uint32_t tec_out(uint32_t f, int type)
+{
+	switch (type) {
+	case 0: return tec_f2i(f, 0);
+	case 1: return tec_f2i(f, 16);
+	default: return f;
+	}
+}
+
+/*
+ * A vertex register's X: the point through the MV matrix.  The matrix has
+ * rows 3 (x y w) or 4 (x y z w) and 1..4 columns, column by column from its
+ * index; w is 1 for an absolute vertex (data register 3 with MV's h bit),
+ * 0 for a relative one, which adds to the last result instead.  The results
+ * go to data registers 4.., and with autoload to the FBC as the same kind of
+ * vertex, rounded down, through its raster offset.
+ */
+static void tec_vertex(struct cg6 *g, int obj, int rel)
+{
+	uint32_t mv = g->tec[0], *d = g->tec_data, in[4], acc;
+	int idx = mv & 63, rows = mv >> 10 & 1 ? 4 : 3, cols = (mv >> 8 & 3) + 1;
+	uint32_t w = rel ? 0 : mv >> 13 & 1 ? d[3] : F_ONE;
+
+	in[0] = d[0];
+	in[1] = d[1];
+	if (rows == 4) {
+		in[2] = mv >> 12 & 1 ? d[2] : 0;
+		in[3] = w;
+	} else
+		in[2] = w;
+	for (int j = 0; j < cols; j++) {
+		int base = idx + j * rows;
+		acc = tec_fmul(in[0], d[base & 63]);
+		for (int k = 1; k < rows; k++)
+			acc = tec_fadd(acc, tec_fmul(in[k], d[(base + k) & 63]));
+		if (rel)
+			acc = tec_fadd(d[4 + j], acc);
+		d[4 + j] = acc;
+	}
+	g->ntec_vertex++;
+	if (mv >> 14 & 1) {		/* autoload */
+		queue_prim(g, obj);
+		queue_push(g, (int32_t)tec_f2i(d[4], 0) + g->offx, (int32_t)tec_f2i(d[5], 0) + g->offy);
+		g->ntec_auto++;
+	}
+}
+
+/* COMMAND1: C (1 x n) = A (1 x m) B (m x n), B column by column */
+static void tec_command(struct cg6 *g, uint32_t c)
+{
+	uint32_t *d = g->tec_data, a[4], acc;
+	int m = (c >> 30 & 3) + 1, n = (c >> 28 & 3) + 1;
+	int ai = c >> 16 & 63, bi = c >> 8 & 63, ci = c & 63;
+
+	for (int k = 0; k < m; k++)
+		a[k] = d[(ai + k) & 63];
+	for (int j = 0; j < n; j++) {
+		int base = bi + j * m;
+		acc = tec_fmul(a[0], d[base & 63]);
+		for (int k = 1; k < m; k++)
+			acc = tec_fadd(acc, tec_fmul(a[k], d[(base + k) & 63]));
+		d[(ci + j) & 63] = acc;
+	}
+	g->ntec_cmd++;
+}
+
+static uint32_t tec_read(struct cg6 *g, uint32_t o)
+{
+	if (o >= 0x100 && o < 0x200) {
+		if (TEC_TYPE(g) == 5)
+			return g->tec_data1[(o - 0x100) >> 2];
+		return tec_out(g->tec_data[(o - 0x100) >> 2], TEC_TYPE(g));
+	}
+	return g->tec[o >> 2];
+}
+
+static void tec_write(struct cg6 *g, uint32_t o, uint32_t v)
+{
+	if (o >= 0x100 && o < 0x200) {
+		if (TEC_TYPE(g) == 5)
+			g->tec_data1[(o - 0x100) >> 2] = v;
+		else
+			g->tec_data[(o - 0x100) >> 2] = tec_in(v, TEC_TYPE(g));
+		return;
+	}
+	g->tec[o >> 2] = v;
+	if (o == 0x010)
+		tec_command(g, v);
+	/* the vertex registers: integer 0x800, fixed 0xA00, float 0xC00; point,
+	   line, triangle, quadrilateral, rectangle 0x40 apart; abs x y z w,
+	   then rel x y z w */
+	if (o >= 0x800 && o < 0xe00 && (o & 0x20) == 0 && (o >> 6 & 7) <= PRIM_RECT) {
+		int kind = o >> 9 & 3, coord = o >> 2 & 3;
+
+		g->tec_data[coord] = kind == 2 ? v : tec_i2f(v, kind ? 16 : 0);
+		if (coord == 0)
+			tec_vertex(g, o >> 6 & 7, o >> 4 & 1);
+	}
 }
 
 /* ---- the Bt458 (docs/cg6.md, "The DAC"): one byte, on bits 31:24 ---- */
@@ -743,7 +997,7 @@ uint32_t cg6_read(struct cg6 *g, uint32_t off, int size)
 	if (a >= CG6_FBC && a < CG6_FBC + 0x1000)
 		w = fbc_read(g, a - CG6_FBC);
 	else if (a >= CG6_TEC && a < CG6_TEC + 0x1000)
-		w = *tec_reg(g, a - CG6_TEC);
+		w = tec_read(g, a - CG6_TEC);
 	else if (a == CG6_FHC)
 		w = 0x60000000u | (uint32_t)g->fhc_rev << 20 | g->fhc;
 	else if (a >= CG6_THC && a < CG6_THC + 0x1000)
@@ -779,7 +1033,7 @@ void cg6_write(struct cg6 *g, uint32_t off, int size, uint32_t v)
 	if (a >= CG6_FBC && a < CG6_FBC + 0x1000)
 		fbc_write(g, a - CG6_FBC, w);
 	else if (a >= CG6_TEC && a < CG6_TEC + 0x1000)
-		*tec_reg(g, a - CG6_TEC) = w;
+		tec_write(g, a - CG6_TEC, w);
 	else if (a == CG6_FHC)
 		g->fhc = w & 0xfffff;
 	else if (a >= CG6_THC && a < CG6_THC + 0x1000)

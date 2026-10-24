@@ -13,7 +13,9 @@
  *   0x301000  THC: video timing, misc (vsync, interrupt), hardware cursor
  *   0x380000  the board's ROM (64 KiB; not modelled: reads 0)
  *   0x700000  FBC: the drawing engine's registers
- *   0x701000  TEC: transform engine registers (stored, no transform)
+ *   0x701000  TEC: the transform engine: data registers that convert by
+ *             VDC's type, vertices through the MV matrix (and on to the FBC
+ *             with autoload), COMMAND1's matrix product
  *   0x800000  the frame buffer, 1 MiB, a byte a pixel, 1152 a line
  *
  * The engine is instantaneous: a command does its whole work when it is
@@ -119,17 +121,20 @@ struct cg6 {
 	int32_t pend_x, pend_y;		/* a vertex's coordinates so far */
 	int pend;			/* which: 1 x, 2 y */
 
-	/* TEC: a register file.  The data registers (0x100..0x1FC) read and
-	   write a second bank while VDC's type (15:13) is 5, INTRNL1: the
-	   kernel's cg6_cntxsave reads all 64 with VDC 0x8000 and again with
-	   0xA000 (docs/cg6.md, "The TEC") */
+	/* TEC (docs/cg6.md, "The TEC"): tec[] what was written to each
+	   register; the 64 data registers (0x100..0x1FC) are tec_data, IEEE
+	   single, converted on access by VDC's type (15:13), and a second bank
+	   tec_data1, raw, while the type is 5 (INTRNL1): the kernel's
+	   cg6_cntxsave reads all 64 with VDC 0x8000 and again with 0xA000 */
 	uint32_t tec[0x1000 / 4];
+	uint32_t tec_data[64];
 	uint32_t tec_data1[64];
 
 	/* the model's own: busy emulation and statistics */
 	int busy_polls, busy;
 	unsigned long ndraw[PRIM_NONE], nblit, nfont, npix;
 	unsigned long nfull;		/* commands refused while busy */
+	unsigned long ntec_vertex, ntec_auto, ntec_cmd;
 	/* a hook for the harness: every register access */
 	void (*trace)(void *, int wr, uint32_t off, int size, uint32_t v);
 	void *trace_arg;
@@ -143,6 +148,12 @@ void cg6_vsync(struct cg6 *, int on);
 int cg6_irq(const struct cg6 *);		/* the P4 interrupt line, active high */
 /* the picture: what the DAC puts out for pixel (x, y), with the cursor */
 uint32_t cg6_rgb(const struct cg6 *, int x, int y);
+
+/* the TEC's arithmetic (IEEE single, as cg6model.c says), for the harness */
+uint32_t tec_fmul(uint32_t a, uint32_t b);
+uint32_t tec_fadd(uint32_t a, uint32_t b);
+uint32_t tec_i2f(uint32_t v, int fbits);	/* fbits 0 integer, 16 fixed */
+uint32_t tec_f2i(uint32_t v, int fbits);	/* toward minus infinity */
 
 /* the raster-op unit, for one byte: exposed for the harness's reference */
 uint8_t cg6_rop8(uint32_t rasterop, uint8_t f, uint8_t b, uint8_t s, uint8_t d);

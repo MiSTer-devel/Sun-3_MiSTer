@@ -144,12 +144,15 @@ CG6_N     ?= 400
 CG6_LP_N  ?= 150
 CG6_SEED  ?= 1
 CG6_KINDS ?=
-CG6_SRC   := $(RTL)/sun3/sun3_cg6.sv $(RTL)/sun3/sun3_cg6_engine.sv
+CG6_SRC   := $(RTL)/sun3/sun3_cg6.sv $(RTL)/sun3/sun3_cg6_engine.sv $(RTL)/sun3/sun3_cg6_tec.sv
 CG6_LP    := $(wildcard $(CG6LIB))
 CG6LIB68K ?= ../../build/dist/sunos-4.1.1-sun3/usr/lib/libpixrect.a
 CG6_LP68K := $(wildcard $(CG6LIB68K))
 CG6_SEED68K ?= 3
 CG6_MUSASHI ?=
+CG6XNEWS  ?= ../../build/dist/sunos-4.1.1-sun3/usr/openwin/bin/xnews
+CG6_XN    := $(wildcard $(CG6XNEWS))
+CG6_XN_N  ?= 300
 tb_cg6_traces:
 	mkdir -p $(CG6OBJ)
 	$(MAKE) -C $(CG6M) B=$(CG6OBJ) $(CG6OBJ)/harness
@@ -157,11 +160,12 @@ tb_cg6_traces:
 	$(if $(CG6_LP),$(MAKE) -C $(CG6M) B=$(CG6OBJ) LIBPIXRECT=$(abspath $(CG6LIB)) $(CG6OBJ)/lp.bin,@echo "tb_cg6: no $(CG6LIB), so no libpixrect trace")
 	$(if $(CG6_LP),$(CG6OBJ)/harness $(CG6OBJ)/lp.bin $(CG6OBJ)/lp.sym -n $(CG6_LP_N) -s $(CG6_SEED) $(if $(CG6_KINDS),-K $(CG6_KINDS)) -t $(CG6OBJ)/t_lp.txt -I $(CG6OBJ)/t_lp.ini -F $(CG6OBJ)/t_lp.fin)
 	$(if $(CG6_LP68K),$(MAKE) -C $(CG6M) B=$(CG6OBJ) LIBPIXRECT68K=$(abspath $(CG6LIB68K)) $(if $(CG6_MUSASHI),MUSASHI=$(abspath $(CG6_MUSASHI))) trace68k TN=$(CG6_LP_N) SEED=$(CG6_SEED68K))
+	$(if $(CG6_XN),$(MAKE) -C $(CG6M) B=$(CG6OBJ) XNEWS=$(abspath $(CG6XNEWS)) $(if $(CG6_MUSASHI),MUSASHI=$(abspath $(CG6_MUSASHI))) tracexn XTN=$(CG6_XN_N) SEED=$(CG6_SEED),@echo "tb_cg6: no $(CG6XNEWS), so no xnews trace")
 tb_cg6: tb_cg6_traces
 	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
 	    $@.sv $(CG6_SRC) $(RTL)/sun3/sun3_cg4.sv $(RTL)/sun3/sun3_cg4_scanout.sv $(RTL)/sun3/video_timing.sv \
 	    sdram_model.sv altddio_out_stub.v $(RTL)/sdram.sv $(RTL)/sun3_mister_sdram.sv tb_cg6_model.cpp
-	./obj_$@/$@ +t0=$(CG6OBJ)/t_prom +t1=$(CG6OBJ)/t_gen $(if $(CG6_LP),+t2=$(CG6OBJ)/t_lp) $(if $(CG6_LP68K),+t3=$(CG6OBJ)/t_lp68k) $(SIMARGS)
+	./obj_$@/$@ +t0=$(CG6OBJ)/t_prom +t1=$(CG6OBJ)/t_gen $(if $(CG6_LP),+t2=$(CG6OBJ)/t_lp) $(if $(CG6_LP68K),+t3=$(CG6OBJ)/t_lp68k) $(if $(CG6_XN),+t4=$(CG6OBJ)/t_xn) $(SIMARGS)
 
 # The cg4's picture: full frames in Sun-3.sv's raster, every pixel, against a
 # memory that answers quickly and slowly.

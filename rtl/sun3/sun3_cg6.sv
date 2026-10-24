@@ -20,8 +20,10 @@
 //               enabled; the cursor's place (0x8FC) and its two 32x32 planes
 //               (0x900..0x9FC), to the scan-out
 //   0xFF700000  FBC: the drawing engine's registers
-//   0xFF701000  TEC: a register file (0x000..0x1FC, 0x800..0xDFC), the data
-//               registers in two banks by VDC (below); it transforms nothing
+//   0xFF701000  TEC: the transform engine (sun3_cg6_tec.sv): its data
+//               registers converted by VDC's type, its vertex registers
+//               through the MV matrix and, with autoload, on into the FBC's
+//               queue, COMMAND1's matrix product; the second bank (below)
 //   the ROM (0xFF380000), the DHC and the ALT: read 0
 //
 // **The FBC** (docs/cg6.md, "The FBC"): every register software sets reads
@@ -32,7 +34,9 @@
 // in a ring of the last four, which the queue's primitive draws from).  A
 // DRAWSTATUS read draws the queue's point, line, rectangle, triangle or
 // quadrilateral.  z, the colour vertex registers and the indexed registers
-// read back what was written to them, from the register store.
+// read back what was written to them, from the register store.  MISC's
+// index (5:4) reads the queue's next slot (xnews reads the vertex before it
+// back from x0/y0..x3/y3).
 //
 // **The register store** is an M10K of 1,024 words for everything that is
 // only stored: z and colour (FBC 0x088.., 0x08C..), the indexed registers
@@ -41,6 +45,12 @@
 // second bank, used while VDC's type (bits 15:13) is 5: the kernel's
 // cg6_cntxsave reads them with VDC 0x8000 and again with 0xA000 (types 4 and
 // 5, Solaris's INTRNL0 and INTRNL1) and cg6_cntxrestore writes both back.
+// The first bank is the TEC's own, read through it.
+//
+// **The TEC** is given every TEC write, and the first bank's reads.  While
+// it is busy every TEC and FBC cycle waits (a read until its value is
+// there); a write is answered at once.  TEC cycles wait for the engine as
+// FBC writes do, so an autoloaded vertex lands while nothing else moves.
 //
 // **Commands.**  A DRAWSTATUS or BLITSTATUS read, or a FONT write, starts the
 // engine; `busy' is from then until it answers.  While it is busy:
@@ -186,8 +196,16 @@ module sun3_cg6 #(
     reg         held  = 1'b0;           // a cycle waiting for the engine, or the store
     reg         srd   = 1'b0;           // ... the store's word is there
     wire        cmdrd = sel_fbc & rw_n & (off == 12'h014 || off == 12'h018);
-    wire        stall = sel_fbc & ~cmdrd & (off != 12'h010);
+    wire        stall = (sel_fbc & ~cmdrd & (off != 12'h010)) | sel_tec;
     wire        now   = (sel & ~go_q) | held;
+
+    // the TEC: its busy holds TEC and FBC cycles; a first-bank read waits for it
+    wire        tec_busy, tec_av;
+    wire [31:0] tec_q, tec_ax, tec_ay;
+    wire [2:0]  tec_agrp;
+    reg         tec_rdw = 1'b0;         // a read the TEC is answering
+    wire        tstall = (sel_fbc | sel_tec) & tec_busy;
+    wire        tec_rd = sel_tec & rw_n & (off[11:8] == 4'h1) & (tec_vdc != 3'd5);
 
     // ---- the register store ---------------------------------------------------------------
     // FBC z and colour (0x088.., 0x08C..) and the indexed registers (0x800..0x93C);
@@ -209,7 +227,9 @@ module sun3_cg6 #(
                          sel_thc ? {3'b010, off[8:2]} :
                          off[11] ? (10'd512 + {1'b0, off[10:2]}) :
                          tec_b1  ? {4'b0110, off[7:2]} : {3'b111, off[8:2]};
-    wire        take   = !rst && now && !(stall && ebusy);             // the cycle is done now
+    wire        take   = !rst && now && !tec_rdw && !(stall && ebusy) && !tstall && !tec_rd;  // the cycle is done now
+    wire        tec_go = !rst && now && !tec_rdw && !(stall && ebusy) && !tstall && sel_tec &&
+                         (tec_rd || !rw_n);
     wire        st_we  = take && !rw_n && st_hit;
     wire        st_rd  = rw_n && st_hit;
 
@@ -239,7 +259,7 @@ module sun3_cg6 #(
     // raster offset for an absolute one, the last vertex for a relative one)
     wire [2:0]  vgrp   = off[8:6];
     wire        vis    = sel_fbc & ~rw_n & off[11] & (off[10:9] == 2'b00) & (vgrp <= P_RECT);
-    wire        newq   = (prim != vgrp) & ~(prim == P_POINT & (vgrp == P_TRI | vgrp == P_QUAD));
+    wire        newq   = (prim != vgrp) & ~(prim == P_POINT & (vgrp == P_LINE | vgrp == P_TRI | vgrp == P_QUAD));
     wire [6:0]  nv_v   = newq ? 7'd0 : nv;
     wire [1:0]  pend_v = (prim != vgrp) ? 2'b00 : pend;
     wire        vrel   = off[4];
@@ -254,6 +274,9 @@ module sun3_cg6 #(
     wire [1:0]  pend_n = pend_v | (vy ? 2'b10 : 2'b01);
     wire [31:0] cx_n   = vy ? pend_x : vsum;
     wire [31:0] cy_n   = vy ? vsum : pend_y;
+    // an autoloaded vertex's place in the queue
+    wire        anewq  = (prim != tec_agrp) & ~(prim == P_POINT & (tec_agrp == P_LINE | tec_agrp == P_TRI | tec_agrp == P_QUAD));
+    wire [6:0]  anv    = anewq ? 7'd0 : nv;
 
     // DRAWSTATUS: the queue's primitive and the vertices it draws, the last
     // k queued (a polygon of fewer, down to 2; a point's twice)
@@ -275,7 +298,7 @@ module sun3_cg6 #(
             fbc_q = pattern[off[4:2]];
         else case (off)
             12'h000: fbc_q = {P4_ID, FHC_REV, fhc};
-            12'h004: fbc_q = {10'h0, misc};
+            12'h004: fbc_q = {10'h0, misc[21:7], 1'b0, nv[1:0], misc[3:0]};
             12'h008: fbc_q = clipcheck;
             12'h010: fbc_q = ebusy ? 32'h30000000 : 32'h0;  // BUSY, FULL
             12'h01C: fbc_q = font;
@@ -347,10 +370,21 @@ module sun3_cg6 #(
             thc_pend  <= 1'b0;
             thc_curxy <= 32'h0;
             tec_vdc   <= 3'd0;
+            tec_rdw   <= 1'b0;
         end else if (now) begin
-            if (stall && ebusy)
-                held <= 1'b1;                       // until the engine is done
-            else if (st_rd && !srd) begin
+            if (tec_rdw) begin
+                if (!tec_busy) begin                // the TEC's answer
+                    held    <= 1'b0;
+                    tec_rdw <= 1'b0;
+                    ack     <= 1'b1;
+                    rdata   <= tec_q;
+                end
+            end else if ((stall && ebusy) || tstall)
+                held <= 1'b1;                       // until the engine, or the TEC, is done
+            else if (tec_rd) begin
+                held    <= 1'b1;                    // tec_go: the TEC converts it
+                tec_rdw <= 1'b1;
+            end else if (st_rd && !srd) begin
                 held <= 1'b1;                       // the store's word, a clock on
                 srd  <= 1'b1;
             end else begin
@@ -469,7 +503,39 @@ module sun3_cg6 #(
                 end
             end
         end
+
+        // an autoloaded vertex from the TEC: whole, absolute (the raster
+        // offset added), into the queue as a CPU's would go; no FBC or TEC
+        // cycle is taken meanwhile
+        if (!rst && tec_av) begin
+            prim <= tec_agrp;
+            pend <= 2'b00;
+            nv   <= anv;
+            if (anv < 7'd64) begin
+                qx[anv[1:0]] <= tec_ax + offx;
+                qy[anv[1:0]] <= tec_ay + offy;
+                xr[anv[1:0]] <= tec_ax + offx;
+                yr[anv[1:0]] <= tec_ay + offy;
+                nv <= anv + 7'd1;
+            end
+        end
     end
+
+
+    sun3_cg6_tec tec (
+        .clk   (clk),
+        .rst   (rst),
+        .go    (tec_go),
+        .we    (!rw_n),
+        .adr   (adr),
+        .wdata (wdata),
+        .busy  (tec_busy),
+        .q     (tec_q),
+        .av    (tec_av),
+        .agrp  (tec_agrp),
+        .ax    (tec_ax),
+        .ay    (tec_ay)
+    );
 
     // ---- the engine -----------------------------------------------------------------------
     // Its inputs are these registers, which do not change while it is busy.

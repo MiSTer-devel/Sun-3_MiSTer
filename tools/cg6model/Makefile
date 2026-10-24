@@ -9,6 +9,12 @@
 #   make -C tools/cg6model trace68k [B=dir] [TN=300] [SEED=]
 #                                          $(B)/t_lp68k.{txt,ini,fin}, every kind
 #
+#   make -C tools/cg6model xnews [XN=2000 SEED=]   OpenWindows 2.0's own TEC code
+#                                          (xnews.c) against the model's TEC
+#   make -C tools/cg6model mutatexn        the model's TEC broken: xnews.c must see it
+#   make -C tools/cg6model tracexn [B=dir] [XTN=300] [SEED=]
+#                                          $(B)/t_xn.{txt,ini,fin}, for tb_cg6
+#
 # Needs gcc and python3.  LIBPIXRECT is a SunOS 4.1.x SPARC libpixrect.a
 # (/usr/lib/libpixrect.a), LIBPIXRECT68K a sun3 one; docs/cg6.md, "The C
 # model", says where the ones this was checked with came from.  Nothing from
@@ -21,6 +27,9 @@
 
 LIBPIXRECT ?= ../../build/dist/sunos-4.1.3-sparc/libpixrect.a
 LIBPIXRECT68K ?= ../../build/dist/sunos-4.1.1-sun3/usr/lib/libpixrect.a
+XNEWS	?= ../../build/dist/sunos-4.1.1-sun3/usr/openwin/bin/xnews
+XN	?= 2000
+XTN	?= 300
 B	:= ../../build/cg6model
 N	?= 3000
 TN	?= 300
@@ -48,7 +57,7 @@ all: run
 
 $(B)/harness: harness.c cg6model.c cg6model.h sparc.c sparc.h
 	mkdir -p $(B)
-	$(CC) $(CFLAGS) -o $@ harness.c cg6model.c sparc.c
+	$(CC) $(CFLAGS) -o $@ harness.c cg6model.c sparc.c -lm
 
 $(B)/lp.bin: $(LIBPIXRECT) aoutlink.py
 	mkdir -p $(B)
@@ -82,6 +91,21 @@ $(MB)/softfloat.o: $(MB)/m68kops.c
 $(B)/harness68k: harness.c cg6model.c cg6model.h $(MUOBJ)
 	$(CC) $(CFLAGS) -DM68K $(M68KDEFS) -I$(MB) -o $@ harness.c cg6model.c $(MUOBJ) -lm
 
+$(B)/xnews68k: xnews.c cg6model.c cg6model.h $(MUOBJ)
+	$(CC) $(CFLAGS) $(M68KDEFS) -I$(MB) -o $@ xnews.c cg6model.c $(MUOBJ) -lm
+
+# the TEC's arithmetic against the host's, then xnews's routines on it
+xnews: $(B)/xnews68k
+	$(B)/xnews68k -T
+	$(B)/xnews68k $(XNEWS) -n $(XN) -s $(SEED)
+
+mutatexn: $(B)/xnews68k
+	XNEWS=$(abspath $(XNEWS)) M68K="$(M68KDEFS) -I$(abspath $(MB))" \
+	    MUOBJ="$(abspath $(MUOBJ))" bash mutatexn.sh
+
+tracexn: $(B)/xnews68k
+	$(B)/xnews68k $(XNEWS) -n $(XTN) -s $(SEED) -t $(B)/t_xn.txt -I $(B)/t_xn.ini -F $(B)/t_xn.fin
+
 $(B)/lp68k.bin: $(LIBPIXRECT68K) aoutlink.py
 	mkdir -p $(B)
 	python3 aoutlink.py -o $(B)/lp68k --lib $(LIBPIXRECT68K) \
@@ -113,6 +137,6 @@ mutate68k: $(B)/harness68k $(B)/lp68k.bin
 
 clean:
 	rm -rf $(B)/harness $(B)/harness68k $(B)/lp.* $(B)/lp68k.* $(B)/trace.txt \
-	    $(B)/initial.bin $(B)/final.bin $(B)/t_lp68k.* $(MB)
+	    $(B)/initial.bin $(B)/final.bin $(B)/t_lp68k.* $(B)/xnews68k $(B)/t_xn.* $(MB)
 
-.PHONY: all run run68k trace68k mutate mutate68k clean
+.PHONY: all run run68k trace68k xnews tracexn mutatexn mutate mutate68k clean

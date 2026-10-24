@@ -57,6 +57,12 @@ both ways.
   * the drawing engine, `sun3_cg6_engine.sv` (new), runs on `wb_clk_i`
     and is a client of its own of the SDRAM adapter (`sun3_top.v` passes
     its port through);
+  * the TEC, `sun3_cg6_tec.sv` (new), inside `sun3_cg6.sv` on the CPU's
+    clock: the data registers converted by VDC's type, the vertex
+    registers through the MV matrix and, with autoload, into the FBC's
+    queue, COMMAND1's matrix product, in IEEE single (one DSP, one M10K),
+    for OpenWindows 2.0's xnews (docs/cg6.md, "The TEC"). FBC and TEC
+    cycles wait while it works; MISC's index reads the queue's;
   * `sun3_cached_fifo_bridge.v` has a `WB_IDLE` output (nothing queued or
     in flight), which the engine waits for before it draws, so that the
     CPU's posted frame-buffer writes land first;
