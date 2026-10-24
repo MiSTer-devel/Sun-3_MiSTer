@@ -63,6 +63,10 @@ both ways.
     queue, COMMAND1's matrix product, in IEEE single (one DSP, one M10K),
     for OpenWindows 2.0's xnews (docs/cg6.md, "The TEC"). FBC and TEC
     cycles wait while it works; MISC's index reads the queue's;
+  * the FBC beyond libpixrect's needs, for xnews: MISC bit 19 the vertical
+    blank (`_install_cmap` waits on it); DRAWSTATUS's and BLITSTATUS's clip
+    bits (visible, intersect, hidden); a rectangle drawn again by lone
+    IPOINTABSX/ITRIABSX writes (its region fill, `_sh_cg6_FLRS8pg`);
   * `sun3_cached_fifo_bridge.v` has a `WB_IDLE` output (nothing queued or
     in flight), which the engine waits for before it draws, so that the
     CPU's posted frame-buffer writes land first;

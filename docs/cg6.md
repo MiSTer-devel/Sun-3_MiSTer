@@ -224,6 +224,19 @@ The indexed registers queue vertices for DRAWSTATUS:
     (**verified** by running it: with a new queue at the line, the first
     edge of 41 outlines in 50 is missing). libpixrect never writes a line
     vertex after a point, so its tests do not change.
+* **A rectangle again, by its x's alone.** After a rectangle is drawn, an
+  IPOINTABSX write and an ITRIABSX write (the point the first vertex, the
+  triangle's the next), with no other coordinate written, give it new left
+  and right x's, and DRAWSTATUS draws it again on the same rows.
+  OpenWindows 2.0's xnews fills a region so, a band at a time: the band's
+  first rectangle whole (IRECT y x y x), each further one by the two x's
+  alone (`_sh_cg6_FLRS8pg` 0x27686..0x2769c; the only place it writes
+  ITRIABSX). xnews repairs exposed areas with it. **Verified** by running
+  it (`xnews68k`, *The TEC's check*): without the rule a band's every
+  rectangle but the first is left undrawn, which is what the board showed
+  (2026-10-24: after `ico` was killed, a strip beside the File Manager was
+  left unpainted). Any other coordinate written, or a vertex queued,
+  cancels it; a DRAWSTATUS then draws what the queue holds.
 * **DRAWSTATUS read** draws from the last vertices queued:
 
   | primitive | draws |
@@ -304,6 +317,22 @@ The engine is asynchronous on a real board. Software follows two rules:
   a negative value without FULL as an exception**. On an exception it does
   the operation in software (cg6_rop, cg6_vector, cg6_polypoint: `mem_*` on
   the frame buffer).
+
+**The clip bits** (cg6fbc.h's `L_FBC_DRAW_*` and `L_FBC_BLIT_*`): a
+command's read, when taken, says where its points lie against the clip
+window: DRAWSTATUS 2:0 hidden, intersect, visible for the vertices it
+draws; BLITSTATUS 13:11 for the source (x0,y0 .. x1,y1) and 10:8 for the
+destination (x2,y2 .. x3,y3). Visible: every point inside; hidden: every
+point beyond the same edge; intersect: the rest (the model and the core
+take each coordinate saturated to 16 bits, as the engine does). xnews reads
+only the visible bit, after DRAWSTATUS for lines and shapes drawn once per
+clip rectangle (`_vectors_ras` 0x8afa, `_shape_ras` 0x7ee6, `_sh_lg_L2Dsg`
+0xebd98): visible, it skips the rest, which a primitive wholly inside one
+rectangle cannot touch. libpixrect reads STATUS bit 1 (intersect) for a
+line only on an FHC of revision 0 (cg6_vector), and the core is revision
+1. Returning 0, as the core did before, is only slower: xnews then draws in
+every rectangle. The hardware and software bits (4:3, 15:14) and STATUS's
+copies are left 0: nothing reads them. MAME sets none of these.
 
 **MISC bit 19 is the vertical blank** (`l_fbc_misc_vblank`, "1 == VBLANK
 has occured"): set as a vertical blank begins, cleared by writing it 1.
@@ -541,6 +570,8 @@ matrix, its frame buffer's TEC/FBC pointer and type cache, a path):
   same FBC cycles with each autoloaded vertex replaced; for fills and
   outlines, drawn from the shape itself), and the two frame buffers are
   compared.
+* `_sh_cg6_FLRS8pg` (0x274c2): a region filled a band at a time (random
+  bands of 1..6 rectangles), every rectangle whole in the reference;
 * `_install_cmap` (0x977c): a screen's colour map into the Bt458 at a
   vertical blank (MISC bit 19; the harness's raster begins one every third
   MISC read), the entries compared.
@@ -587,10 +618,11 @@ vertices, 82,900 of them autoloaded, and 41,323 commands.)
   leave it out. The fills' reference is drawn from the polygon, not from
   xnews's cycles, so that the fan's restart at MISC's index is checked.
 
-`make -C tools/cg6model mutatexn` breaks 15 of the model's rules one at
+`make -C tools/cg6model mutatexn` breaks 16 of the model's rules one at
 a time (the rounding, the sticky bits, the fixed point, the matrix's and
 the command's layouts, relative vertices, autoload's rounding and offset,
-MISC's index and vertical blank), and `-T` or `-c` catches 15 of 15.
+MISC's index and vertical blank, the region fill's lone x's), and `-T`
+or `-c` catches 16 of 16.
 
 ## The THC
 
