@@ -1,20 +1,28 @@
 # Sun-3 for MiSTer
 
 A Sun-3/60C workstation for the MiSTer FPGA platform. This is a 68020 Sun with
-Sun's own MMU, an MC68881, 24 MiB of memory, the on-board bw2 and the P4 cg4
-colour frame buffer. It also has the LANCE Ethernet, the on-board SCSI with
-disk and QIC tape, the Sun keyboard and mouse, and the ICM7170 clock. It runs
-Sun's own boot PROM and SunOS.
+Sun's own MMU, an MC68881, 24 MiB of memory, the on-board bw2 and a P4 colour
+board: the cg4, or the accelerated GX (cg6). It also has the LANCE Ethernet,
+the on-board SCSI with two disks, a QIC tape and a CD-ROM drive, the Sun
+keyboard and mouse, and the ICM7170 clock. It runs Sun's own boot PROM,
+SunOS and NetBSD.
 
-**Status: early, but it boots SunOS.** On a MiSTer (2026-10-04) the Rev 1.9
-PROM comes up on the colour board's console, takes the keyboard, and keeps
-its settings in an EEPROM file. SunOS 4.1.1 installs from QIC tape images onto
+**Status: early, but it boots SunOS.** On a MiSTer the boot PROM (Rev
+3.0.1; Rev 1.9 runs too) comes up on the colour board's console or the mono
+one, takes the keyboard, and keeps its settings in an EEPROM file. SunOS 4.1.1 installs from QIC tape images onto
 a 1 GB disk image and boots from it multi-user, and takes 4.1.1_U1, the Y2K
 patch and Sun's later patches
 ([docs/install-sunos.md](docs/install-sunos.md)). A second disk works,
-SunView and OpenWindows 2.0 run in mono and in colour with the mouse, the
-Ethernet works (see *The network*), and the CPU runs at 20, 25 or 33 MHz
-(see *The CPU clock*).
+SunView and OpenWindows 2.0 run in mono and in colour with the mouse, on
+the cg4 or the GX, the Ethernet works (see *The network*), and the CPU runs
+at 20, 25 or 33 MHz (see *The CPU clock*). SunOS reads CD-ROM images, and
+NetBSD 11.0 installs from its CD image and runs (see *NetBSD*).
+
+New in `Sun-3_20261024.rbf`:
+* the **GX** (cg6), Sun's accelerated colour board, as a choice for the P4
+  slot (see *Colour*);
+* a **CD-ROM drive** at SCSI ID 6 (see *The CD-ROM*);
+* the tape drive now works under NetBSD as well as SunOS.
 
 * [docs/hardware.md](docs/hardware.md): the machine, as locked with the
   owner. It covers the inventory, the address map and the media.
@@ -43,31 +51,26 @@ The network and the ID PROM are served by Main_MiSTer's Sun family support
 
 ## What you will need
 
-* **the core**, from [`releases/`](releases/): `Sun-3_20261005.rbf`, for
-  `_Computer/` (or `_Unstable/`). Beside it are `boot0.rom` (below) and
-  `MiSTer`, a Main_MiSTer with Sun support, for the network and the ID PROM
-  (see *The network*): upstream Main_MiSTer `c97c052` with the
-  `sun-family` branch (`de5e963`) of
-  [danifunker/Main_MiSTer](https://github.com/danifunker/Main_MiSTer/tree/sun-family)
-  on it, GPL-3.0 like Main_MiSTer itself. It replaces `/media/fat/MiSTer`.
-  A running Main cannot be overwritten in place, so keep the old one, copy
-  the new one to `/media/fat/MiSTer.new`, `mv` it over `/media/fat/MiSTer`,
-  and reboot the MiSTer;
+* **the core**, from [`releases/`](releases/): `Sun-3_20261024.rbf`, for
+  `_Computer/` (or `_Unstable/`). The previous core, `Sun-3_20261022.rbf`,
+  is kept there too; it has no GX and no CD-ROM;
 * a DE10-Nano with an **SDRAM board of 32 MB or more**;
-* the boot PROM, Sun's Rev 1.9 for the 3/60, patched for this machine,
+* the boot PROM, Sun's Rev 3.0.1 for the 3/60, patched for this machine,
   at `games/Sun-3/boot0.rom`: `releases/boot0.rom` (see *The boot PROM*);
 * SunOS for sun3 on a QIC tape image: `python3 tools/mktape -o
   sunos-4.1.1-sun3.qic <the distribution's sun3 directory>`. Mount it as
-  *Tape (st0)* in the OSD. To install onto a disk, see
+  *Tape (ID 4)* in the OSD. To install onto a disk, see
   [docs/install-sunos.md](docs/install-sunos.md).
 
 ## The boot PROM
 
-The core runs Sun's own 3/60 boot PROM, Rev 1.9. It is not in the
+The core runs Sun's own 3/60 boot PROM, Rev 3.0.1. It is not in the
 bitstream: Main_MiSTer sends `games/Sun-3/boot0.rom` when the core starts,
 and the machine stays in reset until it has arrived. `releases/boot0.rom`
 is the stock image with seven patches, each listed with its reason in
-[`tools/sun3_60_v1.9_noparity.txt`](tools/sun3_60_v1.9_noparity.txt):
+[`tools/sun3_60_v3.0.1_noparity.txt`](tools/sun3_60_v3.0.1_noparity.txt)
+(and, at their places in Rev 1.9, in
+[`tools/sun3_60_v1.9_noparity.txt`](tools/sun3_60_v1.9_noparity.txt)):
 
 * six take out the parity memory this machine does not have (Sun-3_FPGA's
   verified "noparity" set): the PROM no longer turns parity checking on,
@@ -79,13 +82,25 @@ is the stock image with seven patches, each listed with its reason in
   string pointers, and 0xffffffff made it overwrite itself.
 
 To make the same file yourself, `make -C tools` fetches the stock image
-from sun3arc.org, checks its SHA-256, and writes
-`build/rom/sun3_60_v1.9_noparity.bin` (sha256 `31688f6f…63de`, the same
+from sun3arc.org (or takes one dropped into `build/rom/` as
+`sun3_60_v3.0.1.bin`), checks its SHA-256, and writes
+`build/rom/sun3_60_v3.0.1_noparity.bin` (sha256 `9162b135…2e21`, the same
 as `releases/boot0.rom`). `tools/rompatch` checks every word it changes
-before changing it, and keeps the PROM's checksum right. `make -C tools
-all-roms` also patches Rev 3.0.1 the same way
-([`tools/sun3_60_v3.0.1_noparity.txt`](tools/sun3_60_v3.0.1_noparity.txt)),
-but only 1.9 has been run on the MiSTer.
+before changing it, and keeps the PROM's checksum right.
+
+Rev 3.0.1 prints the Host ID in its banner, and its SCSI unit numbers are
+target × 8 + LUN: the second disk (ID 1) is `b sd(0,8,0)`.
+
+### Rev 1.9
+
+Rev 1.9, the PROM this core first ran, still runs: `make -C tools
+all-roms` writes `build/rom/sun3_60_v1.9_noparity.bin` (sha256
+`31688f6f…63de`). Put it in `games/Sun-3/` under any name ending `.rom`
+and pick it with *Load ROM*: the machine resets into it for that session,
+and the next start loads `boot0.rom` again. Its disk unit numbers are
+target × 4 + LUN, so its second disk is `b sd(0,4,0)`; it has the fuller
+diagnostic menus (video, colour map, SCSI and memory tests) that 3.0.1
+dropped.
 
 ## Booting from tape
 
@@ -97,8 +112,58 @@ and at the `>` prompt type
 
 SunOS 4.1.1's tape boots its miniroot and asks whether to install it.
 The PROM's own tape open waits ten seconds for the drive, as on a real 3/60.
-L1-A (hold Right Alt + F1, the Sun's L1, and press A) stops SunOS and returns
-to the PROM.
+L1-A (see *The keyboard*), or *Stop-A (abort)* on the OSD's *Machine* page,
+stops SunOS and returns to the PROM; `c` continues it.
+
+## The keyboard
+
+The PC keyboard is a Sun Type 3, and the mouse a three-button Mouse Systems
+one. Most keys are where they are on the PC. The Sun keys a PC lacks:
+
+| Sun | PC |
+|---|---|
+| L1..L10 (Stop, Again, Props, Undo, Front, Copy, Open, Paste, Find, Cut) | **hold Right Alt** and press F1..F10 |
+| L1-A, the abort to the PROM | Right Alt + F1, and A while F1 is held (or *Stop-A* in the OSD) |
+| T1..T9, the top row | F1..F9 |
+| Meta (the diamond keys) | the Windows keys |
+| Alt | Left Alt |
+| R1..R15, the right keypad | the numeric keypad and the navigation keys: Num Lock R1, / R2, * R3, - R4, + R5; the arrows R8, R10, R12, R14; Home R7, PgUp R9, End R13, PgDn R15 |
+| Line Feed | keypad Enter |
+| Delete | Delete |
+
+Right Alt sends nothing by itself. MiSTer keeps Scroll Lock, F12 (the OSD)
+and F13 up, so they never reach the Sun.
+
+*Swap Alt/Win keys* on the *Input* page swaps each Alt with the Windows key
+beside it: the key next to the space bar is then Meta, the Windows keys are
+the Alts, and the L-keys are held with the **Right Windows** key instead of
+Right Alt. It acts at once.
+
+## The OSD
+
+The menu follows the layout of the other MiSTer workstation cores. On the top
+page:
+
+* *Pri. disk (ID 0)*, *Disk (ID 1)*, *Tape (ID 4)*, *Tape volume* and
+  *CD-ROM (ID 6)*: the media, which change at once. The disks, the CD-ROM
+  image and the EEPROM image are remembered and mounted again at the next
+  start; the tape is not;
+* *Load ROM*: another boot PROM for this session (see *The boot PROM*);
+* *Network interface* (see *The network*);
+* the pages below, and *Apply and reset*.
+
+| page | rows |
+|---|---|
+| Machine | *CPU clock* (20, 25, 33 MHz), *Colour board* (On, Off), *Colour board type* (cg4, GX; shown while the board is On), *Stop-A (abort)* |
+| Video | *Aspect ratio*, *Scale* |
+| Input | *Swap Alt/Win keys* |
+| Audio | *Keyboard bell* (Normal, Loud, Quiet, Off) |
+| Advanced | *Diag switch*, *Clock* (MiSTer's time, or 28 years back: the same day, weekday and time in 1998, for a SunOS without the Y2K patch), *EEPROM image* |
+
+Media, *Network interface*, *Input* and *Stop-A* act at once. Every other
+change waits for a reset, as a board's jumpers would: *Changes pending*
+shows above *Apply and reset* until then. To keep settings for the next
+start, use *Save settings* on the OSD's System page.
 
 ## The EEPROM
 
@@ -108,7 +173,7 @@ the SD card. Create one once, for example on the MiSTer:
 
     dd if=/dev/zero of=/media/fat/games/Sun-3/Sun-3.nvr bs=2048 count=1
 
-and pick it in the OSD under **EEPROM**. MiSTer remembers it, and the core
+and pick it in the OSD under **EEPROM image** (the *Advanced* page). MiSTer remembers it, and the core
 reads it at every start, before the PROM runs. Changes are written back to
 it half a second after the machine makes them, from the PROM's `q` command
 or from SunOS's `eeprom`. A file picked while the machine runs is read at
@@ -162,6 +227,15 @@ colours from 16.7 million, with an overlay plane. The OSD's *Colour board*
 only the on-board mono bw2 (`Model Sun-3/60M`). Change it, then reset. The
 colour board costs the CPU no measurable speed.
 
+*Colour board type* **GX** puts Sun's accelerated colour board, the cg6,
+in the slot instead: 1152×900 in 256 colours, with a drawing engine that
+fills, copies, draws lines, polygons and text by itself, a transform engine
+for OpenWindows, and a hardware cursor. SunOS 4.1.1 finds it as `cgsix0`.
+SunView and OpenWindows 2.0 both run on it, and colour SunView scrolls text
+faster on the GX than mono SunView does on the bw2. The PROM's banner still
+says `Sun-3/60C/G`. The GX needs the Rev 3.0.1 PROM: Rev 1.9 has no console
+on it. docs/cg6.md describes the board.
+
 ## The CPU clock
 
 A 3/60's 68020 and 68881 run at 20 MHz. The OSD's *CPU clock* also offers
@@ -178,9 +252,32 @@ right; programs simply run faster. Dhrystone 2.1 on the MiSTer:
 | 33 MHz | 5,450 |
 
 As with a crystal on a real board, the clock changes only in a reset:
-change it, then halt SunOS and choose *Reset* (a change made while SunOS
-runs waits for the next reset). To keep it for the next start, use *Save
-settings* on the OSD's System page.
+change it, then halt SunOS and choose *Apply and reset* (a change made
+while SunOS runs waits for the next reset, and the OSD shows *Changes
+pending* until then). To keep it for the next start, use *Save settings* on
+the OSD's System page.
+
+## NetBSD
+
+NetBSD 11.0 for sun3 installs onto a disk image and boots from it. Its
+11.0 boot programs have a bug that panics the kernel on a 3/60 ("radix
+already initialized"), fixed by NetBSD after the release;
+[`tools/netbsd/fixdvma.py`](tools/netbsd/fixdvma.py) makes the same fix in
+the 11.0 files. In outline (the design plan, Phase 7, has the details):
+
+1. From the NetBSD 11.0 ISO, build a boot tape as its `MakeBootTape` does
+   (tapeboot, the RAMDISK kernels, the miniroot), with every file run
+   through `fixdvma.py`, and `tools/mktape` it into a `.qic`.
+2. `python3 tools/mktape --disk netbsd.img --size 1024` for the disk, at
+   *Disk (ID 1)*; the ISO at *CD-ROM (ID 6)*; the tape at *Tape (ID 4)*.
+3. `b st()`, then put the mended miniroot into the disk's swap partition
+   and boot it with `b sd(0,8,1) -s`.
+4. `install`: root disk `sd1`, sets from the CD-ROM (`cd0`, ISO 9660,
+   `sun3/binary/sets`). It takes about two hours at 33 MHz.
+5. `b sd(0,8,0)` boots it (Rev 3.0.1 numbers the disk at ID 1 as 8).
+
+The installed disk boots with no patch. A netbsd-11 build from after
+2026-08-22 would not need `fixdvma.py` at all.
 
 ## Window systems
 
@@ -244,7 +341,27 @@ the File Manager. Click in a window to type into it. The **right** button
 over the background opens the Workspace menu; its *Exit...* asks to confirm
 and returns to the console. X demos are in `/usr/openwin/demo`; the NeWS ones
 there (`colorwheel`, `fish`) run with `psh`, from a shell inside OpenWindows.
-It has been run with the colour board On; with it Off it is untested.
+It runs on the cg4, on the GX, and in black and white with the colour board
+Off.
+
+`psh monaeyes` stops the server: the sun3 `xnews` has a bug in its image
+scaling that crashes it whenever a NeWS image is drawn scaled, on any
+frame buffer. `ico2` is the older ico and takes its size as
+`=300x300+800+500`, not `-geometry`.
+
+## The CD-ROM
+
+*CD-ROM (ID 6)* in the OSD takes an `.iso` image (2048-byte sectors). The
+drive is a Sony CDU-8012, one of the drives SunOS 4.1 knows, read only.
+Under SunOS it is `sr0`:
+
+    mkdir /cdrom
+    mount -r -t hsfs /dev/sr0 /cdrom
+
+The PROM boots a Sun CD through its disk driver, as `b sd(0,30,N)` with N
+the partition (sun3arc's install guide gives `b sd(0,30,4)` for the SunOS
+4.1.1 CD). NetBSD finds the drive as `cd0` and installs from it (see
+*NetBSD*). BIN, CUE and CHD images are not taken.
 
 ## The network
 
@@ -255,12 +372,12 @@ the Sun-2, NeXT and Minimig A2065 cores. **It needs a Main_MiSTer with Sun
 support** (`support/sun/`, the `sun-family` branch of
 [danifunker/Main_MiSTer](https://github.com/danifunker/Main_MiSTer/tree/sun-family));
 without it the LANCE is on a cable to nowhere, and SunOS attaches `le0` all
-the same. *Network* in the OSD picks the host side:
+the same. *Network interface* in the OSD picks the host side:
 
-| Network | what it is |
+| Network interface | what it is |
 |---|---|
 | eth0 (the default) | MiSTer's own Ethernet port, shared: the Sun is a second machine on the LAN, with its own address |
-| Off | no cable |
+| None | no cable |
 | eth1 | a second port (a USB adapter), the Sun's alone |
 | macvlan | a virtual port on eth0 with the Sun's address |
 | tap0 | a tap interface on the MiSTer, for routing it yourself |
@@ -305,13 +422,14 @@ FTP both ways with equal sums, and had no errors on `le0` under load.
 * **A lot of text pasted into a telnet session is partly lost**: the Sun's
   pseudo-terminal input queue overflows, and it beeps and drops the rest.
   Move files by FTP.
-* **With *Network* eth0 the Sun cannot reach the MiSTer it runs on** (see
+* **With *Network interface* eth0 the Sun cannot reach the MiSTer it runs on** (see
   *The network*); every other machine on the LAN can.
-* **The CPU clock, the colour board and the diag switch change only in a
-  reset**, and the OSD keeps them for the next start only after *Save
+* **Every setting but the media, *Network interface* and *Input* changes
+  only in a reset** (*Apply and reset*), and the OSD keeps them for the next start only after *Save
   settings*.
-* **Not tried yet**: NFS, telnet and FTP from the Sun to another machine,
-  and NetBSD. Parts of the cg4 that SunOS never uses are not modelled: the
+* **On the GX, OpenWindows can leave part of a closed window on the
+  screen** until something is drawn over it.
+* **Not tried yet**: NFS, telnet and FTP from the Sun to another machine. Parts of the cg4 that SunOS never uses are not modelled: the
   P4 register's first-half-of-retrace bit, its interrupt-pending bit
   latching while its enable is off, and the Bt458's blink and command bit 6.
 

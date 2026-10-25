@@ -6,13 +6,14 @@
 //  pieces that join them.  The machine is fixed by Sun-3.qsf's macro block and
 //  described in docs/hardware.md: a Sun-3/60C with its RD68021 and RD68884,
 //  24 MiB, the on-board bw2, a cg4 colour board in the P4 slot, SCSI and
-//  serial ports.
+//  serial ports.  The P4 slot may hold the GX instead (docs/cg6.md).
 //
 //  Built so far (docs/design-plan.md): Phases 1 to 5 -- the PROM, its
 //  console with MiSTer's keyboard and mouse as a Sun Type 3 and a Sun-3
 //  mouse, the keyboard's bell, the TOD chip set from MiSTer's clock, two SCSI
-//  disks and the tape, the EEPROM kept in a file, the cg4 (docs/cg4.md) and
-//  the LANCE on Main_MiSTer's network mailbox; and Phase 6's CPU clock.
+//  disks, the tape and a CD-ROM, the EEPROM kept in a file, the cg4
+//  (docs/cg4.md) and the LANCE on Main_MiSTer's network mailbox; Phase
+//  6's CPU clock; and Phase 8's first stage, the GX's PROM console.
 //
 //  Clocks (rtl/pll.v, rtl/pll_serial.v)
 //    clk_mem   100.000 MHz  SDRAM, the memory side of the Wishbone bridge, hps_io,
@@ -61,45 +62,103 @@ module emu
     assign LED_POWER = 2'b00;
 
     // ---- the OSD ---------------------------------------------------------------
-    // status[0] is the reset item and nothing else; the options start at 1, and
-    // the bits keep the places docs/design-plan.md gives them (the Network's
-    // [11:9] is what Main_MiSTer's Sun family support reads).  The disks and
-    // the EEPROM are SC: Main remembers the image last chosen and mounts it
-    // again whenever the core starts, so the PROM finds its settings and the
-    // disk, and auto-boots.  The slots are docs/design-plan.md's.
+    // The computer cores' OSD standard (HP9000-715_MiSTer's
+    // docs/osd-standard.md), as on the Sun-2: the media and Load ROM, then the
+    // network, then the submenus at their fixed page numbers (P1 Machine, P2
+    // Video, P3 Input, P4 Audio, P5 Advanced), then "Apply and reset".  Media,
+    // the network (Main reads it itself), Input and the button act at once;
+    // every other setting is latched into `cfg' while the machine is in reset,
+    // and "Changes pending" (menumask bit 0) shows while one differs from what
+    // is running.  The bits keep the places docs/design-plan.md gives them.
+    //
+    //   status[0]      Apply and reset
+    //   status[2:1]    Aspect ratio        P2, at reset
+    //   status[4:3]    Tape volume         media, at once
+    //   status[6:5]    Scale               P2, at reset
+    //   status[8:7]    Keyboard bell       P4, at reset
+    //   status[11:9]   Network interface   at once; Main_MiSTer reads these bits
+    //   status[12]     Colour board        P1, at reset
+    //   status[14:13]  CPU clock           P1, at reset
+    //   status[15]     Diag switch         P5, at reset
+    //   status[16]     Clock               P5, at reset
+    //   status[17]     Stop-A              P1 button
+    //   status[18]     Swap Alt/Win keys   P3, at once
+    //   status[19]     Colour board type   P1, at reset: cg4 (0) or GX; shown
+    //                                      while the board is On
+    //
+    // v,1: Aspect ratio's third value was 4:3 and is [ARC1] now.
+    //
+    // The disks, the CD-ROM and the EEPROM are SC: Main remembers the image
+    // last chosen and mounts it again whenever the core starts, so the PROM
+    // finds its settings and the disk, and auto-boots.  The CD-ROM is a flat
+    // image of 2048-byte sectors (.iso), which Main serves through the generic
+    // block path.  Load ROM is F0, boot0.rom's index: another PROM for this
+    // session, and a reset.
     `include "build_id.v"
     localparam CONF_STR = {
         "Sun-3;UART9600;",
-        "SC0,IMGVHD,SCSI disk ID 0 (sd0);",
-        "SC1,IMGVHD,SCSI disk ID 1 (sd2);",
-        "S2,QIC,Tape (st0);",
+        "-;",
+        "SC0,IMGVHD,Pri. disk (ID 0);",
+        "SC1,IMGVHD,Disk (ID 1);",
+        "S2,QIC,Tape (ID 4);",
         "O[4:3],Tape volume,1,2,3;",
-        "SC3,NVR,EEPROM;",
+        "SC4,ISO,CD-ROM (ID 6);",
+        "F0,ROM,Load ROM;",
         "-;",
-        "O[2:1],Aspect ratio,Original,Full Screen,4:3;",
-        "O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;",
-        "O[12],Colour board,On,Off;",
-        "O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;",
+        "O[11:9],Network interface,eth0,None,eth1,macvlan,tap0;",
         "-;",
-        "O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;",
-        "O[16],Clock,MiSTer's time,28 years back;",
-        "O[11:9],Network,eth0,Off,eth1,macvlan,tap0;",
-        "O[15],Diag switch,Normal,Diag;",
+        "P1,Machine;",
+        "P2,Video;",
+        "P3,Input;",
+        "P4,Audio;",
+        "P5,Advanced;",
         "-;",
-        "R0,Reset;",
+        "h0-,Changes pending;",
+        "R[0],Apply and reset;",
+
+        "P1O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;",
+        "P1O[12],Colour board,On,Off;",
+        "H1P1O[19],Colour board type,cg4,GX;",
+        "P1-;",
+        "P1T[17],Stop-A (abort);",
+
+        "P2O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+        "P2O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;",
+
+        "P3O[18],Swap Alt/Win keys,No,Yes;",
+
+        "P4O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;",
+
+        "P5O[15],Diag switch,Normal,Diag;",
+        "P5O[16],Clock,MiSTer's time,28 years back;",
+        "P5-;",
+        "P5SC3,NVR,EEPROM image;",
+
+        "v,1;",
         "V,v",`BUILD_DATE
     };
 
     wire [127:0] status;
     wire [1:0]   buttons;
 
+    // The settings the machine runs with, taken while it is in reset (Apply
+    // and reset, the board's button, a core start, a ROM load); the reset
+    // logic below supplies the condition.  The colour board, the CPU clock and
+    // the diag switch are sampled in reset by their own logic as well.
+    wire        machine_reset_req;
+    reg  [19:0] cfg = 20'd0;
+    always @(posedge clk_mem) if (machine_reset_req) cfg <= status[19:0];
+    wire cfg_pending = {status[19], status[16:12], status[8:7], status[6:5], status[2:1]}
+                    != {cfg[19],    cfg[16:12],    cfg[8:7],    cfg[6:5],    cfg[2:1]};
+
     // The raster is 1160x904 (the 1152x900 screen and a small border, which
     // fb_scanout needs for its prefetch) of square pixels.  V-Integer is the
     // default, so it is listed first and its status value is 0: video_freak's
-    // own numbering is 0 normal, 1 V-integer.
-    wire [1:0] ar    = status[2:1];
-    wire [2:0] scale = (status[6:5] == 2'd0) ? 3'd1 :
-                       (status[6:5] == 2'd1) ? 3'd0 : {1'b0, status[6:5]};
+    // own numbering is 0 normal, 1 V-integer.  [ARC1] and [ARC2] are Main's
+    // custom ratios, which video_freak takes as ARX 1 and 2 with ARY 0.
+    wire [1:0] ar    = cfg[2:1];
+    wire [2:0] scale = (cfg[6:5] == 2'd0) ? 3'd1 :
+                       (cfg[6:5] == 2'd1) ? 3'd0 : {1'b0, cfg[6:5]};
 
     // ---- clocks ------------------------------------------------------------------
     wire clk_mem, clk_pix, clk_mii, cpu_clk, clk_ser;
@@ -134,14 +193,15 @@ module emu
     wire [24:0] ps2_mouse;
     wire [64:0] rtc;
 
-    // The virtual drives: VD 0 and 1 the disks, VD 2 the tape, VD 3 the EEPROM.
-    wire [31:0] sd_lba[4];
-    wire [3:0]  sd_rd, sd_wr, sd_ack;
+    // The virtual drives: VD 0 and 1 the disks, VD 2 the tape, VD 3 the
+    // EEPROM, VD 4 the CD-ROM.
+    wire [31:0] sd_lba[5];
+    wire [4:0]  sd_rd, sd_wr, sd_ack;
     wire [13:0] sd_buff_addr;
     wire [7:0]  sd_buff_dout;
-    wire [7:0]  sd_buff_din[4];
+    wire [7:0]  sd_buff_din[5];
     wire        sd_buff_wr;
-    wire [3:0]  img_mounted;
+    wire [4:0]  img_mounted;
     wire        img_readonly;
     wire [63:0] img_size;
 
@@ -151,14 +211,14 @@ module emu
     wire [26:0] ioctl_addr;
     wire [7:0]  ioctl_dout;
 
-    hps_io #(.CONF_STR(CONF_STR), .VDNUM(4)) hps_io (
+    hps_io #(.CONF_STR(CONF_STR), .VDNUM(5)) hps_io (
         .clk_sys        (clk_mem),
         .HPS_BUS        (HPS_BUS),
         .EXT_BUS        (),
 
         .buttons        (buttons),
         .status         (status),
-        .status_menumask(16'd0),
+        .status_menumask({14'd0, status[12], cfg_pending}),   // 1: the colour board is Off
 
         .ps2_key        (ps2_key),
         .ps2_mouse      (ps2_mouse),
@@ -277,7 +337,7 @@ module emu
     // The machine: the OSD's reset, the framework's, an unlocked PLL, no PROM
     // yet, or an EEPROM image still loading; and while the CPU's clock is
     // being changed, which happens only in one of those.
-    wire machine_reset_req = status[0] | buttons[1] | RESET | ~locked | ~rom_loaded | ~ee_ready;
+    assign machine_reset_req = status[0] | buttons[1] | RESET | ~locked | ~rom_loaded | ~ee_ready;
     wire cpuclk_hold;
     wire machine_reset_raw = machine_reset_req | cpuclk_hold;
 
@@ -338,13 +398,21 @@ module emu
     // The colour board, from the OSD, fitted or taken out while the machine is
     // in reset, as a board would be: the PROM and SunOS look for it once.  "On"
     // is status 0, so a new core starts with it.
+    // Its type, cg4 or GX (status[19], 0 the cg4), the same way: cg4_present
+    // says a board is in the slot, cg6_present that it is the GX.
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
-    reg cg4_s1 = 1'b0;
+    reg cg4_s1 = 1'b0, cg6_s1 = 1'b0;
     reg cg4_s2 = 1'b0, cg4_present = 1'b0;
+    reg cg6_s2 = 1'b0, cg6_present = 1'b0;
     always @(posedge cpu_clk) begin
         cg4_s1 <= ~status[12];
         cg4_s2 <= cg4_s1;
-        if (reset_cpu) cg4_present <= cg4_s2;
+        cg6_s1 <= ~status[12] & status[19];
+        cg6_s2 <= cg6_s1;
+        if (reset_cpu) begin
+            cg4_present <= cg4_s2;
+            cg6_present <= cg6_s2;
+        end
     end
 
     // ---- keyboard and mouse ---------------------------------------------------------
@@ -357,11 +425,29 @@ module emu
 
     wire kbm_rxda, kbm_txda, kbm_rxdb, beeper;
 
+    // Swap Alt/Win keys (P3, at once): left Alt <-> left GUI, right Alt <->
+    // right GUI, so the key beside the space bar is the Sun's Meta.  ps2_key
+    // [8] is E0, [7:0] the set-2 code; the toggle in [10] passes untouched.
+    // The bridge's L-key chord (Right Alt with F1..F10) moves to Right Win.
+    function automatic [8:0] alt_win(input [8:0] k);
+        case (k)
+            9'h011:  alt_win = 9'h11F;
+            9'h11F:  alt_win = 9'h011;
+            9'h111:  alt_win = 9'h127;
+            9'h127:  alt_win = 9'h111;
+            default: alt_win = k;
+        endcase
+    endfunction
+    wire [10:0] kbd_key = status[18] ? {ps2_key[10:9], alt_win(ps2_key[8:0])} : ps2_key;
+
+    // Stop-A (P1): the OSD's pulse, on clk_mem as the bridge is; it acts on
+    // the edge.
     sun3_mister_kbd_mouse #(.CLK_HZ(100_000_000)) kbd_mouse (
         .clk          (clk_mem),
         .rst          (reset_kbm),
-        .ps2_key      (ps2_key),
+        .ps2_key      (kbd_key),
         .ps2_mouse    (ps2_mouse),
+        .stop_a       (status[17]),
         .kbd_ser_tx   (kbm_rxda),
         .kbd_ser_rx   (kbm_txda),
         .mouse_ser_tx (kbm_rxdb),
@@ -375,7 +461,7 @@ module emu
     sun3_mister_bell bell (
         .clk    (CLK_AUDIO),
         .beeper (beeper),
-        .volume (status[8:7]),
+        .volume (cfg[8:7]),
         .sample (bell_sample)
     );
 
@@ -396,7 +482,7 @@ module emu
     sun3_mister_tod tod (
         .clk    (clk_mem),
         .rtc    (rtc),
-        .back28 (status[16]),
+        .back28 (cfg[16]),
         .ld     (tod_tgl),
         .tod    (tod_time)
     );
@@ -536,6 +622,43 @@ module emu
         if (tvol_s2 == tvol_s1) tape_volume <= tvol_s2;
     end
 
+    // ---- the CD-ROM --------------------------------------------------------------------------
+    // sr0, SCSI target 6, on VD 4, read only (rtl/sun3/sun3_cdrom.sv): an
+    // .iso, read in 512-byte blocks until the machine asks for 2048.
+    wire        cblk_start, cblk_done, cblk_err, cblk_ready, cblk_buf_we, cblk_busy, cd_changed;
+    wire [31:0] cblk_lba, cblk_count;
+    wire [7:0]  cblk_buf_wdata;
+    wire [8:0]  cblk_buf_addr;
+
+    sun3_mister_block cdrom (
+        .clk           (cpu_clk),
+        .blk_start     (cblk_start),
+        .blk_we        (1'b0),
+        .blk_lba       (cblk_lba),
+        .blk_buf_rdata (8'h00),
+        .blk_done      (cblk_done),
+        .blk_err       (cblk_err),
+        .blk_ready     (cblk_ready),
+        .blk_count     (cblk_count),
+        .blk_buf_we    (cblk_buf_we),
+        .blk_buf_addr  (cblk_buf_addr),
+        .blk_buf_wdata (cblk_buf_wdata),
+        .busy          (cblk_busy),
+        .changed       (cd_changed),
+
+        .clk_hps       (clk_mem),
+        .sd_lba        (sd_lba[4]),
+        .sd_rd         (sd_rd[4]),
+        .sd_wr         (sd_wr[4]),
+        .sd_ack        (sd_ack[4]),
+        .sd_buff_addr  (sd_buff_addr[8:0]),
+        .sd_buff_dout  (sd_buff_dout),
+        .sd_buff_din   (sd_buff_din[4]),
+        .sd_buff_wr    (sd_buff_wr),
+        .img_mounted   (img_mounted[4]),
+        .img_size      (img_size)
+    );
+
     // ---- memory -------------------------------------------------------------------------
     wire         wb_cyc, wb_stb, wb_we, wb_ack;
     wire [29:0]  wb_adr;
@@ -551,14 +674,23 @@ module emu
     wire         cs_req, cs_urgent, cs_done;
     wire [127:0] cs_rdata;
 
-    // Only the screen being shown is fetched: the cg4's when the board is in.
-    // The board changes only in a machine reset, so two flops are enough.
+    wire [25:0]  ge_word;
+    wire         ge_req, ge_we, ge_done;
+    wire [127:0] ge_wdata;
+    wire [15:0]  ge_sel;
+    wire [127:0] ge_rdata;
+
+    // Only the screen being shown is fetched: the colour board's when one is
+    // in, its colour plane alone for the GX.  The board changes only in a
+    // machine reset, so two flops are enough.
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
-    reg cg4m_s1 = 1'b0;
-    reg cg4_mem = 1'b0;
+    reg cg4m_s1 = 1'b0, cg6m_s1 = 1'b0;
+    reg cg4_mem = 1'b0, cg6_mem = 1'b0;
     always @(posedge clk_mem) begin
         cg4m_s1 <= cg4_present;
         cg4_mem <= cg4m_s1;
+        cg6m_s1 <= cg6_present;
+        cg6_mem <= cg6m_s1;
     end
 
     sun3_mister_sdram sdram (
@@ -585,6 +717,14 @@ module emu
         .cs_urgent  (cs_urgent),
         .cs_done    (cs_done),
         .cs_rdata   (cs_rdata),
+
+        .ge_word    (ge_word),
+        .ge_req     (ge_req),
+        .ge_we      (ge_we),
+        .ge_wdata   (ge_wdata),
+        .ge_sel     (ge_sel),
+        .ge_done    (ge_done),
+        .ge_rdata   (ge_rdata),
 
         .SDRAM_DQ   (SDRAM_DQ),
         .SDRAM_A    (SDRAM_A),
@@ -652,6 +792,8 @@ module emu
     wire        cg4_retrace, cg4_video_on;
     wire [7:0]  cg4_read_mask, cg4_command, cg4_cm_raddr;
     wire [23:0] cg4_ovl1, cg4_ovl2, cg4_ovl3, cg4_cm_rdata;
+    wire [4:0]  cg6_cur_row;                // the GX's cursor, into the scan-out
+    wire [31:0] cg6_cur_a, cg6_cur_b, cg6_cur_xy;
 
     sun3_top machine (
         .CLK           (cpu_clk),
@@ -698,6 +840,19 @@ module emu
         .cg4_cm_raddr  (cg4_cm_raddr),
         .cg4_cm_rdata  (cg4_cm_rdata),
 
+        .cg6_present   (cg6_present),
+        .ge_word       (ge_word),
+        .ge_req        (ge_req),
+        .ge_we         (ge_we),
+        .ge_wdata      (ge_wdata),
+        .ge_sel        (ge_sel),
+        .ge_done       (ge_done),
+        .ge_rdata      (ge_rdata),
+        .cg6_cur_row   (cg6_cur_row),
+        .cg6_cur_a     (cg6_cur_a),
+        .cg6_cur_b     (cg6_cur_b),
+        .cg6_cur_xy    (cg6_cur_xy),
+
         .blk_start     (blk_start),
         .blk_we        (blk_we),
         .blk_lba       (blk_lba),
@@ -734,6 +889,17 @@ module emu
         .blk1_buf_we    (blk1_buf_we),
         .blk1_buf_addr  (blk1_buf_addr),
         .blk1_buf_wdata (blk1_buf_wdata),
+
+        .cblk_start     (cblk_start),
+        .cblk_lba       (cblk_lba),
+        .cblk_done      (cblk_done),
+        .cblk_err       (cblk_err),
+        .cblk_ready     (cblk_ready),
+        .cblk_count     (cblk_count),
+        .cblk_buf_we    (cblk_buf_we),
+        .cblk_buf_addr  (cblk_buf_addr),
+        .cblk_buf_wdata (cblk_buf_wdata),
+        .cd_changed     (cd_changed),
 
         .V_INT         (v_int),
 
@@ -819,7 +985,8 @@ module emu
     );
 
     // The cg4's picture (rtl/sun3/sun3_cg4_scanout.sv): its planes through the
-    // Bt458s, whose colour map it reads on this clock.
+    // Bt458s, whose colour map it reads on this clock.  The GX's is its
+    // colour plane alone, through the same Bt458.
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg cg4p_s1 = 1'b0;
     reg cg4_pix = 1'b0;
@@ -832,6 +999,7 @@ module emu
         .mclk      (clk_mem),
         .mrst      (reset_mem),
         .enable    (cg4_mem),
+        .colour_only (cg6_mem),
         .c_word    (cs_word),
         .c_req     (cs_req),
         .c_urgent  (cs_urgent),
@@ -847,14 +1015,18 @@ module emu
         .ovl1      (cg4_ovl1),
         .ovl2      (cg4_ovl2),
         .ovl3      (cg4_ovl3),
+        .cur_xy    (cg6_cur_xy),
+        .cur_row   (cg6_cur_row),
+        .cur_a     (cg6_cur_a),
+        .cur_b     (cg6_cur_b),
         .cm_raddr  (cg4_cm_raddr),
         .cm_rdata  (cg4_cm_rdata),
         .rgb       (cg4_rgb),
         .retrace   (cg4_retrace)
     );
 
-    // The screen: the cg4's when the board is in (a 3/60C's monitor is on the
-    // P4 board), the bw2's otherwise.  The cg4's pixels are four clocks behind
+    // The screen: the colour board's when one is in (a 3/60C's monitor is on
+    // the P4 board), the bw2's otherwise.  The cg4's pixels are four clocks behind
     // cx/cy, the bw2's none, so the syncs and DE wait for whichever is shown.
     reg [3:0] de_d = 4'h0, hs_d = 4'hF, vs_d = 4'hF;
     always @(posedge clk_pix) begin
@@ -889,8 +1061,8 @@ module emu
         .VIDEO_ARX   (VIDEO_ARX),
         .VIDEO_ARY   (VIDEO_ARY),
         .VGA_DE_IN   (de_o),
-        .ARX         ((ar == 2'd0) ? 12'd1160 : (ar == 2'd2) ? 12'd4 : 12'd0),
-        .ARY         ((ar == 2'd0) ? 12'd904  : (ar == 2'd2) ? 12'd3 : 12'd0),
+        .ARX         ((ar == 2'd0) ? 12'd1160 : {10'd0, ar - 2'd1}),   // 0 fill, 1/2 ARC1/ARC2
+        .ARY         ((ar == 2'd0) ? 12'd904  : 12'd0),
         .CROP_SIZE   (12'd0),
         .CROP_OFF    (5'd0),
         .SCALE       (scale)
@@ -898,8 +1070,8 @@ module emu
 
     // ---- LEDs ---------------------------------------------------------------------------
     // User: the machine is in reset (no PROM yet, or the OSD's reset).
-    // Disk: a disk or the tape is moving a block, ORed with the HPS's own activity.
+    // Disk: a disk, the tape or the CD is moving a block, ORed with the HPS's own activity.
     assign LED_USER = reset_cpu;
-    assign LED_DISK = {1'b0, blk_busy | blk1_busy | tblk_busy};
+    assign LED_DISK = {1'b0, blk_busy | blk1_busy | tblk_busy | cblk_busy};
 
 endmodule

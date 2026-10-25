@@ -113,6 +113,19 @@ module sun3_fpga(/* clock, reset */
 		 input [8:0] 	blk1_buf_addr,
 		 input [7:0] 	blk1_buf_wdata,
 `endif
+`ifdef SUN3_CDROM
+		 /* the CD-ROM's block seam (sr0, target 6, sun3_cdrom.sv) */
+		 output 	cblk_start,
+		 output [31:0] 	cblk_lba,
+		 input 		cblk_done,
+		 input 		cblk_err,
+		 input 		cblk_ready,
+		 input [31:0] 	cblk_count,
+		 input 		cblk_buf_we,
+		 input [8:0] 	cblk_buf_addr,
+		 input [7:0] 	cblk_buf_wdata,
+		 input 		cd_changed,
+`endif
 		 /* video irq */
 		 input 		V_INT,
 		 /* leds, debug */
@@ -144,6 +157,25 @@ module sun3_fpga(/* clock, reset */
 		 input 		cg4_cm_clk,
 		 input [7:0] 	cg4_cm_raddr,
 		 output [23:0] 	cg4_cm_rdata,
+`endif
+`ifdef SUN3_CG6
+		 /* the GX in the P4 slot instead of the cg4 (sun3_cg6.sv), when
+		    cg4_present says a board is there; and its drawing engine's
+		    SDRAM port, in wb_clk_i */
+		 input 		cg6_present,
+		 output [25:0] 	ge_word,
+		 output 	ge_req,
+		 output 	ge_we,
+		 output [127:0] ge_wdata,
+		 output [15:0] 	ge_sel,
+		 input 		ge_done,
+		 input [127:0] 	ge_rdata,
+		 /* its cursor, for the scan-out: a row of its planes read on
+		    cg4_cm_clk, and its place (off the screen unless the GX is in) */
+		 input [4:0] 	cg6_cur_row,
+		 output [31:0] 	cg6_cur_a,
+		 output [31:0] 	cg6_cur_b,
+		 output [31:0] 	cg6_cur_xy,
 `endif
 `ifdef SUN3_TOD_LOAD
 		 /* setting the TOD chip from outside (icm7170.v), in CLK */
@@ -292,11 +324,19 @@ module sun3_fpga(/* clock, reset */
 `endif
    wire 			 MATCH_MEM;
    wire 			 MATCH_FB;
+   wire 			 MATCH_VIDSENSE;
    // The cg4 (SUN3_CG4): its registers (sun3_cg4.sv) and its three planes
    // (memory, through the bridge).
    wire 			 MATCH_CG4DAC, MATCH_CG4P4, MATCH_CG4MEM;
    wire [31:0] 			 cg4_out;
-   wire 			 cg4_ack, cg4_irq;
+   wire 			 cg4_ack, cg4_irq, cg4_von;
+   // The GX (SUN3_CG6): its registers (sun3_cg6.sv), the Bt458 it shares with
+   // the cg4 (sun3_cg4.sv), and its frame buffer (memory, through the bridge).
+   wire 			 MATCH_CG6REG, MATCH_CG6DAC, MATCH_CG6MEM;
+   wire [31:0] 			 cg6_out;
+   wire 			 cg6_ack, cg6_irq, cg6_von;
+   wire [31:0] 			 cg6_cur_xy_q;
+   wire 			 wb_idle;
    
    wire [31:0] 			 ethernetdma_addr_out;
    wire [31:0] 			 ethernetdma_data_out;
@@ -380,8 +420,9 @@ module sun3_fpga(/* clock, reset */
 	if (~SUN3_AS_n & C_S12r) C_S14r <= 1'b1;
 	if (~SUN3_AS_n & C_S14r) C_S16r <= 1'b1;
 	if (~SUN3_AS_n & C_S16r) C_S18r <= 1'b1;
-	if (~SUN3_AS_n & C_S18r & !MATCH_MEM & !MATCH_FB & !MATCH_COPRO // CHECKME: sun3, too soon?
+	if (~SUN3_AS_n & C_S18r & !MATCH_MEM & !MATCH_FB & !MATCH_VIDSENSE & !MATCH_COPRO // CHECKME: sun3, too soon?
 	    & !MATCH_CG4MEM & !MATCH_CG4DAC & !MATCH_CG4P4
+	    & !MATCH_CG6MEM & !MATCH_CG6DAC & !MATCH_CG6REG   // the GX's FBC waits for its engine
 `ifdef SUN3_ETH_WISH7990
 	    & !MATCH_AMDLE
 `endif
@@ -724,22 +765,39 @@ module sun3_fpga(/* clock, reset */
    assign MATCH_FBX      = (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices[18:11] == 8'hFF) & (ma_pmap2devices[10:8] == 3'h0) & C_S6; // architectural: 2 MiB
 `ifdef SUN3_FB
    assign MATCH_FB       = (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices[18:11] == 8'hFF) & (ma_pmap2devices[10:5] == 6'h00) & C_S6; // BW: 256 KiB
+   // The on-board video's resolution, at obmem 0xFF1C0000 (one page): bit 7
+   // set is 1152x900, clear 1600x1280 (the board's hi-res jumper, J800, by
+   // inference).  Rev 3.0.1 reads it to set the bw2's width and height and
+   // leaves them unset, at zero, when it times out: a white screen with
+   // nothing drawn on a 3/60 without a P4 board.  Rev 1.9 reads it too and
+   // keeps 1152x900 either way.  Reads give 0x80 in every byte; writes are
+   // ignored.
+   assign MATCH_VIDSENSE = (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices == 19'h7F8E0) & C_S6;
 `else
    // No video memory: the PROM's bw2 probe times out.  Not what a real 3/60
    // looks like -- they all have it -- and the monitor is not entirely happy
    // without it (see SUN3_FB in sun3_config.vh).
    assign MATCH_FB       = 1'b0;
+   assign MATCH_VIDSENSE = 1'b0;
 `endif
 
 `ifdef SUN3_CG4
+   // cg4_present says a colour board is in the P4 slot; with SUN3_CG6,
+   // cg6_present that it is the GX rather than the cg4.
+ `ifdef SUN3_CG6
+   wire 			 cg4_fitted = cg4_present & ~cg6_present;
+   wire 			 cg6_fitted = cg4_present &  cg6_present;
+ `else
+   wire 			 cg4_fitted = cg4_present;
+ `endif
    // The cg4, a P4 board, when the OSD fits it (docs/cg4.md):
    //   0xFF200000 the Bt458s, 0xFF300000 the P4 register (one page each),
    //   0xFF400000 overlay and 0xFF600000 enable (128 KiB each), 0xFF800000
    //   colour (1 MiB).  ma_pmap2devices is PA[31:13].  Absent, they time out,
    //   which is how the PROM and SunOS find there is no board.
-   assign MATCH_CG4DAC = cg4_present & (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices == 19'h7F900) & C_S6;
-   assign MATCH_CG4P4  = cg4_present & (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices == 19'h7F980) & C_S6;
-   assign MATCH_CG4MEM = cg4_present & (EN_DEV) & (TYPE == 2'h0) & !DISACC & C_S6 &
+   assign MATCH_CG4DAC = cg4_fitted & (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices == 19'h7F900) & C_S6;
+   assign MATCH_CG4P4  = cg4_fitted & (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices == 19'h7F980) & C_S6;
+   assign MATCH_CG4MEM = cg4_fitted & (EN_DEV) & (TYPE == 2'h0) & !DISACC & C_S6 &
 			 (((ma_pmap2devices[18:7] == 12'hFF4) & (ma_pmap2devices[6:4] == 3'h0)) |
 			  ((ma_pmap2devices[18:7] == 12'hFF6) & (ma_pmap2devices[6:4] == 3'h0)) |
 			   (ma_pmap2devices[18:7] == 12'hFF8));
@@ -747,6 +805,24 @@ module sun3_fpga(/* clock, reset */
    assign MATCH_CG4DAC = 1'b0;
    assign MATCH_CG4P4  = 1'b0;
    assign MATCH_CG4MEM = 1'b0;
+`endif
+`ifdef SUN3_CG6
+   // The GX, in the same slot when the OSD says so (docs/cg6.md):
+   //   0xFF200000 the Bt458 (the cg4's page), 0xFF240000 the DHC, 0xFF280000
+   //   the ALT, 0xFF300000 the FHC and THC (A12), 0xFF380000 the ROM (64 KiB),
+   //   0xFF700000 the FBC and TEC (A12): sun3_cg6.sv; 0xFF800000 the frame
+   //   buffer (1 MiB), the cg4's colour plane.  Nothing else of the cg4's.
+   assign MATCH_CG6DAC = cg6_fitted & (EN_DEV) & (TYPE == 2'h0) & !DISACC & (ma_pmap2devices == 19'h7F900) & C_S6;
+   assign MATCH_CG6REG = cg6_fitted & (EN_DEV) & (TYPE == 2'h0) & !DISACC & C_S6 &
+			 ((ma_pmap2devices == 19'h7F920) | (ma_pmap2devices == 19'h7F940) |
+			  (ma_pmap2devices == 19'h7F980) | (ma_pmap2devices[18:3] == 16'hFF38) |
+			  (ma_pmap2devices == 19'h7FB80));
+   assign MATCH_CG6MEM = cg6_fitted & (EN_DEV) & (TYPE == 2'h0) & !DISACC & C_S6 &
+			 (ma_pmap2devices[18:7] == 12'hFF8);
+`else
+   assign MATCH_CG6DAC = 1'b0;
+   assign MATCH_CG6REG = 1'b0;
+   assign MATCH_CG6MEM = 1'b0;
 `endif
        
    /* VME spaces, no default timing, FYI only */
@@ -830,8 +906,11 @@ module sun3_fpga(/* clock, reset */
 				.EN_UUBYTE(EN_UUBYTE),
 				.MATCH_MEM(MATCH_MEM),
 				.MATCH_FB(MATCH_FB),
-				.MATCH_CG(MATCH_CG4MEM),
+				.MATCH_CG(MATCH_CG4MEM | MATCH_CG6MEM),
 				.W_ACK(w_ack),
+`ifdef SUN3_WB_CACHE
+				.WB_IDLE(wb_idle),
+`endif
 				
 				// wishbone
 				.wb_cyc_o(wb_cyc_o),
@@ -844,6 +923,12 @@ module sun3_fpga(/* clock, reset */
 				.wb_ack_i(wb_ack_i)
 				);
    
+`ifndef SUN3_WB_CACHE
+   // only the cached bridge says when it is idle; the GX (SUN3_CG6) is
+   // built with it (Sun-3.qsf)
+   assign wb_idle = 1'b1;
+`endif
+
    assign EN_LLBYTE = ( SUN3_ADR_IN[0] &  SUN3_ADR_IN[1]) | (                SUN3_ADR_IN[1]             &  SUN3_SIZ[1]) | (               ~SUN3_SIZ[0] & ~SUN3_SIZ[1]) | ( SUN3_ADR_IN[0] &                SUN3_SIZ[0] & SUN3_SIZ[1]);
    assign EN_LUBYTE = (~SUN3_ADR_IN[0] &  SUN3_ADR_IN[1]) | ( SUN3_ADR_IN[0] & ~SUN3_ADR_IN[1]             &  SUN3_SIZ[1]) | (~SUN3_ADR_IN[1] & ~SUN3_SIZ[0] & ~SUN3_SIZ[1]) | (               ~SUN3_ADR_IN[1] & SUN3_SIZ[0] & SUN3_SIZ[1]);
    assign EN_ULBYTE = ( SUN3_ADR_IN[0] & ~SUN3_ADR_IN[1]) | (               ~SUN3_ADR_IN[1] & ~SUN3_SIZ[0])             | (~SUN3_ADR_IN[1]             &  SUN3_SIZ[1]);
@@ -977,14 +1062,14 @@ module sun3_fpga(/* clock, reset */
    always @(posedge CLK)
      if (!sys_reset || ee_rst_st == 2'd2) ee_rst_st <= 2'd0;
      else ee_rst_st <= ee_rst_st + 2'd1;
-   wire [7:0] 			 ee_cons = cg4_present ? 8'h20 : 8'h00;
+   wire [7:0] 			 ee_cons = cg4_present ? 8'h20 : 8'h00;   // cg4 or GX: a P4 colour board
    wire 			 ee_fix = sys_reset & (ee_rst_st == 2'd2) & (eeprom_out != ee_cons) &
 				 ((eeprom_out == 8'h00) | (eeprom_out == 8'h20));
 `ifdef SUN3_SIM
    always @(posedge CLK)
      if (ee_fix)
        $display("[%0t] eeprom: console byte %02x, now %02x (%s)", $time, eeprom_out, ee_cons,
-		cg4_present ? "the cg4" : "the bw2");
+		cg4_present ? "a P4 colour board" : "the bw2");
 `endif
    eeprom eeprom(.CLK(CLK),
 		 .idx(sys_reset ? 11'h01F : SUN3_ADR_IN[10:0]),
@@ -1069,8 +1154,12 @@ module sun3_fpga(/* clock, reset */
 		       MATCH_PROM      ? prom_out :
 		       MATCH_MEM       ? wishbone_out :
 		       MATCH_FB        ? wishbone_out :
+		       MATCH_VIDSENSE  ? EXPAND_8BITS(8'h80) :
 		       MATCH_CG4MEM    ? wishbone_out :
 		       (MATCH_CG4DAC | MATCH_CG4P4) ? cg4_out :
+		       MATCH_CG6MEM    ? wishbone_out :
+		       MATCH_CG6DAC    ? {cg4_out[31:24], 24'h000000} :   // the GX's Bt458 is on D31:24
+		       MATCH_CG6REG    ? cg6_out :
 		       MATCH_KBDMS     ? EXPAND_8BITS(kbdms_out) :
 		       MATCH_SERIAL    ? EXPAND_8BITS(serial_out) :
 		       MATCH_UARTBYP   ? EXPAND_8BITS(serial_out) :
@@ -1103,11 +1192,11 @@ module sun3_fpga(/* clock, reset */
 		     (             C_S4 & (MATCH_FLTLOG)) | // reads, and writes ignored
 		     ( SUN3_RW_n & C_S4 & (MATCH_SMAP)) |  // entering S4, quick devices (CTX is 1 clock but went valid after being written, not affected by SUN3_A)
 		     ( SUN3_RW_n & C_S4 & (MATCH_PMAP)) |  // entering S4, physical map needed an extra cycle
-		     ( SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG | MATCH_PROM)) | // entering S6, devices going through the MMU
+		     ( SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG | MATCH_PROM | MATCH_VIDSENSE)) | // entering S6, devices going through the MMU
 		     ( SUN3_RW_n & C_S4 & (MATCH_UARTBYP)) | // entering S4, FAST serial (4*1/4 clock)		  
 		     ( SUN3_RW_n & C_S6 & (MATCH_SERIAL)) | // entering S8, FAST serial (4*1/4 clock)
 		     ( SUN3_RW_n & C_S12 & (MATCH_KBDMS)) |  // entering S8, SLOW serial (1/4 clock)
-		     ( SUN3_RW_n & w_ack & (MATCH_MEM | MATCH_FB | MATCH_CG4MEM)) | // wishbone
+		     ( SUN3_RW_n & w_ack & (MATCH_MEM | MATCH_FB | MATCH_CG4MEM | MATCH_CG6MEM)) | // wishbone
 `ifdef SUN3_ETH_WISH7990
 		     ( SUN3_RW_n & ~ethernet_dsack_n_out[0] & (MATCH_AMDLE)) | // ethernet (PVC bridge)
 `endif
@@ -1115,12 +1204,13 @@ module sun3_fpga(/* clock, reset */
 		     (~SUN3_RW_n & C_S4 & (MATCH_CTX |                MATCH_SYSEN |              MATCH_DIAG |                   MATCH_MEMERR_CTRL)) | // entering S4, quick devices (WO or WR)
 		     (~SUN3_RW_n & C_S4 & (MATCH_SMAP)) |  // entering S4, quick devices (CTX is 1 clock but went valid after being written, not affected by SUN3_A)
 		     (~SUN3_RW_n & C_S4 & (MATCH_PMAP)) |  // entering S4, physical map needed an extra cycle
-		     (~SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG)) | // entering S6, devices going through the MMU
+		     (~SUN3_RW_n & C_S6 & (MATCH_EEPROM | MATCH_TIMER | MATCH_IRQREG | MATCH_VIDSENSE)) | // entering S6, devices going through the MMU
 		     (~SUN3_RW_n & C_S4 & (MATCH_UARTBYP)) | // entering S4, FAST serial (4*1/4 clock)		  
 		     (~SUN3_RW_n & C_S6 & (MATCH_SERIAL)) | // entering S8, FAST serial (4*1/4 clock)
 		     (~SUN3_RW_n & C_S12 & (MATCH_KBDMS)) | // entering S8, SLOW serial (1/4 clock)
-		     (~SUN3_RW_n & w_ack & (MATCH_MEM | MATCH_FB | MATCH_CG4MEM)) | // wishbone
-		     (cg4_ack & (MATCH_CG4DAC | MATCH_CG4P4)) | // the cg4's registers, reads and writes
+		     (~SUN3_RW_n & w_ack & (MATCH_MEM | MATCH_FB | MATCH_CG4MEM | MATCH_CG6MEM)) | // wishbone
+		     (cg4_ack & (MATCH_CG4DAC | MATCH_CG4P4 | MATCH_CG6DAC)) | // the cg4's registers (and the GX's Bt458), reads and writes
+		     (cg6_ack & MATCH_CG6REG) | // the GX's registers: when its engine lets them
 `ifdef SUN3_ETH_WISH7990
 		     (~SUN3_RW_n & ~ethernet_dsack_n_out[0] & (MATCH_AMDLE)) | // ethernet (PVC bridge)
 `endif
@@ -1210,7 +1300,7 @@ module sun3_fpga(/* clock, reset */
    // first interrupts, and the P4 board's interrupt alone from then on.
    wire vid_int;
    sun3_vint vint (.CLK(CLK), .RESET(sys_reset), .VBLANK(V_INT_s),
-                   .P4_INT(cg4_irq), .V_INT(vid_int));
+                   .P4_INT(cg4_irq | cg6_irq), .V_INT(vid_int));
 
    sun3_irq_priority irqenc (.CLK(CLK),
     			     .EN_IRQ7(EN_IRQ7),
@@ -1232,20 +1322,23 @@ module sun3_fpga(/* clock, reset */
    
 `ifdef SUN3_CG4
    // ---- the cg4's registers: the Bt458s and the P4 register ------------------
+   // The GX's Bt458 is this one, wired as the GX wires it (docs/cg6.md, "The
+   // DAC"): its byte on D31:24 and one colour-map component a cycle, which
+   // the cg4's packing takes as a cycle of one lane.
    sun3_cg4 cg4 (
        .clk       (CLK),
        .rst       (sys_reset),
-       .sel_dac   (MATCH_CG4DAC),
+       .sel_dac   (MATCH_CG4DAC | MATCH_CG6DAC),
        .sel_p4    (MATCH_CG4P4),
        .rw_n      (SUN3_RW_n),
        .adr       (SUN3_ADR_IN[3:2]),
-       .lanes     ({EN_UUBYTE, EN_ULBYTE, EN_LUBYTE, EN_LLBYTE}),
-       .wdata     (SUN3_DATA_IN),
+       .lanes     (MATCH_CG6DAC ? 4'b0001 : {EN_UUBYTE, EN_ULBYTE, EN_LUBYTE, EN_LLBYTE}),
+       .wdata     (MATCH_CG6DAC ? {4{SUN3_DATA_IN[31:24]}} : SUN3_DATA_IN),
        .rdata     (cg4_out),
        .ack       (cg4_ack),
        .irq       (cg4_irq),
        .retrace   (cg4_retrace),
-       .video_on  (cg4_video_on),
+       .video_on  (cg4_von),
        .read_mask (cg4_read_mask),
        .command   (cg4_command),
        .ovl1      (cg4_ovl1),
@@ -1258,6 +1351,54 @@ module sun3_fpga(/* clock, reset */
    assign cg4_out = 32'h0;
    assign cg4_ack = 1'b0;
    assign cg4_irq = 1'b0;
+   assign cg4_von = 1'b0;
+`endif
+
+`ifdef SUN3_CG6
+   // ---- the GX's registers and drawing engine -------------------------------------
+   // The engine is on wb_clk_i, the SDRAM's clock, beside the bridge whose
+   // queue it waits on; its SDRAM port goes up to the board.
+   sun3_cg6 cg6 (
+       .clk       (CLK),
+       .rst       (sys_reset),
+       .sel_fhc   (MATCH_CG6REG & (ma_pmap2devices == 19'h7F980) & ~SUN3_ADR_IN[12]),
+       .sel_thc   (MATCH_CG6REG & (ma_pmap2devices == 19'h7F980) &  SUN3_ADR_IN[12]),
+       .sel_fbc   (MATCH_CG6REG & (ma_pmap2devices == 19'h7FB80) & ~SUN3_ADR_IN[12]),
+       .sel_tec   (MATCH_CG6REG & (ma_pmap2devices == 19'h7FB80) &  SUN3_ADR_IN[12]),
+       .sel_nul   (MATCH_CG6REG & (ma_pmap2devices != 19'h7F980) & (ma_pmap2devices != 19'h7FB80)),
+       .rw_n      (SUN3_RW_n),
+       .adr       (SUN3_ADR_IN[11:2]),
+       .wdata     (SUN3_DATA_IN),
+       .rdata     (cg6_out),
+       .ack       (cg6_ack),
+       .irq       (cg6_irq),
+       .retrace   (cg4_retrace),
+       .video_on  (cg6_von),
+       .pclk      (cg4_cm_clk),
+       .cur_row   (cg6_cur_row),
+       .cur_a     (cg6_cur_a),
+       .cur_b     (cg6_cur_b),
+       .cur_xy    (cg6_cur_xy_q),
+       .mclk      (wb_clk_i),
+       .mem_idle  (wb_idle),
+       .ge_word   (ge_word),
+       .ge_req    (ge_req),
+       .ge_we     (ge_we),
+       .ge_wdata  (ge_wdata),
+       .ge_sel    (ge_sel),
+       .ge_done   (ge_done),
+       .ge_rdata  (ge_rdata));
+   // the screen is on when the board's own control says so
+   assign cg4_video_on = cg6_fitted ? cg6_von : cg4_von;
+   assign cg6_cur_xy   = cg6_fitted ? cg6_cur_xy_q : 32'hFFE0FFE0;
+`else
+   assign cg6_out = 32'h0;
+   assign cg6_ack = 1'b0;
+   assign cg6_irq = 1'b0;
+   assign cg6_von = 1'b0;
+ `ifdef SUN3_CG4
+   assign cg4_video_on = cg4_von;
+ `endif
 `endif
 
 `ifdef SUN3_ETH_WISH7990
@@ -1535,6 +1676,18 @@ module sun3_fpga(/* clock, reset */
        .blk1_buf_we    (blk1_buf_we),
        .blk1_buf_addr  (blk1_buf_addr),
        .blk1_buf_wdata (blk1_buf_wdata),
+`endif
+`ifdef SUN3_CDROM
+       .cblk_start     (cblk_start),
+       .cblk_lba       (cblk_lba),
+       .cblk_done      (cblk_done),
+       .cblk_err       (cblk_err),
+       .cblk_ready     (cblk_ready),
+       .cblk_count     (cblk_count),
+       .cblk_buf_we    (cblk_buf_we),
+       .cblk_buf_addr  (cblk_buf_addr),
+       .cblk_buf_wdata (cblk_buf_wdata),
+       .cd_changed     (cd_changed),
 `endif
        .dma_active    ()
    );

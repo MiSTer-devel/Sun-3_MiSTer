@@ -72,13 +72,18 @@ module eeprom(input CLK,
 	sram[11'h70b] = 8'h12;
 `ifdef SUN3_SIM
 	// +eeprom_boot=st (Sun-3_MiSTer's tb_emu): auto-boot from another
-	// device than sd, without typing at the PROM.
+	// device than sd, without typing at the PROM.  +eeprom_boot_unit=<hex>
+	// and +eeprom_boot_part=<hex> set the unit (0x1C) and the partition
+	// (0x1D): sd, 30, 1 boots the CD-ROM's partition 1 under Rev 3.0.1.
 	begin : sim_boot
 	   reg [15:0] dev;
+	   reg [7:0]  b;
 	   if ($value$plusargs("eeprom_boot=%s", dev)) begin
 	      sram[11'h019] = dev[15:8];
 	      sram[11'h01a] = dev[7:0];
 	   end
+	   if ($value$plusargs("eeprom_boot_unit=%h", b)) sram[11'h01c] = b;
+	   if ($value$plusargs("eeprom_boot_part=%h", b)) sram[11'h01d] = b;
 	end
 `endif
      end

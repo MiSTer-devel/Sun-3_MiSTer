@@ -43,6 +43,46 @@ both ways.
     at Wishbone word `{6'h3F, PA[25:2]}`, the top of the space;
   * `sun3_cg4_scanout.sv` (new) draws them, through the colour map, into
     the same raster as `fb_scanout.sv`.
+* **The GX** (`SUN3_CG6`; docs/cg6.md), the P4 slot's other board, fitted
+  when `cg4_present` and the new `cg6_present` say so:
+  * `sun3_fpga.v` matches its pages (the Bt458 at 0xFF200000, the DHC, the
+    ALT, the FHC and THC at 0xFF300000, the ROM at 0xFF380000, the FBC and
+    TEC at 0xFF700000) for the new `sun3_cg6.sv`, and its frame buffer at
+    0xFF800000 (the cg4's colour plane) for the bridge; the cg4's own
+    decode is off meanwhile. Its register cycles are left out of the bus
+    timeout, since an FBC cycle waits while the drawing engine works;
+  * the Bt458 is `sun3_cg4.sv`'s, its data on D31:24 and one colour-map
+    component a cycle (`lanes` 0001, the byte copied to every lane);
+  * the THC's retrace interrupt is the P4 interrupt into `sun3_vint.v`;
+  * the drawing engine, `sun3_cg6_engine.sv` (new), runs on `wb_clk_i`
+    and is a client of its own of the SDRAM adapter (`sun3_top.v` passes
+    its port through);
+  * the TEC, `sun3_cg6_tec.sv` (new), inside `sun3_cg6.sv` on the CPU's
+    clock: the data registers converted by VDC's type, the vertex
+    registers through the MV matrix and, with autoload, into the FBC's
+    queue, COMMAND1's matrix product, in IEEE single (one DSP, one M10K),
+    for OpenWindows 2.0's xnews (docs/cg6.md, "The TEC"). FBC and TEC
+    cycles wait while it works; MISC's index reads the queue's;
+  * the FBC beyond libpixrect's needs, for xnews: MISC bit 19 the vertical
+    blank (`_install_cmap` waits on it); DRAWSTATUS's and BLITSTATUS's clip
+    bits (visible, intersect, hidden); a rectangle drawn again by lone
+    IPOINTABSX/ITRIABSX writes (its region fill, `_sh_cg6_FLRS8pg`);
+    a DRAWSTATUS with nothing new queued drawing the last primitive again
+    (it draws a shape once per clip rectangle);
+  * `sun3_cached_fifo_bridge.v` has a `WB_IDLE` output (nothing queued or
+    in flight), which the engine waits for before it draws, so that the
+    CPU's posted frame-buffer writes land first;
+  * `sun3_cg4_scanout.sv` has a `colour_only` input: the colour plane's 72
+    bursts a line alone, and no overlay; and the GX's 32x32 cursor, its
+    planes read from `sun3_cg6.sv` on the pixel clock, shown in the Bt458's
+    overlay colours in front of the colour (`sun3_top.v` and `sun3_fpga.v`
+    pass its four signals through; the cg4 leaves it off the screen).
+* **`sun3_fpga.v`: the on-board video's resolution register** at obmem
+  0xFF1C0000 (`MATCH_VIDSENSE`), which upstream left to time out. It reads
+  0x80 in every byte (bit 7 set: 1152x900) and ignores writes. Rev 3.0.1
+  sets the bw2's width and height only from it, and without it drew its
+  console into a zero-width screen: a white screen on a 3/60 without a P4
+  board. Rev 1.9 reads it too and keeps 1152x900 either way.
 * **`sun3_si.sv`**: the tape, st0, an Emulex MT-02 at target 4
   (`SUN3_TAPE`, `sun3_mt02.sv` from Sun-2_MiSTer), with its own block seam.
   A second disk at target 1 (`SUN3_SD1`, another `scsi_targ`, SunOS's sd2) on
@@ -58,6 +98,20 @@ both ways.
   what limited large disk transfers. The counters end as they did, which
   `tb/verilator/tb_si.sv` checks against the old engine, kept there as
   `sun3_si_ref.sv`.
+  A CD-ROM, sr0 at target 6 (`SUN3_CDROM`, the new `sun3_cdrom.sv`), with
+  its own block seam, read only. The fabric has four ports, so the CD's
+  drive is ORed with the second disk's on the fourth: the bus is a wired-OR
+  either way.
+* **`sun3_cdrom.sv`** (new): the CD-ROM drive. Its bus side, handshake and
+  two-bank read-ahead are Wish5380's `scsi_targ`, read only; the rest is a
+  SONY CDU-8012 as SunOS 4.1's sr driver and the PROM's disk driver use it:
+  512-byte blocks after a reset (Sun's CD drives; SunOS's `srdef.h` is built
+  `FIVETWELVE`, and the PROM boots a CD with its disk driver, `b sd(0,30,N)`
+  on Rev 3.0.1), 2048 after a MODE SELECT asks for them, INQUIRY type 5 and
+  removable, READ CAPACITY, MODE SENSE pages 01 and 0E, READ TOC (one data
+  track), READ SUB-CHANNEL, NOT READY / 3A with no disc, and UNIT ATTENTION
+  / 28 once when a disc goes in while the machine runs.
+  `tb/verilator/tb_cdrom.sv` and `mutate_cdrom.sh` test it.
 * **`sun3_mt02.sv`** (from Sun-2_MiSTer `816c187`): a READ that meets a file
   mark or blank tape before its first block answers STATUS after 5 ms of
   "tape motion". The PROM's si driver sets the 5380's DMA mode only after
@@ -86,7 +140,9 @@ both ways.
     Sun-3_FPGA had its bytes swapped. Neither the 1.9 nor the 3.0.1 PROM
     reads it;
   * in simulation, `+eeprom_boot=st` makes the boot device the tape, so
-    `tb_emu` auto-boots from it without typing at the PROM.
+    `tb_emu` auto-boots from it without typing at the PROM;
+    `+eeprom_boot_unit=` and `+eeprom_boot_part=` (hex) set its unit and
+    partition, e.g. `sd`, `30`, `1` for the CD-ROM under Rev 3.0.1.
 * **`sun3_attr.vh`**: `SUN3_QUARTUS` asks for `M10K`, the Cyclone V's block,
   not the MAX 10's `M9K`. `SUN3_RAM_BLOCK_NORW` adds `no_rw_check`, for a RAM
   written from two clocks.

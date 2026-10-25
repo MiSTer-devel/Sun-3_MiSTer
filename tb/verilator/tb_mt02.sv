@@ -272,8 +272,8 @@ initial begin
 
     // SunOS 4.0's st driver knows an MT-02 by an empty vendor field.
     cmd(8'h12, 0, 0, 0, 36, 0);
-    check(st_byte == 8'h00 && din.size() == 5 && din[0] == 8'h01 && din[1] == 0 && din[4] == 0,
-          "INQUIRY: five bytes, a sequential device and zeroes -- what SunOS 4.0 takes for an Emulex");
+    check(st_byte == 8'h00 && din.size() == 5 && din[0] == 8'h01 && din[1] == 8'h80 && din[4] == 0,
+          "INQUIRY: five bytes, a removable sequential device and zeroes -- an Emulex to SunOS, a tape to NetBSD");
     cmd(8'h12, 8'h20, 0, 0, 36, 0);
     check(din.size() == 5 && din[0] == 8'h7f, "INQUIRY of LUN 1: nothing there");
     cmd(8'h1a, 0, 0, 0, 12, 0);
@@ -296,6 +296,11 @@ initial begin
     get_sense(16);
     check(sense[2] == 8'h80 && sense[8] == 8'h1c, "sense: Filemark, NO SENSE, Emulex 0x1C");
     check(sense[0] == 8'hF0 && info_of(sense) == 32'd61, "... valid, residue 61 blocks");
+    cmd(8'h01, 0, 0, 0, 0, 0);
+    read_blocks(64);
+    get_sense(18);
+    check(sense.size() == 16 && {sense[3], sense[4], sense[5], sense[6]} == 32'd61,
+          "the same read, NetBSD's sense (18 asked): the residue whole, 61, no PROM bit in byte 4");
     read_blocks(1);
     check(st_byte == 8'h00 && din.size() == 512 && block_is(din, 0, 1, 1, 0), "the next READ is file 1, past the mark");
     read_blocks(1);

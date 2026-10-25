@@ -15,9 +15,9 @@ danifunker/Main_MiSTer).
 
 * **Work on `master`.** Ask before pushing.
 * **`releases/` holds only what goes on a MiSTer**: the core
-  (`Sun-3_YYYYMMDD.rbf`, the bitstream tested on the board), `MiSTer` (a
-  Main_MiSTer with Sun support) and `boot0.rom` (the patched Rev 1.9 PROM,
-  `make -C tools`). The README's "What you will need" says where each goes
+  (`Sun-3_YYYYMMDD.rbf`, the bitstream tested on the board; earlier ones are
+  kept, never deleted, and no README goes there) and `boot0.rom`
+  (the patched Rev 3.0.1 PROM, `make -C tools`). The README's "What you will need" says where each goes
   and what it was built from; keep the two in step.
 * **A plain checkout builds with Quartus 17.0.2 alone.**
   * There are no submodules.
@@ -51,11 +51,12 @@ danifunker/Main_MiSTer).
 
 | | |
 |---|---|
-| `make -C tools` / `all-roms` / `fetch` | the stock 3/60 PROMs from sun3arc into `build/rom/`, SHA-256 checked; the patched `noparity` image (`boot0.rom`) and the simulation's `fast` one |
-| `make -C tb/verilator` | the glue benches: sdram, block, kbd_mouse, bell, kbm_scc, tod, mt02, cg4, cg4_scanout, eeprom, si (the SCSI DMA against the old byte-per-cycle engine), vint (level 4's source, with the interrupt PAL and the P4 register), enet (the network's DDR3 mailbox, between Wish7990's MII blocks and Main's daemon played by the bench), cpuclk (the OSD's CPU clock: the PLL's counter rewritten in reset, against `pll_stub.sv`'s PLL and `pll_cfg`) |
-| `bash tb/verilator/mutate_<x>.sh` | mutation checks: sdram, kbm, bell, tod, mt02, cg4, cg4_scanout, eeprom, si, vint, enet, cpuclk, cpu_fpu |
+| `make -C tools` / `all-roms` / `fetch` | the stock 3/60 PROMs from sun3arc into `build/rom/`, SHA-256 checked; the patched `noparity` image (`boot0.rom`) and the simulation's `fast` one; `all-roms` the same for Rev 3.0.1 (stock image dropped in as `build/rom/sun3_60_v3.0.1.bin`) |
+| `make -C tb/verilator` | the glue benches: sdram, block, kbd_mouse, bell, kbm_scc, tod, mt02, cg4, cg4_scanout, eeprom, si (the SCSI DMA against the old byte-per-cycle engine), vint (level 4's source, with the interrupt PAL and the P4 register), enet (the network's DDR3 mailbox, between Wish7990's MII blocks and Main's daemon played by the bench), cpuclk (the OSD's CPU clock: the PLL's counter rewritten in reset, against `pll_stub.sv`'s PLL and `pll_cfg`), cdrom (sr0 at ID 6: 512/2048-byte blocks, no-disc sense, SunOS's and the PROM's sequences), cg6 (the GX: the C model's traces, its own, SunOS's SPARC and 68020 libpixrect's and OpenWindows 2.0 xnews's TEC routines, replayed pixel for pixel; `+lockstep=` runs the model beside it; `CG6_MUSASHI=` a Musashi checkout for the 68020's) |
+| `bash tb/verilator/mutate_<x>.sh` | mutation checks: sdram, kbm, bell, tod, mt02, cg4, cg4_scanout, eeprom, si, vint, enet, cpuclk, cdrom, cg6 (`JOBS=n` runs n at once), cpu_fpu |
+| `make -C tools/cg6model xnews` / `mutatexn` | OpenWindows 2.0's sun3 xnews (`build/dist/sunos-4.1.1-sun3/usr/openwin/bin/xnews`) loaded whole on Musashi: its own TEC routines against the C model's TEC, its software and the exact result (docs/cg6.md, "The TEC"); `tracexn` its trace for tb_cg6 |
 | `make -C tb/verilator tb_cpu_fpu` | RD68021 + RD68884 against the 1,320-program CPU+FPU corpus a real Mac II passed |
-| `make -C tb/verilator tb_emu [TIMEOUT_MS=] [DISK=] [DISK1=] [EEPROM=] [KEYS=] [SIMARGS=]` | the whole core (`Sun-3.sv` with `files.qip` and the `.qsf`'s macros): PROM loader, SDRAM, scan-out, keyboard. It writes `screen_*.ppm` (24-bit), `console.log` and a log in `run_tb_emu/`. With the `fast` PROM the banner comes at ~1 s simulated, and `+eeprom_boot=st` boots the tape to munix by ~2.6 s. Its plusargs (`+tape=`, `+eeprom=` and `+eeprom_save=`, `+status=1000` for colour off, `+status=4000` for 33 MHz, `+trace_tape`, `+trace_cg4`, `+trace_scsi`, `+trace_vd`, `+watch=`, `+pctrace_from=`, `+memdump=`, `+screen_stats`) are listed in `tb_emu.sv`'s header. `EMU_OBJ=` builds a second copy while one runs |
+| `make -C tb/verilator tb_emu [TIMEOUT_MS=] [DISK=] [DISK1=] [EEPROM=] [KEYS=] [SIMARGS=]` | the whole core (`Sun-3.sv` with `files.qip` and the `.qsf`'s macros): PROM loader, SDRAM, scan-out, keyboard. It writes `screen_*.ppm` (24-bit), `console.log` and a log in `run_tb_emu/`. With the `fast` PROM (`ROM=` picks another; `all-roms` also makes 3.0.1's `fast`) the banner comes at ~1 s simulated with the colour board off and ~1.7 s with it on (1.9 clears the colour plane; 3.0.1 does not, ~1 s), and `+eeprom_boot=st` boots the tape to munix by ~2.6 s. Its plusargs (`+tape=`, `+eeprom=` and `+eeprom_save=`, `+status=1000` for colour off, `+status=4000` for 33 MHz, `+trace_tape`, `+trace_cg4`, `+trace_scsi`, `+trace_vd`, `+watch=`, `+vwatch=` (by virtual address), `+mmutrace` (every segment- and page-map write), `+pctrace_from=`, `+memdump=`, `+screen_stats`) are listed in `tb_emu.sv`'s header. `EMU_OBJ=` builds a second copy while one runs |
 | `python3 tools/mktape -o build/tapes/X.qic <dir>` | a tape image from a SunOS sun3 distribution (sun3arc `maketape` layout, or `tapeN/` per-file dumps) |
 | `python3 tools/mktape --disk build/disks/sd0-1g.img --size 1024 --root 32` | an empty, labelled 1 GB disk to install onto ([docs/install-sunos.md](docs/install-sunos.md)); tapes built by `mktape` know it in `format.dat` |
 | `python3 tools/sunos/mkpatchkit.py` | the kit (`build/dist/patchkit-tape/`, for `mktape`) that installs the 74 SunOS patches U1 and the Y2K patch lack ([docs/sunos-patches.md](docs/sunos-patches.md), install-sunos.md 8) |
@@ -94,5 +95,11 @@ are the PROM images, disks and tapes the tools make under `build/`.
 * **The ICM7170 model came with three bugs.** It turned the year at the end of
   November, never advanced the weekday, and a reset stopped it. Each is fixed,
   and `tb_mister_tod` / `mutate_tod.sh` guard them.
+* **Verilator takes SystemVerilog that Quartus 17 rejects**: a net of a
+  typedef'd type (`wire s18 x = ...`), the streaming operators
+  (`{<<{...}}`) and a unary minus on a typedef cast (`-s22'(x)`; write
+  `0 - s22'(x)`) all passed every bench and failed the build. Run `flock
+  /tmp/quartus.lock quartus_map Sun-3 --analysis_and_elaboration` (a few
+  minutes) on new RTL before a full build.
 * **Main_MiSTer saves a core's OSD settings only from its System page**
   (*Save settings*); closing the OSD or its *Reset* saves nothing.

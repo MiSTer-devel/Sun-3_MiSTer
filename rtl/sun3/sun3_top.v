@@ -93,6 +93,19 @@ module sun3_top(/* clock, reset */
 	   input wire [8:0]  blk1_buf_addr,
 	   input wire [7:0]  blk1_buf_wdata,
 `endif
+`ifdef SUN3_CDROM
+	   /* the CD-ROM's block seam (sr0, target 6, sun3_cdrom.sv) */
+	   output wire 	     cblk_start,
+	   output wire [31:0] cblk_lba,
+	   input wire 	     cblk_done,
+	   input wire 	     cblk_err,
+	   input wire 	     cblk_ready,
+	   input wire [31:0] cblk_count,
+	   input wire 	     cblk_buf_we,
+	   input wire [8:0]  cblk_buf_addr,
+	   input wire [7:0]  cblk_buf_wdata,
+	   input wire 	     cd_changed,
+`endif
 	   /* video irq */
 	   input wire 	     V_INT,
 	   /* leds, debug */
@@ -121,6 +134,23 @@ module sun3_top(/* clock, reset */
 	   input wire 	     cg4_cm_clk,
 	   input wire [7:0]  cg4_cm_raddr,
 	   output wire [23:0] cg4_cm_rdata,
+`endif
+`ifdef SUN3_CG6
+	   /* the GX (sun3_cg6.sv) instead of the cg4, and its drawing engine's
+	      SDRAM port, in wb_clk_i */
+	   input wire 	     cg6_present,
+	   output wire [25:0] ge_word,
+	   output wire 	     ge_req,
+	   output wire 	     ge_we,
+	   output wire [127:0] ge_wdata,
+	   output wire [15:0] ge_sel,
+	   input wire 	     ge_done,
+	   input wire [127:0] ge_rdata,
+	   /* its cursor, for the scan-out (cg4_cm_clk) */
+	   input wire [4:0]  cg6_cur_row,
+	   output wire [31:0] cg6_cur_a,
+	   output wire [31:0] cg6_cur_b,
+	   output wire [31:0] cg6_cur_xy,
 `endif
 `ifdef SUN3_TOD_LOAD
 	   /* setting the TOD chip from outside, in CLK (icm7170.v) */
@@ -309,6 +339,18 @@ module sun3_top(/* clock, reset */
 		  .blk1_buf_addr(blk1_buf_addr),
 		  .blk1_buf_wdata(blk1_buf_wdata),
 `endif
+`ifdef SUN3_CDROM
+		  .cblk_start(cblk_start),
+		  .cblk_lba(cblk_lba),
+		  .cblk_done(cblk_done),
+		  .cblk_err(cblk_err),
+		  .cblk_ready(cblk_ready),
+		  .cblk_count(cblk_count),
+		  .cblk_buf_we(cblk_buf_we),
+		  .cblk_buf_addr(cblk_buf_addr),
+		  .cblk_buf_wdata(cblk_buf_wdata),
+		  .cd_changed(cd_changed),
+`endif
 		  .V_INT(V_INT),
 
 		  .leds(leds_n),
@@ -335,6 +377,20 @@ module sun3_top(/* clock, reset */
 		  .cg4_cm_clk(cg4_cm_clk),
 		  .cg4_cm_raddr(cg4_cm_raddr),
 		  .cg4_cm_rdata(cg4_cm_rdata),
+`endif
+`ifdef SUN3_CG6
+		  .cg6_present(cg6_present),
+		  .ge_word(ge_word),
+		  .ge_req(ge_req),
+		  .ge_we(ge_we),
+		  .ge_wdata(ge_wdata),
+		  .ge_sel(ge_sel),
+		  .ge_done(ge_done),
+		  .ge_rdata(ge_rdata),
+		  .cg6_cur_row(cg6_cur_row),
+		  .cg6_cur_a(cg6_cur_a),
+		  .cg6_cur_b(cg6_cur_b),
+		  .cg6_cur_xy(cg6_cur_xy),
 `endif
 `ifdef SUN3_TOD_LOAD
 		  .tod_ld(tod_ld),

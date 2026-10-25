@@ -22,7 +22,8 @@ run() {
   first=$(echo "$out" | grep -m3 "^FAIL:" | tr '\n' ';')
   if echo "$out" | grep -q "^PASS"; then echo "$name: NOT CAUGHT ($summary)"; else echo "$name: caught -- $summary -- $first"; fi
 }
-run "no PROM bit in sense byte 4"   -e 's/s_info\[23:16\] | 8'"'"'h01/s_info[23:16]/'
+run "no PROM bit in sense byte 4"   -e "s/s_info\[23:16\] | {7'd0, alloc_len == 10'd16}/s_info[23:16]/"
+run "the PROM bit for every length" -e "s/s_info\[23:16\] | {7'd0, alloc_len == 10'd16}/s_info[23:16] | 8'h01/"
 run "sense capped at 18"            -e "s/(alloc_len < 10'd16) ? alloc_len : 10'd16/(alloc_len < 10'd18) ? alloc_len : 10'd18/"
 run "fetch while busy"              -e 's/end else if (!blk_busy) begin/end else begin/'
 run "file mark not crossed by READ" -e '/s_info    <= {8'"'"'d0, blk_left};/{n;s/pos_file  <= pos_file + 5'"'"'d1;/pos_file  <= pos_file;/}'
@@ -34,6 +35,7 @@ run "no residue at a file mark"     -e "s/s_info    <= {8'd0, blk_left};/s_info 
 run "volume change ignored"         -e 's/if (need_load || volume_i != t_vol) begin/if (need_load) begin/'
 run "write not protected"           -e 's/else          check_cond(SK_PROTECT, EM_PROTECTED);/else ;/'
 run "10-byte CDB cut short"         -e "s/if (idx + 10'd1 == {6'd0, cdb_len}) begin/if (idx == 10'd5) begin/"
+run "INQUIRY says the tape is fixed"  -e "s/(idx == 10'd1 \&\& lun == 3'd0) ? 8'h80 : 8'h00/8'h00/"
 run "INQUIRY longer than five bytes" -e "s/(alloc_len < 10'd5) ? alloc_len : 10'd5/(alloc_len < 10'd36) ? alloc_len : 10'd36/"
 run "no tape motion before STATUS"   -e "s/if (blk_left == cdb_count) motion <=/if (1'b0) motion <=/g"
 run "tape motion after data too"     -e "s/if (blk_left == cdb_count) motion <=/if (1'b1) motion <=/g"

@@ -126,6 +126,20 @@ module sun3_si #(
     input  wire [8:0]  blk1_buf_addr,
     input  wire [7:0]  blk1_buf_wdata,
 `endif
+`ifdef SUN3_CDROM
+    // ---- the CD-ROM's block seam: sr0 at target 6 (rtl/sun3/sun3_cdrom.sv) --
+    // Read only.  cd_changed is one clock when an image is mounted or removed.
+    output wire        cblk_start,
+    output wire [31:0] cblk_lba,
+    input  wire        cblk_done,
+    input  wire        cblk_err,
+    input  wire        cblk_ready,
+    input  wire [31:0] cblk_count,
+    input  wire        cblk_buf_we,
+    input  wire [8:0]  cblk_buf_addr,
+    input  wire [7:0]  cblk_buf_wdata,
+    input  wire        cd_changed,
+`endif
 
     output wire        dma_active    // for debug
 );
@@ -262,11 +276,41 @@ module sun3_si #(
    assign drive_disk1 = '0;
 `endif
 
+   // The CD-ROM, sr0 (SUN3_CDROM): a SCSI CD-ROM drive at target 6, as SunOS
+   // 4.1.1's GENERIC has it, reading an .iso.  It comes up in 512-byte blocks,
+   // as Sun's CD drives did, so the PROM boots it with its disk driver.  It
+   // answers whether or not a disc is in.
+   scsi_t drive_cd;
+`ifdef SUN3_CDROM
+   blk_req_t creq;
+   blk_rsp_t crsp;
+   assign cblk_start = creq.start;
+   assign cblk_lba   = creq.lba;
+   always_comb begin
+      crsp           = '0;
+      crsp.done      = cblk_done;
+      crsp.err       = cblk_err;
+      crsp.ready     = cblk_ready;
+      crsp.count     = cblk_count;
+      crsp.buf_we    = cblk_buf_we;
+      crsp.buf_addr  = cblk_buf_addr;
+      crsp.buf_wdata = cblk_buf_wdata;
+   end
+
+   sun3_cdrom #(.CLK_PERIOD_PS(CLK_PERIOD_PS), .TARGET_ID(6)) sr0 (
+       .clk_i(clk), .rst_i(rst), .drive_o(drive_cd), .bus_i(bus),
+       .blk_o(creq), .blk_i(crsp), .media_changed_i(cd_changed));
+`else
+   assign drive_cd = '0;
+`endif
+
+   // The fabric has four ports; the bus is a wired-OR, so the CD shares the
+   // second disk's.
    scsi_fabric fabric (
        .a_i   (drive_chip),
        .b_i   (drive_targ),
        .c_i   (drive_tape),
-       .d_i   (drive_disk1),
+       .d_i   (drive_disk1 | drive_cd),
        .bus_o (bus)
    );
 

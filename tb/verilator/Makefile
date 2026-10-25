@@ -13,7 +13,8 @@ VFLAGS := --binary --timing -Wno-fatal -Wno-WIDTH -Wno-WIDTHEXPAND -Wno-WIDTHTRU
           -I$(RTL)/sun3 +define+SIMULATION=1
 
 TESTS := tb_mister_sdram tb_mister_block tb_mister_kbd_mouse tb_mister_bell tb_kbm_scc tb_mister_tod tb_mt02 \
-         tb_cg4 tb_cg4_scanout tb_mister_eeprom tb_si tb_vint tb_mister_enet tb_mister_cpuclk
+         tb_cg4 tb_cg4_scanout tb_mister_eeprom tb_si tb_vint tb_mister_enet tb_mister_cpuclk tb_cdrom \
+         tb_cg6
 
 # The whole core is its own makefile; it is a run, not a quick test, so it is
 # not part of `all'.
@@ -95,6 +96,15 @@ tb_mt02:
 	    $(RTL)/sun3/sun3_mt02.sv $@.sv
 	./obj_$@/$@ +dir=obj_$@
 
+# The CD-ROM, sr0 at target 6: the commands SunOS's sr driver and the PROM's
+# disk driver send, in 512- and 2048-byte blocks, against a disc made in the
+# bench.
+tb_cdrom:
+	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
+	    $(RTL)/vendor/wish5380/wish5380_pkg.sv $(RTL)/vendor/wish5380/scsi_fabric.sv \
+	    $(RTL)/sun3/sun3_cdrom.sv $@.sv
+	./obj_$@/$@
+
 # The on-board SCSI's DMA (sun3_si.sv) against the byte-per-cycle engine it
 # replaced (sun3_si_ref.sv): the same commands must leave the same memory,
 # disk and registers, in less time.
@@ -115,8 +125,47 @@ tb_cg4:
 # P4 register, driven as SunOS's cgfour driver drives them.
 tb_vint:
 	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
-	    $@.sv $(RTL)/sun3/sun3_vint.v $(RTL)/sun3/sun3_irq_priority.v $(RTL)/sun3/sun3_cg4.sv
+	    $@.sv $(RTL)/sun3/sun3_vint.v $(RTL)/sun3/sun3_irq_priority.v $(RTL)/sun3/sun3_cg4.sv $(CG6_SRC)
 	./obj_$@/$@
+
+# The GX (sun3_cg6.sv, its engine, the Bt458 on D31:24, the SDRAM adapter's
+# engine port and the colour-only scan-out) against tools/cg6model's traces:
+# the PROM 3.0.1 console's sequence and the engine driven directly (harness
+# -G, no library needed), and, when Sun's SPARC libpixrect is in build/dist/
+# (docs/cg6.md, "The C model"), libpixrect's own tests of every kind; and when
+# the sun3 4.1.1 one is there too, the same of the 68020 library on Musashi
+# (CG6_MUSASHI a checkout, or fetched at the pinned commit).  CG6_N tests of
+# the direct kind, CG6_LP_N of libpixrect's, from CG6_SEED (the 68020's from
+# CG6_SEED68K, whose tests have no runaway cg6_stencil, docs/cg6.md).
+CG6M      := ../../tools/cg6model
+CG6LIB    ?= ../../build/dist/sunos-4.1.3-sparc/libpixrect.a
+CG6OBJ    := $(abspath obj_tb_cg6)
+CG6_N     ?= 400
+CG6_LP_N  ?= 150
+CG6_SEED  ?= 1
+CG6_KINDS ?=
+CG6_SRC   := $(RTL)/sun3/sun3_cg6.sv $(RTL)/sun3/sun3_cg6_engine.sv $(RTL)/sun3/sun3_cg6_tec.sv
+CG6_LP    := $(wildcard $(CG6LIB))
+CG6LIB68K ?= ../../build/dist/sunos-4.1.1-sun3/usr/lib/libpixrect.a
+CG6_LP68K := $(wildcard $(CG6LIB68K))
+CG6_SEED68K ?= 3
+CG6_MUSASHI ?=
+CG6XNEWS  ?= ../../build/dist/sunos-4.1.1-sun3/usr/openwin/bin/xnews
+CG6_XN    := $(wildcard $(CG6XNEWS))
+CG6_XN_N  ?= 300
+tb_cg6_traces:
+	mkdir -p $(CG6OBJ)
+	$(MAKE) -C $(CG6M) B=$(CG6OBJ) $(CG6OBJ)/harness
+	$(CG6OBJ)/harness -G $(CG6OBJ)/t -n $(CG6_N) -s $(CG6_SEED)
+	$(if $(CG6_LP),$(MAKE) -C $(CG6M) B=$(CG6OBJ) LIBPIXRECT=$(abspath $(CG6LIB)) $(CG6OBJ)/lp.bin,@echo "tb_cg6: no $(CG6LIB), so no libpixrect trace")
+	$(if $(CG6_LP),$(CG6OBJ)/harness $(CG6OBJ)/lp.bin $(CG6OBJ)/lp.sym -n $(CG6_LP_N) -s $(CG6_SEED) $(if $(CG6_KINDS),-K $(CG6_KINDS)) -t $(CG6OBJ)/t_lp.txt -I $(CG6OBJ)/t_lp.ini -F $(CG6OBJ)/t_lp.fin)
+	$(if $(CG6_LP68K),$(MAKE) -C $(CG6M) B=$(CG6OBJ) LIBPIXRECT68K=$(abspath $(CG6LIB68K)) $(if $(CG6_MUSASHI),MUSASHI=$(abspath $(CG6_MUSASHI))) trace68k TN=$(CG6_LP_N) SEED=$(CG6_SEED68K))
+	$(if $(CG6_XN),$(MAKE) -C $(CG6M) B=$(CG6OBJ) XNEWS=$(abspath $(CG6XNEWS)) $(if $(CG6_MUSASHI),MUSASHI=$(abspath $(CG6_MUSASHI))) tracexn XTN=$(CG6_XN_N) SEED=$(CG6_SEED),@echo "tb_cg6: no $(CG6XNEWS), so no xnews trace")
+tb_cg6: tb_cg6_traces
+	$(V) $(VFLAGS) --top-module $@ --Mdir obj_$@ -o $@ \
+	    $@.sv $(CG6_SRC) $(RTL)/sun3/sun3_cg4.sv $(RTL)/sun3/sun3_cg4_scanout.sv $(RTL)/sun3/video_timing.sv \
+	    sdram_model.sv altddio_out_stub.v $(RTL)/sdram.sv $(RTL)/sun3_mister_sdram.sv tb_cg6_model.cpp
+	./obj_$@/$@ +t0=$(CG6OBJ)/t_prom +t1=$(CG6OBJ)/t_gen $(if $(CG6_LP),+t2=$(CG6OBJ)/t_lp) $(if $(CG6_LP68K),+t3=$(CG6OBJ)/t_lp68k) $(if $(CG6_XN),+t4=$(CG6OBJ)/t_xn) $(SIMARGS)
 
 # The cg4's picture: full frames in Sun-3.sv's raster, every pixel, against a
 # memory that answers quickly and slowly.
@@ -150,4 +199,4 @@ tb_cpu_fpu:
 clean:
 	rm -rf obj_* run_*
 
-.PHONY: all clean $(TESTS)
+.PHONY: all clean $(TESTS) tb_cg6_traces

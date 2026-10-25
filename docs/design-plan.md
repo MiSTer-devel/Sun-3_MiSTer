@@ -18,11 +18,11 @@ Order of priority, from the owner:
   on a 1 GB disk image, booting multi-user** ([install-sunos.md](install-sunos.md)).
   The kernel finds `cgfour0`.
 * Main_MiSTer `sun-family` knows the Sun-3: the disk write buffer, the ID
-  PROM with machine type 0x17, and the `S3ETH001` mailbox. `releases/MiSTer`
-  is `de5e963` on upstream `c97c052` (pushed), on the board since
-  2026-10-06; Phases 1 to 6 were tested on `55fe6c8`.
-* `releases/`: the core (`Sun-3_20261005.rbf`, built from `7bc4785`), that
-  Main, and the patched 1.9 PROM as `boot0.rom`.
+  PROM with machine type 0x17, and the `S3ETH001` mailbox: `de5e963` on
+  upstream `c97c052` (pushed), on the board since 2026-10-06; Phases 1 to 6
+  were tested on `55fe6c8`.
+* `releases/`: the core and the patched Rev 3.0.1 PROM as `boot0.rom`
+  (2026-10-22; 1.9 before it, which still runs).
 * The core on the board (`_Unstable/Sun-3_20261005-clk.rbf`) has the
   second disk (Phase 3, step 1), the packed SCSI DMA, the cg4's overlay
   gated by its enable plane, level 4 through the DSACK PAL, the LANCE, and
@@ -151,11 +151,13 @@ Everything visible on screen lives in bank 3, away from the CPU's banks.
 The CPU reaches memory through Sun-3_FPGA's cached FIFO bridge (8 KiB read
 cache, posted writes). Frame buffer cycles are never cached.
 
-The SDRAM adapter has three clients:
+The SDRAM adapter has four clients:
 * the CPU bridge;
 * the bw2 scan-out, which is small and keeps its absolute priority;
 * the cg4 scan-out, which takes turns with the CPU and gets priority only when
-  its line buffer is about to run dry (the Sun-2's `cs_urgent` scheme).
+  its line buffer is about to run dry (the Sun-2's `cs_urgent` scheme);
+* the GX's drawing engine (docs/cg6.md), below the scan-outs and taking
+  turns with the CPU.
 
 The cg4 scan-out is about 78 MB/s at 60 Hz: 62 for the colour plane and 16
 for overlay and enable. That is measured in Phase 4. **Fallback** if the CPU
@@ -167,33 +169,65 @@ Sun-2.
 
 ## OSD (Sun-3.sv's CONF_STR, every phase's items in)
 
+The computer cores' layout (HP9000-715_MiSTer's `docs/osd-standard.md`, as
+on the Sun-2): the media and Load ROM, the network, the pages at fixed
+numbers (P1 Machine, P2 Video, P3 Input, P4 Audio, P5 Advanced), then
+"Apply and reset".
+
 ```
 Sun-3;UART9600;
-SC0,IMGVHD,SCSI disk ID 0 (sd0);
-SC1,IMGVHD,SCSI disk ID 1 (sd2);
-S2,QIC,Tape (st0);
+-;
+SC0,IMGVHD,Pri. disk (ID 0);
+SC1,IMGVHD,Disk (ID 1);
+S2,QIC,Tape (ID 4);
 O[4:3],Tape volume,1,2,3;
-SC3,NVR,EEPROM;
+SC4,ISO,CD-ROM (ID 6);
+F0,ROM,Load ROM;
 -;
-O[2:1],Aspect ratio,Original,Full Screen,4:3;
-O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;
-O[12],Colour board,On,Off;
-O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;
+O[11:9],Network interface,eth0,None,eth1,macvlan,tap0;
 -;
-O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;
-O[16],Clock,MiSTer's time,28 years back;
-O[11:9],Network,eth0,Off,eth1,macvlan,tap0;
-O[15],Diag switch,Normal,Diag;
+P1,Machine;
+P2,Video;
+P3,Input;
+P4,Audio;
+P5,Advanced;
 -;
-R0,Reset;
+h0-,Changes pending;
+R[0],Apply and reset;
+
+P1O[14:13],CPU clock,20 MHz,25 MHz,33 MHz;
+P1O[12],Colour board,On,Off;
+H1P1O[19],Colour board type,cg4,GX;
+P1-;
+P1T[17],Stop-A (abort);
+
+P2O[2:1],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];
+P2O[6:5],Scale,V-Integer,Normal,Narrower HV-Integer,Wider HV-Integer;
+
+P3O[18],Swap Alt/Win keys,No,Yes;
+
+P4O[8:7],Keyboard bell,Normal,Loud,Quiet,Off;
+
+P5O[15],Diag switch,Normal,Diag;
+P5O[16],Clock,MiSTer's time,28 years back;
+P5-;
+P5SC3,NVR,EEPROM image;
+
+v,1;
 ```
 
-Three rules for the status bits:
-* The Network bits are what Main's core table names, `[11:9]` as on the Sun-2.
+Five rules for the status bits:
+* The Network interface bits are what Main's core table names, `[11:9]` as
+  on the Sun-2.
 * A value of 0 is always the default.
-* What a board would only change powered off -- the colour board, the CPU
-  clock, the diag switch -- is taken while the machine is in reset: a change
-  made while it runs waits for the next reset.
+* Media, the network, Input and the Stop-A button act at once. Every other
+  setting is latched into `cfg` in a machine reset, and "Changes pending"
+  (menumask bit 0) shows while one differs from what runs.
+* *Colour board type* (`status[19]`, 0 the cg4) is shown only while the
+  board is On (menumask bit 1 is *Colour board* Off); it is latched in reset
+  with it.
+* No row's bits move when it moves between pages (saved settings stay
+  valid); `v,N` changes when a value list changes meaning.
 
 ## Phases
 
@@ -637,7 +671,9 @@ a terminal.
    * the Network bits (`[11:9]`);
    * the ID PROM's machine type (0x17);
    * the disks whose writes are buffered (slots 0-1);
-   * the CD slot (none: slot 2 is the tape).
+   * the CD slot (none: slot 2 is the tape). The CD-ROM, added later on
+     slot 4, is a flat `.iso` that Main serves through its generic block
+     path, so it needs no CD slot of Main's.
 
    `S3ETH001` names a 16-slot RX ring. Build from a `git archive` copy in
    WSL, never in the checkout.
@@ -730,6 +766,39 @@ whole core would reset and come up again).
 3. NetBSD/sun3: install from a miniroot written to the swap partition, or
    from a tape image. Not by netboot.
 
+   **Status (2026-10-23):** the 11.0 release's boot tape panics the RAMDISK
+   kernel with `radix already initialized`, on the board and in `tb_emu`
+   from zeroed memory alike. It is NetBSD's bug, not the core's: 11.0's
+   standalone programs (tapeboot, ufsboot, netboot, bootxx;
+   `sun68k/stand/libsa/sun3.c` 1.11) alias their 0x200000-0x2dffff into
+   DVMA space at 0xfff00000 by sharing PMEGs, and the PROM's SCSI driver
+   keeps its own mappings there. In `tb_emu`, tapeboot gives the segment at
+   0xff00000 PMEG 0x10 (VA 0x200000's), Rev 3.0.1's tape driver then maps
+   its page 9 to PA 0x17e6000 for itself, and the kernel inherits VA
+   0x212000 -> PA 0x17e6000, where its BSS (`radix_initialized`, VA
+   0x0e212808) lives. `pmap_bootstrap` assumes PA = VA - KERNBASE and hands
+   PA 0x17e6000 to UVM as free, and the first allocation of it sets the
+   flag. NetBSD fixed it on 2026-08-19 (sun3.c 1.12, netbsd-11 ticket
+   #420: the alias moves to 0x240000/0xfff40000). `tools/netbsd/fixdvma.py`
+   makes the same change in the 11.0 binaries (tapeboot, and the five
+   copies in `miniroot.fs`, which installboot puts on the disk); with the
+   mended tape the kernel's BSS is at PA = VA - KERNBASE and boots past
+   the panic. `tb_emu`'s `+vwatch=` and `+mmutrace` found it.
+
+   **Done (2026-10-23, on the board, 33 MHz, PROM 3.0.1, cg4):** NetBSD
+   11.0 installed onto a 1 GB disk at ID 1 and boots multi-user from it
+   (`b sd(0,8,0)`). The mended tape's RAMDISK found sd0, sd1 and the
+   CD-ROM; its `st` did not attach the MT-02 ("tape fixed"), so the mended
+   `miniroot.fs` was written into `sd1b` from the MiSTer's side, and booted
+   with `b sd(0,8,1) -s`. Its `install` made `/` on `sd1a`, read
+   `base`, `etc`, `kern-GENERIC`, `rescue`, `misc` and `man` from the
+   CD-ROM (ISO 9660, `sun3/binary/sets`) in about 1h45, and put the
+   miniroot's mended `bootxx`/`ufsboot` on the disk, so the installed disk
+   needs no patch. `uname`: NetBSD 11.0 GENERIC sun3, `hw.model sun3 60`,
+   24 MiB. Since `dc0594b` the MT-02's INQUIRY says removable and NetBSD
+   attaches `st0` (with no cartridge mounted it reports NOT READY, as it
+   should; a read is still to be tried).
+
 ### Phase 8: later
 
 * **GX (cg6)** on P4: an accelerated 8-bit frame buffer whose console needs
@@ -737,8 +806,29 @@ whole core would reset and come up again).
   from the software that drives it, before any RTL:
   * a spec and C model checked against SunOS 4.1.1's cg6 pixrect;
   * then a model against X11's `Xsun` cg6 code.
-* A **CD-ROM target** (sr0, ID 6) through Main's `sun_cdrom`. SunOS 4.1.1 for
-  sun3 did ship on CD.
+
+  **Status (2026-10-23, on the board):** stage 1 (`SUN3_CG6`,
+  `rtl/sun3/sun3_cg6.sv` and `sun3_cg6_engine.sv`, OSD *Colour board
+  type* `P1O[19]`): Rev 3.0.1's console on the GX, and SunOS's `cgsix0`
+  console. docs/cg6.md, "Stage 1: in the core". Stage 2 (Verilator only):
+  lines, polygons, the pattern, the hardware cursor, the stored registers
+  and burst writes, for SunView; docs/cg6.md, "Stage 2: SunView".
+* A **CD-ROM target** (sr0, ID 6). SunOS 4.1.1 for sun3 did ship on CD.
+  **Status (2026-10-22):** built (`SUN3_CDROM`, `rtl/sun3/sun3_cdrom.sv`,
+  OSD `SC4`, VD 4), a flat `.iso` through Main's generic block path, not
+  `sun_cdrom` (whose CUE/CHD translation stays the SPARCstation's). It
+  comes up in 512-byte blocks, as Sun's CD drives did and as SunOS 4.1's sr
+  driver (`FIVETWELVE`) and the PROM's disk driver expect, and changes to
+  2048 by MODE SELECT. `tb_cdrom` and `mutate_cdrom.sh` test it; in
+  `tb_emu` (`CDROM=`, built by `tb/verilator/mk_cd_iso.py`) both PROMs
+  boot a test CD's partition and run its boot block: Rev 3.0.1 as
+  `sd(0,30,1)` (TEST UNIT READY, START UNIT, the label, one READ(6) of 16
+  blocks) and Rev 1.9 as `sd(0,18,1)` (the label, then 16 one-block
+  reads), although sun3arc's table says 1.9 cannot boot a CD. **On the
+  board (2026-10-23):** SunOS 4.1.1_U1 mounts a test ISO with `mount -r -t
+  hsfs /dev/sr0 /cdrom`, and `sum` of its files matches the originals. To
+  do: the 4.1.1 CD's own boot, `b sd(0,30,4)` (sun3arc's install guide),
+  when a 4.1.1 CD image is at hand.
 * **1600x1280 hi-res bw2** (the J800 jumper), scaled to 1080p.
 * A **sun3x core** (3/80) would be a separate project. AP68030 is the
   candidate CPU (GPL, 68030 + MMU, 50 MHz, 17k ALMs; not OS-tested yet). Its

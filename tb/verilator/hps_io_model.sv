@@ -18,8 +18,10 @@
 //                   all-zero file is a new one), +eeprom_ro mounting it read
 //                   only; +eeprom_save=<file> writes the image as it stands
 //                   to <file> after each block the machine writes to it.
-//                   As Main_MiSTer mounts the SC slots it remembers (the disks
-//                   and the EEPROM) while it reads the configuration string,
+//   +cdrom=<file>   the same for VD 4, the CD-ROM (an .iso; SCSI ID 6, sr0),
+//                   read only.
+//                   As Main_MiSTer mounts the SC slots it remembers (the disks,
+//                   the EEPROM and the CD-ROM) while it reads the configuration string,
 //                   they are mounted before boot0.rom is sent, the tape
 //                   after; and as Main, no block is served during a download.
 //   +keys=<text>    typed from +keys_ms=<ms> (default 2000) on, one key about
@@ -117,6 +119,7 @@ module hps_io #(
         if (VDNUM > 1 && $value$plusargs("disk1=%s", img_file)) mount(1, img_file, 1'b0);
         if (VDNUM > 3 && $value$plusargs("eeprom=%s", img_file))
             mount(3, img_file, $test$plusargs("eeprom_ro"));
+        if (VDNUM > 4 && $value$plusargs("cdrom=%s", img_file)) mount(4, img_file, 1'b1);
 
         if ($value$plusargs("idprom=%s", rom_file)) begin
             send_file(rom_file, 16'd64);

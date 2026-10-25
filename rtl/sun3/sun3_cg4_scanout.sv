@@ -38,6 +38,20 @@
 // of a burst is at {b[3:2], ~b[1:0], 3'b000}, and pixel p of a 1-bit burst at
 // {p[6:5], ~p[4:0]}, as fb_scanout.sv takes the bw2's.
 //
+// **Colour only** (`colour_only', the GX: sun3_cg6.sv): a line is its 72
+// colour bursts alone, and no pixel is an overlay colour.  It is a level that
+// changes only while the machine is in reset.
+//
+// **The GX's cursor** (sun3_cg6.sv; docs/cg6.md, "The THC"): 32x32 pixels
+// whose top left is at cur_xy (x in 31:16, y in 15:0, signed, frame-buffer
+// coordinates), two planes, a 32-bit word a row with its MSB leftmost.  Where
+// a pixel's plane A or B bit is set, the pixel is Bt458 overlay colour
+// {B, A}, each bit gated by its command-register overlay enable as the
+// Bt458's OL inputs are, in front of the colour.  The row is asked for on
+// cur_row a line ahead of need (it changes only at a line's start) and its
+// planes come back on cur_a and cur_b the clock after.  The cg4 leaves the
+// cursor off the screen.
+//
 // **Latency**: rgb is four clocks behind cx/cy -- the line buffers' read, the
 // colour map's address, its read (in sun3_cg4.sv, on this clock), the mix.
 // Sun-3.sv delays the syncs and DE to match while the cg4 is shown.
@@ -56,6 +70,7 @@ module sun3_cg4_scanout #(
     input  wire         mclk,
     input  wire         mrst,
     input  wire         enable,         // shown: fetch nothing otherwise
+    input  wire         colour_only,    // the GX: no overlay or enable planes
     output wire [25:0]  c_word,         // SDRAM word of the 16-byte burst
     output wire         c_req,
     output wire         c_urgent,
@@ -72,6 +87,10 @@ module sun3_cg4_scanout #(
     input  wire [7:0]   read_mask,
     input  wire [7:0]   command,
     input  wire [23:0]  ovl1, ovl2, ovl3,
+    // the GX's cursor
+    input  wire [31:0]  cur_xy,         // a level, changing only when written
+    output reg  [4:0]   cur_row = 5'd0,
+    input  wire [31:0]  cur_a, cur_b,   // cur_row's planes, a clock later
     output reg  [7:0]   cm_raddr = 8'h0,    // the colour map, read one clock later
     input  wire [23:0]  cm_rdata,
     output reg  [23:0]  rgb = 24'd0,
@@ -114,13 +133,35 @@ module sun3_cg4_scanout #(
 
     (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
     reg [7:0]  rm_s1 = 8'hFF, cmd_s1 = 8'h00;
-    reg        von_s1 = 1'b0;
+    reg        von_s1 = 1'b0, co_s1 = 1'b0;
+    (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS" *)
+    reg [31:0] cxy_s1 = 32'h0;
     reg [7:0]  rm = 8'hFF, cmd = 8'h00;
     reg        von = 1'b0;
+    reg [1:0]  cole = 2'b00;            // the overlay enables, for the cursor
+    reg [31:0] cxy = 32'h0;
     always @(posedge clk_pixel) begin
-        rm_s1 <= read_mask; cmd_s1 <= command; von_s1 <= video_on;
-        rm    <= rm_s1;     cmd    <= cmd_s1;  von    <= von_s1;
+        rm_s1 <= read_mask; cmd_s1 <= command; von_s1 <= video_on; co_s1 <= colour_only;
+        rm    <= rm_s1;     von    <= von_s1;
+        // colour only: neither overlay input is enabled
+        cmd   <= co_s1 ? {cmd_s1[7:2], 2'b00} : cmd_s1;
+        cole  <= cmd_s1[1:0];
+        cxy_s1 <= cur_xy;
+        cxy    <= cxy_s1;
     end
+
+    // the cursor: this line's row of it, and whether this pixel is in it
+    wire signed [16:0] cdy = $signed({6'd0, row}) - $signed({cxy[15], cxy[15:0]});
+    wire signed [16:0] cdx = $signed({6'd0, col}) - $signed({cxy[31], cxy[31:16]});
+    reg                cin_y = 1'b0;
+    always @(posedge clk_pixel) begin
+        cur_row <= cdy[4:0];
+        cin_y   <= in_y && (cdy >= 0) && (cdy < 17'sd32);
+    end
+    wire               cin  = cin_y && in_x && (cdx >= 0) && (cdx < 17'sd32);
+    reg                cin1 = 1'b0;
+    reg  [4:0]         cbit1 = 5'd0;
+    reg  [1:0]         col2 = 2'd0;
 
     // stage 1: the line buffers; stage 2: the colour map's address and the
     // overlay input; stage 3: the colour map's data (sun3_cg4); stage 4: the mix
@@ -139,12 +180,15 @@ module sun3_cg4_scanout #(
         ebeat <= ebuf[{row[1:0], col[10:7]}];
         p1    <= col[6:0];
         vis1  <= in_x & in_y;
+        cin1  <= cin;
+        cbit1 <= 5'd31 - cdx[4:0];
 
         cm_raddr <= pix & rm;
         ol2      <= {ovb & enb & cmd[1], enb & cmd[0]};
         vis2     <= vis1;
+        col2     <= cin1 ? {cur_b[cbit1] & cole[1], cur_a[cbit1] & cole[0]} : 2'd0;
 
-        ol3  <= ol2;
+        ol3  <= (col2 != 2'd0) ? col2 : ol2;
         vis3 <= vis2;
 
         rgb <= !(vis3 & von)  ? 24'd0 :
@@ -169,6 +213,7 @@ module sun3_cg4_scanout #(
     reg  [10:0] fetch_row = 11'd0;      // next line to fetch
     reg  [10:0] shown     = 11'd0;      // lines whose display has begun
     reg  [6:0]  beat      = 7'd0;       // 0..8 enable, 9..17 overlay, 18..89 colour
+    wire [6:0]  beat0;                  // a line's first: 18 when colour only
     // Nothing is fetched until a frame starts.  A frame's start forgets where
     // the fetch was, so a burst must not be in flight then: the fetch ends
     // with the frame's last line, well before, but not if it began at some
@@ -182,6 +227,7 @@ module sun3_cg4_scanout #(
     // the burst's SDRAM word: colour lines are 1152 bytes (576 words), the
     // 1-bit planes' 144 (72); a burst is 8 words
     localparam int OB0 = MBEATS, CB0 = 2 * MBEATS;      // the first overlay and colour beats
+    assign beat0 = colour_only ? 7'(CB0) : 7'd0;
     wire [6:0]  mb = (beat >= 7'(OB0)) ? beat - 7'(OB0) : beat;
     wire [6:0]  cb = beat - 7'(CB0);
     assign c_word = (beat < 7'(OB0))
@@ -212,7 +258,7 @@ module sun3_cg4_scanout #(
         if (mrst || fs_pulse) begin
             fetch_row <= 11'd0;
             shown     <= 11'd0;
-            beat      <= 7'd0;
+            beat      <= beat0;
             en_ones   <= 1'b1;
             ov_ones   <= 1'b1;
         end else begin
@@ -224,7 +270,7 @@ module sun3_cg4_scanout #(
                 else if (beat < 7'(CB0))
                     ov_ones <= ov_ones & all_ones;
                 if (beat == 7'(BEATS - 1) || (beat == 7'(CB0 - 1) && no_colour)) begin
-                    beat      <= 7'd0;
+                    beat      <= beat0;
                     fetch_row <= fetch_row + 11'd1;
                     en_ones   <= 1'b1;
                     ov_ones   <= 1'b1;

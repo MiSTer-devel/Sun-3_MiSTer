@@ -36,7 +36,10 @@
 //
 // So the sense is extended sense with eight additional bytes -- sixteen in
 // all, the most the PROM takes and more than the kernel's eleven -- and bit 0
-// of byte 4 is always set, which is what makes the PROM see a file mark.
+// of byte 4 is set, which is what makes the PROM see a file mark -- when
+// sixteen bytes are asked for, as the PROM asks.  NetBSD's st asks for
+// eighteen and takes the residue of a READ that meets a file mark from the
+// information field, so for it byte 4 must be the residue's own.
 // That is exactly what TME's Emulex MT-02 does (phabrics/tme
 // scsi/emulexmt02.c: "the sun2 PROM insists that the fifth byte of the sense
 // have its least significant bit set"), and TME is known to install SunOS 4
@@ -299,14 +302,22 @@ module sun3_mt02 #(
                 // the driver falls back to its generic entry.  The device type
                 // is still given, because the SunOS 4.1.1 tape bootblock will
                 // not boot from a SCSI device that does not say it is a tape.
-                resp = (idx == 10'd0) ? ((lun == 3'd0) ? 8'h01 : 8'h7f) : 8'h00;
+                // Byte 1 says the medium is removable, as a cartridge is:
+                // NetBSD's st matches a generic tape only when it is
+                // (`T_SEQUENTIAL, T_REMOV'), and said "tape fixed not
+                // configured" without it.  SunOS 4.1.1's st (1.98) tells the
+                // MT-02 by its sense length, not by these bytes.
+                resp = (idx == 10'd0) ? ((lun == 3'd0) ? 8'h01 : 8'h7f) :
+                       (idx == 10'd1 && lun == 3'd0) ? 8'h80 : 8'h00;
 
             R_SENSE:
                 case (idx[3:0])
                     4'd0:  resp = {s_valid, 7'h70};
                     4'd2:  resp = {s_fm, s_eom, 2'b00, s_key};
                     4'd3:  resp = s_info[31:24];
-                    4'd4:  resp = s_info[23:16] | 8'h01;    // the PROM's file mark bit
+                    // the PROM's file mark bit, for the PROM's sixteen bytes
+                    // only: NetBSD (18) reads the residue here
+                    4'd4:  resp = s_info[23:16] | {7'd0, alloc_len == 10'd16};
                     4'd5:  resp = s_info[15:8];
                     4'd6:  resp = s_info[7:0];
                     4'd7:  resp = 8'd8;                     // eight more: sixteen in all

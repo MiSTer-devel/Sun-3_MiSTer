@@ -55,14 +55,14 @@ dd if=sd0-head.bin of=sd0-1g.img conv=notrunc
 ## 2. Mount them
 
 In the OSD (F12):
-* *SCSI disk ID 0 (sd0)*: `sd0-1g.img`;
-* *Tape (st0)*: `sunos-4.1.1-sun3.qic`, with *Tape volume* `1`;
-* optionally *EEPROM* (see the README).
+* *Pri. disk (ID 0)*: `sd0-1g.img`;
+* *Tape (ID 4)*: `sunos-4.1.1-sun3.qic`, with *Tape volume* `1`;
+* optionally *EEPROM image*, on the *Advanced* page (see the README).
 
-Then *Reset*. The PROM auto-boots the disk:
+Then *Apply and reset*. The PROM auto-boots the disk:
 
 ```
-EEPROM boot device...sd(0,0,0)
+EEPROM boot device...Boot: sd(0,0,0)
 
 This disk is labelled but has no SunOS on it yet.
 To install from the tape in st0:  b st()
@@ -214,7 +214,7 @@ The miniroot has no `halt`: type `sync` twice, then L1-A. At `>`, `b sd()`, or
 reset: the PROM's auto-boot now finds the boot block `installboot` wrote.
 
 ```
-EEPROM boot device...sd(0,0,0)
+EEPROM boot device...Boot: sd(0,0,0)
 root on sd0a fstype 4.2
 Boot: vmunix
 SunOS Release 4.1.1 (GENERIC) #1: Sat Oct 13 06:05:48 PDT 1990

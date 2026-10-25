@@ -58,8 +58,17 @@
 //                        (sun3_mt02.sv), with its own block seam
 //   SUN3_SD1             a second disk at SCSI target 1 (Wish5380's
 //                        scsi_targ; SunOS's sd2), with its own block seam
+//   SUN3_CDROM           sr0, a CD-ROM drive at SCSI target 6
+//                        (sun3_cdrom.sv), read only, 512-byte blocks until
+//                        MODE SELECT asks for 2048, with its own block seam
 //   SUN3_CG4             a P4 cg4 colour board, fitted while the cg4_present
 //                        input says so (sun3_cg4.sv, docs/cg4.md)
+//   SUN3_CG6             the GX (cg6) as the P4 board instead, while
+//                        cg6_present says so too (sun3_cg6.sv and its drawing
+//                        engine, sun3_cg6_engine.sv; docs/cg6.md): it shares
+//                        the cg4's Bt458, colour plane and scan-out, and its
+//                        engine is an SDRAM client of its own.  Needs SUN3_CG4
+//                        and SUN3_WB_CACHE (the bridge's WB_IDLE)
 //
 //   SUN3_MEM_MIB         installed main memory, in MiB
 //   SUN3_CPU_HZ          the CPU clock (CLK), in Hz: the TOD chip counts it

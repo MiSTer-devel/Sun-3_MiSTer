@@ -32,6 +32,7 @@
 //                    overlay  PA 0xFF400000 + o (128 KiB)  -> CG_OVERLAY_WORD + o/2
 //                    enable   PA 0xFF600000 + o (128 KiB)  -> CG_ENABLE_WORD + o/2
 //   cg4 scan-out   cs_word (an SDRAM word, burst-aligned)   -> as given
+//   GX engine      ge_word (an SDRAM word)                  -> as given
 //
 // FB_WB_BASE is where the bridge puts the bw2 window, {11'h07F, A[20:2]}:
 // byte 0x0FE00000.  The frame buffer sits 24 MiB up, in bank 3 of a 32 MiB
@@ -43,6 +44,13 @@
 // cg4's is 90 bursts a line, most of the SDRAM's time, so it takes turns with
 // the CPU and demands priority only when it says it is about to run dry
 // (cs_urgent; sun3_cg4_scanout.sv), as Sun-2_MiSTer's colour scan-out does.
+// The GX's drawing engine (rtl/sun3/sun3_cg6_engine.sv) comes last: below the
+// scan-outs, even a polite one, and taking turns with the CPU, who was served
+// last going to the back.  It reads a burst, as the scan-outs do, and writes
+// one: a line of 16 bytes with a byte select each, which the controller
+// writes as eight single-word WRITEs on consecutive clocks (sdram.sv's
+// `wrb'), a word's masked bytes left alone; with ge_req low the adapter is
+// as it was without it.
 //
 // **Handshakes.**  Both clients hold a request until it is answered and only
 // then move on, and both see the answer a clock after it is given: the bridge
@@ -95,6 +103,17 @@ module sun3_mister_sdram #(
     output reg          cs_done    = 1'b0,
     output reg  [127:0] cs_rdata   = 128'h0,
 
+    // the GX's drawing engine: a burst read, or a burst written (ge_word's
+    // burst, 8-aligned; ge_wdata a line, word k at [32k+31:32k] as a read's;
+    // ge_sel[b] the select of the line's byte at [8b+7:8b])
+    input  wire [25:0]  ge_word,
+    input  wire         ge_req,
+    input  wire         ge_we,
+    input  wire [127:0] ge_wdata,
+    input  wire [15:0]  ge_sel,
+    output reg          ge_done    = 1'b0,
+    output reg  [127:0] ge_rdata   = 128'h0,
+
     // SDRAM pins
     inout  wire [15:0]  SDRAM_DQ,
     output wire [12:0]  SDRAM_A,
@@ -139,6 +158,16 @@ module sun3_mister_sdram #(
     reg  [1:0]  c_bs   = 2'b00;         // [1] high byte (DQ15:8), [0] low byte
     reg         c_rd   = 1'b0;
     reg         c_wr   = 1'b0;
+    reg         c_wrb  = 1'b0;          // a burst written: the engine's
+    // the engine's line in the controller's order: SDRAM word j of the burst
+    // is line bits [16*(j^1) +: 16], as for a read
+    wire [127:0] c_bdin;
+    wire [15:0]  c_bbs;
+    genvar gj;
+    generate for (gj = 0; gj < 8; gj = gj + 1) begin : wbo
+        assign c_bdin[16*gj +: 16] = ge_wdata[16*(gj^1) +: 16];
+        assign c_bbs[2*gj +: 2]    = ge_sel[2*(gj^1) +: 2];
+    end endgenerate
     wire [15:0] dout;
     wire        ready;
 
@@ -164,6 +193,9 @@ module sun3_mister_sdram #(
         .dout      (dout),
         .din       (c_din),
         .wr        (c_wr),
+        .wrb       (c_wrb),
+        .bdin      (c_bdin),
+        .bbs       (c_bbs),
         .bs        (c_bs),
         .rd        (c_rd),
         .ready     (ready),
@@ -186,16 +218,21 @@ module sun3_mister_sdram #(
                      S_RD   = 3'd1,     // rd held, waiting for the first word
                      S_RDB  = 3'd2,     // collecting words 1..7
                      S_WR   = 3'd3,     // wr held, waiting for the command
-                     S_GAP  = 3'd4;     // the client has not yet seen the answer
+                     S_GAP  = 3'd4,     // the client has not yet seen the answer
+                     S_WRB  = 3'd5;     // wrb held: the engine's burst being written
 
     reg [2:0]   st      = S_IDLE;
     reg         for_fb  = 1'b0;         // whose read this is
     reg         for_cs  = 1'b0;
+    reg         for_ge  = 1'b0;
     // Turns between the cg4's scan-out and the CPU: whoever was served last
     // goes to the back.  0 the scan-out, 1 the CPU.
     reg         last_cpu = 1'b0;
     wire        wb_want  = wb_cyc_i & wb_stb_i;
     wire        pick_cs  = cs_req & (cs_urgent | !wb_want | last_cpu);
+    // Turns between the CPU and the engine: 1 the engine went last.
+    reg         last_ge  = 1'b0;
+    wire        pick_ge  = ge_req & (!wb_want | !last_ge);
     reg [2:0]   widx    = 3'd0;
     reg [127:0] line    = 128'h0;
     reg [1:0]   lane    = 2'd0;
@@ -207,15 +244,18 @@ module sun3_mister_sdram #(
         wb_ack_o  <= 1'b0;
         fb_c_done <= 1'b0;
         cs_done   <= 1'b0;
+        ge_done   <= 1'b0;
 
         if (init) begin
             st   <= S_IDLE;
             c_rd <= 1'b0;
             c_wr <= 1'b0;
+            c_wrb <= 1'b0;
         end else case (st)
             S_IDLE: begin
                 for_fb <= 1'b0;
                 for_cs <= 1'b0;
+                for_ge <= 1'b0;
                 if (fb_c_req) begin
                     // The bw2's scan-out first: it has a deadline and asks for
                     // a line's worth every scan line, so the CPU barely notices.
@@ -229,8 +269,9 @@ module sun3_mister_sdram #(
                     c_word   <= {cs_word[25:3], 3'b000};
                     c_rd     <= 1'b1;
                     st       <= S_RD;
-                end else if (wb_want) begin
+                end else if (wb_want && !pick_ge) begin
                     last_cpu <= 1'b1;
+                    last_ge  <= 1'b0;
                     lane <= wb_adr_i[1:0];
                     if (!wb_we_i) begin
                         c_word <= {wb_word[25:3], 3'b000};     // the whole line
@@ -256,6 +297,23 @@ module sun3_mister_sdram #(
                         wb_ack_o <= 1'b1;                      // nothing to write
                         st       <= S_GAP;
                     end
+                end else if (pick_ge) begin
+                    // the engine: as the CPU's, its own data and answer
+                    for_ge   <= 1'b1;
+                    last_cpu <= 1'b1;
+                    last_ge  <= 1'b1;
+                    if (!ge_we) begin
+                        c_word <= {ge_word[25:3], 3'b000};
+                        c_rd   <= 1'b1;
+                        st     <= S_RD;
+                    end else if (ge_sel != 16'h0) begin
+                        c_word <= {ge_word[25:3], 3'b000};
+                        c_wrb  <= 1'b1;             // ge_wdata and ge_sel are held until answered
+                        st     <= S_WRB;
+                    end else begin
+                        ge_done <= 1'b1;
+                        st      <= S_GAP;
+                    end
                 end
             end
 
@@ -278,6 +336,9 @@ module sun3_mister_sdram #(
                     end else if (for_cs) begin
                         cs_rdata <= {line[127:112], dout, line[95:0]};
                         cs_done  <= 1'b1;
+                    end else if (for_ge) begin
+                        ge_rdata <= {line[127:112], dout, line[95:0]};
+                        ge_done  <= 1'b1;
                     end else begin
                         wb_line_o <= {line[127:112], dout, line[95:0]};
                         wb_dat_o  <= (lane == 2'd3) ? {line[127:112], dout}
@@ -307,6 +368,13 @@ module sun3_mister_sdram #(
                     end
                 end else if (!c_wr)
                     c_wr <= 1'b1;               // the second half's request
+
+            S_WRB:
+                if (ready_rise) begin
+                    c_wrb   <= 1'b0;
+                    ge_done <= 1'b1;
+                    st      <= S_GAP;
+                end
 
             S_GAP:
                 st <= S_IDLE;

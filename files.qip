@@ -98,12 +98,16 @@ set_global_assignment -name VERILOG_FILE rtl/sun3/fault_log.v
 set_global_assignment -name VERILOG_FILE rtl/sun3/wish7990_dvma_to_020.v
 set_global_assignment -name VERILOG_FILE rtl/sun3/wish7990_sun3_regs.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_mt02.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cdrom.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_si.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/reset_sync.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/video_timing.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/fb_scanout.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg4.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg4_scanout.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg6_engine.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg6.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sun3/sun3_cg6_tec.sv
 
 # ---- MiSTer glue ------------------------------------------------------------------
 set_global_assignment -name QIP_FILE rtl/pll_serial.qip
