@@ -341,8 +341,13 @@ the File Manager. Click in a window to type into it. The **right** button
 over the background opens the Workspace menu; its *Exit...* asks to confirm
 and returns to the console. X demos are in `/usr/openwin/demo`; the NeWS ones
 there (`colorwheel`, `fish`) run with `psh`, from a shell inside OpenWindows.
-It runs on the cg4 and on the GX; with the colour board Off it is
-untested.
+It runs on the cg4, on the GX, and in black and white with the colour board
+Off.
+
+`psh monaeyes` stops the server: the sun3 `xnews` has a bug in its image
+scaling that crashes it whenever a NeWS image is drawn scaled, on any
+frame buffer. `ico2` is the older ico and takes its size as
+`=300x300+800+500`, not `-geometry`.
 
 ## The CD-ROM
 
