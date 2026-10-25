@@ -97,7 +97,7 @@ run "the font's y not incremented"        $R -e "s/yr\[0\] <= yr\[0\] + incy;/yr
 run "the font's x1 not incremented"       $R -e "s/xr\[1\] <= xr\[1\] + incx;/xr[1] <= xr[1];/"
 run "a refused command without EXCEPTION" $R -e "s/rdata <= 32'hB0000000;/rdata <= 32'h30000000;/"
 run "FBC cycles not held while busy"      $R -e "s/(stall \&\& ebusy)/(1'b0)/g"
-run "the blit from x1, y1"                $R -e "s/.x2        (sat16(xr\[2\])),/.x2        (sat16(xr[1])),/"
+run "the blit from x1, y1"                $R -e "s/\.i_x2        (sat16(xr\[2\])),/.i_x2        (sat16(xr[1])),/"
 run "the THC's vsync stuck at 0"          $R -e "s/thc_misc\[10\], 1'b0, rt_now,/thc_misc[10], 1'b0, 1'b0,/"
 run "the interrupt whether enabled or not" $R -e "s/assign irq      = thc_pend \& thc_misc\[5\];/assign irq      = thc_pend;/"
 run "INT written 1 does not clear it"     $R -e "s/if (wdata\[4\]) thc_pend <= 1'b0;/if (1'b0) thc_pend <= 1'b0;/"

@@ -799,6 +799,50 @@ initial begin
         check(nb == 0, $sformatf("non-overlapping rectangles: %0d pixels wrong", nb));
     end
 
+    // ---- a copy down onto itself: rows 600..609 of x 0..63, each its own
+    // value, to row 603.  The rows must go bottom-up, or the source's last
+    // rows are overwritten before they are read
+    begin
+        int nb = 0;
+        bit [31:0] dq;
+        wr32(24'h7000E0, 0); wr32(24'h7000E4, 0); wr32(24'h7000F0, FBW - 1); wr32(24'h7000F4, FBH - 1);
+        for (int r = 0; r < 10; r++)
+            for (int i = 0; i < 16; i++)
+                bus(1, 24'h800000 + 24'((600 + r) * FBW + 4 * i), 4, {4{8'(8'h80 + r)}}, dq);
+        wait_idle();
+        while (!mem_idle) @(posedge mclk);
+        wr32(24'h700108, 32'hA980CCCC);
+        wr32(24'h700080, 0);  wr32(24'h700084, 600);
+        wr32(24'h700090, 63); wr32(24'h700094, 609);
+        wr32(24'h7000A0, 0);  wr32(24'h7000A4, 603);
+        rd32(24'h700018, q);
+        wait_idle();
+        while (!mem_idle) @(posedge mclk);
+        for (int r = 0; r < 10; r++)
+            for (int x = 0; x < 64; x++)
+                nb += (fb_peek((603 + r) * FBW + x) != 8'(8'h80 + r));
+        check(nb == 0, $sformatf("a copy down onto itself, bottom-up: %0d pixels wrong", nb));
+    end
+
+    // ---- a triangle takes the last three vertices queued: a point
+    // (100,760), then triangle vertices (150,760), (150,810), (100,810) --
+    // the triangle of those three, not the quadrilateral of all four
+    begin
+        int nb = 0;
+        wr32(24'h700108, 32'hA980FF00); wr32(24'h700100, 32'h71);
+        wr32(24'h700800, 100); wr32(24'h700804, 760);
+        wr32(24'h700884, 760); wr32(24'h700880, 150);
+        wr32(24'h700884, 810); wr32(24'h700880, 150);
+        wr32(24'h700884, 810); wr32(24'h700880, 100);
+        rd32(24'h700014, q);
+        wait_idle();
+        while (!mem_idle) @(posedge mclk);
+        nb += (fb_peek(805 * FBW + 145) != 8'h71);     // inside the triangle
+        nb += (fb_peek(765 * FBW + 105) == 8'h71);     // inside the quadrilateral only
+        nb += (fb_peek(770 * FBW + 110) == 8'h71);
+        check(nb == 0, $sformatf("a triangle of the last three vertices queued: %0d pixels wrong", nb));
+    end
+
     // ---- the TEC: a line through MV (x' = 2x + 10, y' = 2y + 20), autoloaded
     // into the FBC's line registers, then drawn: (5.5, 7.25) .. (55.5, 7.25)
     // is (21, 34) .. (121, 34); data 4 and 5 read back as 16.16; and how long
